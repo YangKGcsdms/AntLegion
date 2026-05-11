@@ -89,7 +89,9 @@ export class BusEngine {
     };
 
     this.busSecret =
-      process.env.FACT_BUS_SECRET ?? randomBytes(32).toString("hex");
+      process.env.ANTLEGION_BUS_SECRET
+      ?? process.env.FACT_BUS_SECRET
+      ?? randomBytes(32).toString("hex");
 
     this.store = new JSONLStore(this.config.data.dir);
 

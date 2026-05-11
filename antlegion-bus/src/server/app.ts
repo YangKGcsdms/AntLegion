@@ -72,7 +72,7 @@ export function createApp(config?: Partial<BusConfig>) {
       mode: body.mode ?? "exclusive",
       source_ant_id: body.source_ant_id,
       created_at: body.created_at ?? Date.now() / 1000,
-      ttl_seconds: body.ttl_seconds ?? 1800,
+      ttl_seconds: body.ttl_seconds ?? 86400,
       schema_version: body.schema_version ?? "1.0.0",
       confidence: body.confidence ?? null,
       causation_chain: causationChain,
@@ -92,14 +92,33 @@ export function createApp(config?: Partial<BusConfig>) {
     const state = c.req.query("state") as FactState | undefined;
     const sourceAntId = c.req.query("source_ant_id");
     const limit = parseInt(c.req.query("limit") ?? "100", 10);
+    const sinceSequence = c.req.query("since_sequence");
+    const sinceSeq = sinceSequence ? parseInt(sinceSequence, 10) : undefined;
 
-    const facts = engine.queryFacts({
+    let facts = engine.queryFacts({
       fact_type: factType,
       state,
       source_ant_id: sourceAntId,
-      limit,
+      limit: sinceSeq != null ? 10_000 : limit,
     });
+
+    if (sinceSeq != null) {
+      facts = facts
+        .filter((f) => f.sequence_number > sinceSeq)
+        .sort((a, b) => a.sequence_number - b.sequence_number)
+        .slice(0, limit);
+    }
+
+    const maxSeq = facts.reduce((m, f) => Math.max(m, f.sequence_number), sinceSeq ?? 0);
+    c.header("X-Antlegion-Max-Sequence", String(maxSeq));
     return c.json(facts.map(factToResponse));
+  });
+
+  app.get("/facts/cursor", (c) => {
+    const stats = engine.getStats() as { facts: { total: number } };
+    const all = engine.queryFacts({ limit: 1 });
+    const head = all.length > 0 ? all[0].sequence_number : 0;
+    return c.json({ head_sequence: head, total: stats.facts.total });
   });
 
   app.get("/facts/:factId", (c) => {
