@@ -1,10 +1,12 @@
 /**
- * Entry point: start the antlegion-bus HTTP + WebSocket server.
+ * Entry point: start the antlegion-bus HTTP server.
+ *
+ * The bus is a passive state store. Clients drive their own polling loop
+ * via GET /facts?since_sequence=N. There is no event push.
  */
 
 import { serve } from "@hono/node-server";
 import { createApp } from "./server/app.js";
-import { attachWebSocket } from "./server/ws.js";
 import { DEFAULT_CONFIG } from "./types/protocol.js";
 
 const port = parseInt(process.env.PORT ?? String(DEFAULT_CONFIG.server.port), 10);
@@ -15,11 +17,7 @@ const { app, engine } = createApp({ data: { dir: dataDir } });
 
 const server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
   console.log(`[antlegion-bus] listening on http://${host}:${info.port}`);
-  console.log(`[antlegion-bus] WebSocket at ws://${host}:${info.port}/ws`);
 });
-
-// Attach WebSocket upgrade handler
-attachWebSocket(server as any, engine);
 
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"]) {

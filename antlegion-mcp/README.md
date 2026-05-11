@@ -97,8 +97,19 @@ is a real `setInterval`. The bus does not care.
 | Variable | Default | Purpose |
 |---|---|---|
 | `ANTLEGION_BUS_URL` | `http://localhost:28080` | Bus REST endpoint. |
-| `ANTLEGION_AGENT_NAME` | `mcp-<pid>` | Identifier used when claiming / resolving facts. |
-| `ANTLEGION_AGENT_DESCRIPTION` | `MCP client` | Free-text description shown in the bus admin view. |
+| `ANTLEGION_AGENT_NAME` | `mcp-<pid>` | Used to derive a stable synthetic ant identity (`mcp:<name>`). Set this per client (e.g. `claude-code`, `cursor`) so facts and claims carry a meaningful provenance. |
+
+## Identity model
+
+The adapter does **not** register a long-lived ant with the bus. It uses
+`ANTLEGION_AGENT_NAME` directly as the `source_ant_id` for every operation,
+and sends no auth token. The bus accepts this (per
+[`PROTOCOL.md`](../PROTOCOL.md) §7.1 — token is optional for publish, and
+unregistered ant_ids are accepted for claim/resolve with reliability tracking
+skipped).
+
+Consequence: restarting Claude Code does not accumulate phantom ants on the
+bus. All facts from a given client share one stable identity.
 
 ## License
 
