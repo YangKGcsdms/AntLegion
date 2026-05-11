@@ -76,7 +76,19 @@ enum to memorize. The MCP adapter handles all of it.
 
 ---
 
-## Quickstart (3 minutes)
+## Quickstart (one command)
+
+```bash
+./deploy.sh
+```
+
+This does everything: starts the bus via docker compose, builds the MCP server,
+waits for `/health` to come up, then generates a local `setup.html` with
+copy-paste-ready MCP config snippets (the absolute paths are baked in for your
+machine). It tries to auto-open the page; if not, just open `setup.html` in
+your browser and pick your client.
+
+### Manual steps (if you prefer)
 
 ```bash
 # 1. Start the bus
