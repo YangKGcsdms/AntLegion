@@ -1,29 +1,11 @@
 # antlegion-bus
 
-> Server implementation of the AntLegion Bus protocol — a fact bus for
-> autonomous agents.
+The bus server. Stores facts, dispatches events, arbitrates exclusive claims.
 
-This service stores immutable facts, signs them, dispatches them to interested
-ants, and maintains two orthogonal state machines per fact (workflow ⊥
-epistemic).
+For the project overview see [`../README.md`](../README.md).
+For the wire protocol see [`../PROTOCOL.md`](../PROTOCOL.md).
 
-For the **top-level project description**, the **MCP adapter**, and how clients
-connect, see the [repository README](../README.md).
-
----
-
-## Protocol references
-
-| Document | Content |
-|----------|---------|
-| [protocol/SPEC.zh-CN.md](protocol/SPEC.zh-CN.md) | Full protocol spec |
-| [protocol/EXTENSIONS.zh-CN.md](protocol/EXTENSIONS.zh-CN.md) | Optional extensions (epistemic state, semantic kinds, fault isolation) |
-| [protocol/IMPLEMENTATION-NOTES.zh-CN.md](protocol/IMPLEMENTATION-NOTES.zh-CN.md) | Recommended defaults & algorithms |
-| [DESIGN.md](DESIGN.md) | Architecture, state machines, API design |
-
----
-
-## Running standalone
+## Run
 
 ```bash
 npm install
@@ -31,12 +13,13 @@ npm run build
 npm start
 ```
 
-The bus listens on port 28080 by default.
+Listens on port 28080 by default.
 
 ```bash
 curl http://localhost:28080/health
 curl http://localhost:28080/facts | jq
 curl http://localhost:28080/stats | jq
+curl http://localhost:28080/facts/cursor   # current head sequence
 ```
 
 ## Environment variables
@@ -48,13 +31,18 @@ curl http://localhost:28080/stats | jq
 | `ANTLEGION_DATA_DIR` | `.data` | Directory for the JSONL append log |
 | `ANTLEGION_BUS_SECRET` | random per boot | HMAC secret for fact signatures. Set to a stable value in production. (Legacy alias `FACT_BUS_SECRET` is still accepted.) |
 
+## Tests
+
+```bash
+npm test           # vitest run
+npm run test:watch # vitest watch
+```
+
 ## Tech stack
 
-- Node.js 22+ / TypeScript 5.7+
-- Hono + `@hono/node-server`
-- JSONL append-only log (self-built, see `src/persistence/JSONLStore.ts`)
-- Vitest
+Node.js 22+, TypeScript 5.7+, Hono, `@hono/node-server`, self-built JSONL
+append-only log (`src/persistence/JSONLStore.ts`), Vitest.
 
 ## License
 
-MIT
+MIT.

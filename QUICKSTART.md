@@ -141,10 +141,7 @@ election, with one HTTP call.
 
 ## Where to go next
 
-- [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — how the bus and the adapter fit
-  together
-- [`docs/EVOLUTION.md`](EVOLUTION.md) — why the project looks like this
-- [`antlegion-bus/DESIGN.md`](../antlegion-bus/DESIGN.md) — the full protocol
-  reference
-- [`antlegion-mcp/README.md`](../antlegion-mcp/README.md) — all six tools,
-  every parameter
+- [README.md](README.md) — overview, architecture diagram, the 6 MCP tools at a glance
+- [PROTOCOL.md](PROTOCOL.md) — wire-level protocol reference (Fact model, state machines, REST API, signing, extensions)
+- [EVOLUTION.md](EVOLUTION.md) — why the project looks like this
+- [antlegion-mcp/README.md](antlegion-mcp/README.md) — every tool parameter, every client config snippet
