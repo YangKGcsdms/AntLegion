@@ -1,49 +1,29 @@
 # antlegion-bus
 
-> AntLegion Bus 协议的 Node.js/TypeScript 服务端实现。
+> Server implementation of the AntLegion Bus protocol — a fact bus for
+> autonomous agents.
 
-与 [antlegion](../antlegion)（Agent Runtime）技术栈统一：整个生态统一为 TypeScript。
+This service stores immutable facts, signs them, dispatches them to interested
+ants, and maintains two orthogonal state machines per fact (workflow ⊥
+epistemic).
 
----
-
-## 项目定位
-
-```
-antlegion-bus  ←  总线服务端（本项目）
-antlegion      ←  Agent Runtime / 节点客户端
-```
-
-两者共用相同的协议规范，实现完整闭环：
-
-```
-[antlegion Agent]  →  WebSocket/HTTP  →  [antlegion-bus]
-      ↑                                         ↑
-  发布/认领/解决/查询事实               存储事实、分发事件、仲裁认领
-```
-
-对应 Python 参考实现 `ant_legion_bus`，协议对齐，可互操作。
+For the **top-level project description**, the **MCP adapter**, and how clients
+connect, see the [repository README](../README.md).
 
 ---
 
-## 协议文档
+## Protocol references
 
-| 文档 | 内容 |
-|------|------|
-| [protocol/SPEC.zh-CN.md](protocol/SPEC.zh-CN.md) | 完整协议规范 |
-| [protocol/EXTENSIONS.zh-CN.md](protocol/EXTENSIONS.zh-CN.md) | 可选扩展（认知状态、语义分类、故障隔离等） |
-| [protocol/IMPLEMENTATION-NOTES.zh-CN.md](protocol/IMPLEMENTATION-NOTES.zh-CN.md) | 推荐默认值与算法 |
-
-## 设计文档
-
-[DESIGN.md](DESIGN.md) — 架构、状态机、API 设计、实现阶段规划。
-
-## 实现进度
-
-[PROGRESS.md](PROGRESS.md) — 各 Phase 任务清单与完成状态。
+| Document | Content |
+|----------|---------|
+| [protocol/SPEC.zh-CN.md](protocol/SPEC.zh-CN.md) | Full protocol spec |
+| [protocol/EXTENSIONS.zh-CN.md](protocol/EXTENSIONS.zh-CN.md) | Optional extensions (epistemic state, semantic kinds, fault isolation) |
+| [protocol/IMPLEMENTATION-NOTES.zh-CN.md](protocol/IMPLEMENTATION-NOTES.zh-CN.md) | Recommended defaults & algorithms |
+| [DESIGN.md](DESIGN.md) | Architecture, state machines, API design |
 
 ---
 
-## 快速开始（规划中）
+## Running standalone
 
 ```bash
 npm install
@@ -51,22 +31,29 @@ npm run build
 npm start
 ```
 
-- 看板：http://localhost:28080
-- API：http://localhost:28080/facts
+The bus listens on port 28080 by default.
 
----
+```bash
+curl http://localhost:28080/health
+curl http://localhost:28080/facts | jq
+curl http://localhost:28080/stats | jq
+```
 
-## 技术栈
+## Environment variables
 
-| 层 | 选型 |
-|----|------|
-| 运行时 | Node.js 22+ |
-| 语言 | TypeScript 5.7+ |
-| HTTP/WS | Hono + @hono/node-server |
-| 持久化 | JSONL 追加日志（自研） |
-| 测试 | Vitest |
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `28080` | HTTP listen port |
+| `HOST` | `0.0.0.0` | Listen address |
+| `ANTLEGION_DATA_DIR` | `.data` | Directory for the JSONL append log |
+| `ANTLEGION_BUS_SECRET` | random per boot | HMAC secret for fact signatures. Set to a stable value in production. (Legacy alias `FACT_BUS_SECRET` is still accepted.) |
 
----
+## Tech stack
+
+- Node.js 22+ / TypeScript 5.7+
+- Hono + `@hono/node-server`
+- JSONL append-only log (self-built, see `src/persistence/JSONLStore.ts`)
+- Vitest
 
 ## License
 

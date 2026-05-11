@@ -6,12 +6,9 @@ build/
 .npm/
 .eslintcache
 
+# Local state / data
 .antlegion/
 .factclaw/
-
-
-# Output
-docs/
 shared-output/
 output/
 *.log
