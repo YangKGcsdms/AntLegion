@@ -1,124 +1,124 @@
 # AntLegion Bus
 
-> A **fact bus** for autonomous agents. One protocol, one server, one MCP adapter.
-> Connect Claude Code, Cursor, Cline, Continue, Codex CLI, or any other
+> A **fact bus** for autonomous agents. One protocol. One server. One MCP adapter.
+> Connect Claude Code, Cursor, Cline, Continue, Codex CLI, Goose, or any other
 > MCP-capable client by adding one line to their config.
 
 ---
 
 ## What this is
 
-A small, opinionated server that stores **immutable facts** with a causation
-chain, content-hash integrity, and a two-axis state model (workflow ⊥
-epistemic). Agents publish facts, query for them, optionally claim exclusive
-ones, and resolve them.
+A small server that stores **immutable facts** with a causation chain,
+content-hash integrity, and a two-axis state model (workflow ⊥ epistemic).
+Agents publish facts, query for them, optionally claim exclusive ones, and
+resolve them.
 
-A second, small server (`antlegion-mcp/`) exposes the bus over the **Model
-Context Protocol**. Any MCP-capable client speaks to the bus through six tools.
+A second server (`antlegion-mcp/`) exposes the bus over the **Model Context
+Protocol**. Any MCP-capable client speaks to the bus through six tools.
 
-That is the whole product.
+That is the whole product. There is **no orchestrator**, **no broker push**,
+**no agent runtime**. Clients drive their own scan loop on whatever cadence
+they need.
+
+---
+
+## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  AntLegion Bus  (antlegion-bus/)                          │
-│  REST + JSONL store + content_hash + two state machines   │
-└────────────────────────┬─────────────────────────────────┘
-                         │
-                         │  HTTP
-                         │
-┌────────────────────────▼─────────────────────────────────┐
+│  AntLegion Bus  (antlegion-bus/)                         │
+│  REST + JSONL store + content hashing + signing          │
+│  Two state machines per fact (workflow ⊥ epistemic)      │
+└──────────────────────────┬───────────────────────────────┘
+                           │  HTTP
+                           │
+┌──────────────────────────▼───────────────────────────────┐
 │  MCP Server  (antlegion-mcp/)                             │
-│  stdio, 6 tools, 2 resources                              │
-└────────────────────────┬─────────────────────────────────┘
-                         │
-       ┌──────┬──────┬───┴────┬──────┬──────┬─────┐
-       ▼      ▼      ▼        ▼      ▼      ▼     ▼
-   Claude  Cursor Cline Continue Codex Windsurf Goose  …
-    Code                          CLI
+│  stdio · 6 tools · 2 resources                            │
+│  Hides hashing, tokens, ant identity, causation depth     │
+└──────────────────────────┬───────────────────────────────┘
+                           │  stdio (MCP protocol)
+                           │
+       ┌──────┬──────┬─────┴─────┬──────┬──────┬──────┐
+       ▼      ▼      ▼           ▼      ▼      ▼      ▼
+   Claude  Cursor  Cline    Continue Codex Windsurf Goose
+    Code                              CLI               …
        (each client runs its own polling loop)
 ```
 
-There is **no orchestrator**, **no broker push**, **no agent runtime**. Clients
-drive their own scan loop on whatever cadence they need. The bus is a passive
-state store.
+The bus is a **passive state store**. Facts have a `sequence_number` that
+increases monotonically; clients poll with `since_sequence=N` and get only
+new facts. Closer in spirit to `git fetch` than to a message queue.
+
+---
+
+## The 6 MCP tools (everything a client sees)
+
+| Tool | Purpose |
+|---|---|
+| `antlegion_publish` | Emit a new fact. Broadcast (shared context) or exclusive (one consumer claims). |
+| `antlegion_query` | Read facts. Use `since_sequence` for incremental polling. |
+| `antlegion_claim` | Atomically claim an exclusive fact. |
+| `antlegion_resolve` | Mark a claimed fact resolved. Optionally emit child facts. |
+| `antlegion_observe` | Vote `corroborate` / `contradict` on someone else's fact. |
+| `antlegion_causation` | Walk a fact's causation chain back to the root. |
+
+Plus 2 MCP resources for read-only inspection:
+
+| URI | Content |
+|---|---|
+| `antlegion://facts/recent` | Last 20 facts |
+| `antlegion://facts/pending` | Facts available for claim |
+
+That is the complete surface a client implements against. No content
+hashing, no signature verification, no token management, no semantic-kind
+enum to memorize. The MCP adapter handles all of it.
 
 ---
 
 ## Quickstart (3 minutes)
 
-### 1. Start the bus
-
 ```bash
+# 1. Start the bus
 cp .env.example .env
 docker compose up -d
-curl http://localhost:28080/health
+
+# 2. Build the MCP server
+cd antlegion-mcp && npm install && npm run build && cd ..
+
+# 3. Wire it into Claude Code (~/.claude.json)
+#    See QUICKSTART.md for the exact JSON
 ```
 
-### 2. Build & install the MCP server
-
-```bash
-cd antlegion-mcp
-npm install
-npm run build
-npm link               # optional, so `antlegion-mcp` is on your PATH
-```
-
-### 3. Wire it into your client
-
-Claude Code: edit `~/.claude.json`:
-
-```json
-{
-  "mcpServers": {
-    "antlegion": {
-      "command": "node",
-      "args": ["/absolute/path/to/antlegion-mcp/dist/index.js"],
-      "env": {
-        "ANTLEGION_BUS_URL": "http://localhost:28080",
-        "ANTLEGION_AGENT_NAME": "claude-code"
-      }
-    }
-  }
-}
-```
-
-Cursor / Cline / Codex CLI / Goose / etc.: drop the equivalent JSON/TOML into
-their MCP config location. See [`antlegion-mcp/README.md`](antlegion-mcp/README.md).
-
-### 4. Talk to the bus in plain English
+Then in Claude Code:
 
 ```
-You: 在 bus 上发一条 fact，类型是 demo.hello，payload 写 "first contact"
+You: 在 bus 上发一条 fact，type 是 demo.hello，payload {"msg":"first contact"}
 Claude: [tool] antlegion_publish({ fact_type: "demo.hello", payload: { msg: "first contact" } })
-Claude: 发出，fact_id=8f3a..., sequence=1
-
-You: 看一下 bus 上最近有什么
-Claude: [tool] antlegion_query({ limit: 5 })
-Claude: 当前 1 条 fact: demo.hello "first contact" 来自 claude-code
+        [result] { fact_id: "8f3a...", state: "published", sequence_number: 1 }
+        Done.
 ```
+
+Full walkthrough: [QUICKSTART.md](QUICKSTART.md).
 
 ---
 
-## The "fact bus" idea in 60 seconds
+## The "fact bus" idea, briefly
 
-Most agent frameworks pass messages: agent A calls agent B, B returns to A.
-This couples them. AntLegion takes a different path borrowed from CAN-bus and
-event sourcing:
+Most agent frameworks pass messages: A calls B, B returns to A. This couples
+them. AntLegion takes a different path borrowed from CAN-bus and event
+sourcing:
 
 | | Message passing | Fact bus |
 |---|---|---|
 | Connection | A knows B's address | A and B both connect to the bus |
-| Persistence | Message is a transient event | Fact is immutable, content-hashed, persisted |
+| Persistence | Message is transient | Fact is immutable, content-hashed, persisted |
 | Provenance | Hard to reconstruct | Causation chain on every fact |
-| Trust | Implicit (you trust the sender) | Explicit `epistemic_state`: asserted → corroborated → consensus, or → contested → refuted |
-| Routing | Direct | Filter on type / capabilities / domain |
-| Exclusivity | Each receiver gets its own copy | `exclusive` mode → exactly one consumer claims and resolves |
+| Trust | Implicit | Explicit `epistemic_state`: asserted → corroborated → consensus, or → contested → refuted |
+| Routing | Direct | Content-based filter on type / capabilities / domain |
+| Exclusivity | Each receiver gets its own copy | `exclusive` mode → exactly one consumer claims |
 
-Facts have a `sequence_number` that is monotonically increasing. Clients poll
-with `since_sequence=N` and only get new facts. This is closer in spirit to
-`git fetch` than to a message queue.
-
-For a deeper protocol reference see [`antlegion-bus/DESIGN.md`](antlegion-bus/DESIGN.md).
+For the complete protocol see [PROTOCOL.md](PROTOCOL.md).
 
 ---
 
@@ -126,11 +126,13 @@ For a deeper protocol reference see [`antlegion-bus/DESIGN.md`](antlegion-bus/DE
 
 ```
 .
-├── antlegion-bus/         # The bus server (Hono + JSONL)
-├── antlegion-mcp/         # The MCP adapter (stdio, 6 tools)
-├── docs/                  # Architecture and design notes
-├── docker-compose.yml     # Spins up just the bus
-└── .env.example
+├── README.md            ← you are here
+├── PROTOCOL.md          ← wire protocol reference (Fact, state machines, REST API, signing, extensions)
+├── QUICKSTART.md        ← 5-minute Claude Code walkthrough
+├── EVOLUTION.md         ← why the project looks like this
+├── docker-compose.yml   ← spins up just the bus
+├── antlegion-bus/       ← bus server (Hono + JSONL)
+└── antlegion-mcp/       ← MCP adapter (stdio, 6 tools)
 ```
 
 ---
@@ -138,7 +140,7 @@ For a deeper protocol reference see [`antlegion-bus/DESIGN.md`](antlegion-bus/DE
 ## When this fits, and when it doesn't
 
 **Fits:**
-- Multiple independent agents that should share state without direct calls.
+- Multiple independent agents that share state without direct calls.
 - You need a complete provenance record (compliance, audit, research).
 - Loose coupling: agents may come and go; clients may be CLI scripts, IDEs,
   cron jobs, MCP clients, or long-running daemons.
@@ -146,29 +148,26 @@ For a deeper protocol reference see [`antlegion-bus/DESIGN.md`](antlegion-bus/DE
 
 **Does not fit:**
 - Tight request/response RPCs between two known endpoints. Use HTTP.
-- High-throughput event streams (>1k events/sec sustained). Use Kafka/NATS.
-- Workflows with strong sequential dependencies enforced by a central planner.
-  The bus has no orchestrator; if you need one, write a client that *is* one.
+- High-throughput event streams (>1k events/sec sustained). Use Kafka / NATS.
+- Workflows with strong sequential dependencies enforced by a central
+  planner. The bus has no orchestrator; if you need one, write a client
+  that *is* one.
 
 ---
 
 ## What happened to the old multi-agent SDLC demo?
 
-The previous incarnation of this repository shipped a 3,000-line agent runtime
-plus five docker containers (PM / UI designer / backend / frontend / QA) that
-collaborated through fact subscriptions to auto-generate Todo CRUD apps.
+Earlier versions shipped a 3,000-line agent runtime plus five docker
+containers (PM / UI / backend / frontend / QA) that collaborated through
+fact subscriptions to auto-generate Todo CRUD apps. That code is preserved
+on the [`archive/legacy-emergent-runtime`](https://github.com/YangKGcsdms/antlegion-platform/tree/archive/legacy-emergent-runtime)
+branch. Full reasoning in [EVOLUTION.md](EVOLUTION.md).
 
-That code is preserved on the
-[`archive/legacy-emergent-runtime`](https://github.com/YangKGcsdms/antlegion-platform/tree/archive/legacy-emergent-runtime)
-branch. It is not deleted, just retired from the trunk.
-
-The retirement is intentional. The fact bus is the durable asset; the 5-agent
-SDLC demo was a workaround for there being no way for *external* agents (Claude
-Code, Cursor, …) to connect. With the MCP adapter, that workaround is no longer
-needed. See [`docs/EVOLUTION.md`](docs/EVOLUTION.md) for the full reasoning.
+Short version: with MCP available, no internal runtime is needed. Every
+external client can join the bus directly.
 
 ---
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+MIT. See [LICENSE](LICENSE).

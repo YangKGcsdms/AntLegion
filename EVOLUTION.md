@@ -94,6 +94,16 @@ all support it. One MCP adapter unlocks all of them at once.
   plus client-side configuration.
 - `FACT-FLOW.md`, `PROJECT_SUMMARY.md` — the SDLC narrative. The README now
   carries the new, smaller story.
+- `antlegion-bus/DESIGN.md`, `antlegion-bus/PROGRESS.md` — implementation
+  design and phase tracking for the old runtime-coupled era. Their useful
+  protocol content was folded into the root [PROTOCOL.md](PROTOCOL.md).
+- `antlegion-bus/protocol/{SPEC, EXTENSIONS, IMPLEMENTATION-NOTES}` (six
+  files, English + Chinese). Merged into a single unified
+  [PROTOCOL.md](PROTOCOL.md) at root, with §12 (Node Implementation
+  Responsibilities) and Appendix C (Agent Decision Guide) removed — those
+  now live in the MCP adapter.
+- The `docs/` subdirectory. All documentation now lives at the project root
+  for discoverability.
 
 ## Where to find the old code
 
