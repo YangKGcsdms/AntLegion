@@ -19,21 +19,72 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { hostname } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const BUS_URL = (process.env.ANTLEGION_BUS_URL ?? "http://localhost:28080").replace(/\/$/, "");
-const AGENT_NAME = process.env.ANTLEGION_AGENT_NAME ?? `mcp-client-${process.pid}`;
+
+// Identity:
+// - If ANTLEGION_AGENT_NAME is explicitly set, use it verbatim. The user takes
+//   responsibility for collision avoidance (e.g. setting it to "claude-code").
+// - Otherwise auto-derive a name that won't collide between hosts / windows /
+//   CI runs: <hostname>-<pid>. This is what gets sent as source_ant_id to
+//   every bus operation.
+const AGENT_NAME =
+  process.env.ANTLEGION_AGENT_NAME ?? `${hostname()}-${process.pid}`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bus client
 //
-// We use a stable synthetic ant_id derived from AGENT_NAME and never register
-// with the bus. The protocol accepts publish/claim/resolve from unregistered
-// ant_ids (the bus simply skips reliability tracking for them). This keeps the
-// bus from accumulating one phantom ant per Claude Code / Cursor restart.
+// We use AGENT_NAME directly as the source_ant_id and never register with the
+// bus. The protocol accepts publish/claim/resolve from unregistered ant_ids
+// (the bus simply skips reliability tracking for them). This keeps the bus
+// from accumulating one phantom ant per Claude Code / Cursor restart.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SYNTHETIC_ANT_ID = AGENT_NAME;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cursor persistence
+//
+// The bus is poll-only and clients drive their own scan loop. To make this
+// useful across process restarts (cron-driven Codex, Claude Code reopen, etc.)
+// we persist the last seen sequence_number per AGENT_NAME under
+//   ~/.antlegion/cursor-<AGENT_NAME>.json
+// On startup the file is loaded; every successful query updates it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CURSOR_DIR = join(homedir(), ".antlegion");
+const CURSOR_FILE = join(CURSOR_DIR, `cursor-${encodeURIComponent(AGENT_NAME)}.json`);
+
 let lastSeenSequence = 0;
+try {
+  if (existsSync(CURSOR_FILE)) {
+    const raw = readFileSync(CURSOR_FILE, "utf-8");
+    const parsed = JSON.parse(raw) as { last_sequence?: number };
+    if (typeof parsed.last_sequence === "number" && Number.isFinite(parsed.last_sequence)) {
+      lastSeenSequence = parsed.last_sequence;
+    }
+  }
+} catch {
+  // Corrupt or unreadable cursor file is non-fatal; start from 0.
+}
+
+function persistCursor(seq: number): void {
+  try {
+    if (!existsSync(CURSOR_DIR)) mkdirSync(CURSOR_DIR, { recursive: true });
+    writeFileSync(
+      CURSOR_FILE,
+      JSON.stringify({ last_sequence: seq, agent_name: AGENT_NAME, updated_at: new Date().toISOString() }, null, 2),
+      "utf-8",
+    );
+  } catch {
+    // Cursor persistence failure is non-fatal; we just lose the optimization
+    // on next restart.
+  }
+}
 
 async function busPost(path: string, body: Record<string, unknown>): Promise<unknown> {
   const res = await fetch(`${BUS_URL}${path}`, {
@@ -113,15 +164,23 @@ async function toolPublish(args: {
 }
 
 async function toolQuery(args: QueryArgs) {
+  // Default to the persisted cursor so repeated queries (and cron-driven
+  // restarts) automatically advance instead of re-reading from 0. Callers
+  // who want to scan the entire history pass since_sequence: 0 explicitly.
+  const effectiveSince = args.since_sequence ?? lastSeenSequence;
+
   const qs = new URLSearchParams();
   if (args.fact_type) qs.set("fact_type", args.fact_type);
   if (args.state) qs.set("state", args.state);
-  if (args.since_sequence != null) qs.set("since_sequence", String(args.since_sequence));
+  if (effectiveSince > 0) qs.set("since_sequence", String(effectiveSince));
   qs.set("limit", String(args.limit ?? 50));
   const facts = (await busGet(`/facts?${qs.toString()}`)) as FactSummary[];
 
   const maxSeq = facts.reduce((m, f) => Math.max(m, f.sequence_number), lastSeenSequence);
-  if (maxSeq > lastSeenSequence) lastSeenSequence = maxSeq;
+  if (maxSeq > lastSeenSequence) {
+    lastSeenSequence = maxSeq;
+    persistCursor(maxSeq);
+  }
 
   return {
     count: facts.length,

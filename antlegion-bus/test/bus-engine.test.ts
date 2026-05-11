@@ -20,6 +20,7 @@ function makeEngine() {
     bus: {
       maxCausationDepth: 16,
       defaultTtlSeconds: 300,
+      claimTimeoutSeconds: 600,
       gcRetainResolvedSeconds: 600,
       gcRetainDeadSeconds: 3600,
       gcMaxFacts: 10000,
@@ -426,6 +427,86 @@ describe("BusEngine", () => {
   // -----------------------------------------------------------------------
   // Admin
   // -----------------------------------------------------------------------
+
+  describe("Claim timeout", () => {
+    it("releases stale claims back to published when claim timeout elapses", () => {
+      const shortEngine = new BusEngine({
+        data: { dir: TEST_DIR + "-claim-to" },
+        server: { port: 0, host: "127.0.0.1" },
+        bus: {
+          maxCausationDepth: 16,
+          defaultTtlSeconds: 300,
+          claimTimeoutSeconds: 1,
+          gcRetainResolvedSeconds: 600,
+          gcRetainDeadSeconds: 3600,
+          gcMaxFacts: 10000,
+          replayOnReconnect: 50,
+        },
+        flow: {
+          dedupeWindowSeconds: 10,
+          rateLimitCapacity: 100,
+          rateLimitRefillRate: 100,
+          circuitBreakerWindowSeconds: 5,
+          circuitBreakerThreshold: 1000,
+        },
+        trust: { consensusQuorum: 2, refutationQuorum: 2 },
+      });
+
+      try {
+        const f = publishableFact({ mode: "exclusive" });
+        shortEngine.publishFact(f);
+        const [ok] = shortEngine.claimFact(f.fact_id, "crashed-worker");
+        expect(ok).toBe(true);
+        expect(shortEngine.getFact(f.fact_id)?.state).toBe("claimed");
+        expect(shortEngine.getFact(f.fact_id)?.claimed_at).not.toBeNull();
+
+        // Backdate claimed_at past the timeout window.
+        const fact = shortEngine.getFact(f.fact_id)!;
+        fact.claimed_at = Date.now() / 1000 - 5;
+
+        // Drive the expirationTick via the public claim-of-self pathway:
+        // simpler — invoke the private tick by re-claiming with the same ant
+        // would not help; instead, advance a clock or just sleep and let the
+        // 10s interval fire. For unit-test speed we call the engine's reaper
+        // via a brief sleep + reading state. Use a small sleep so the actual
+        // interval timer (10s) doesn't fire, and instead manually trigger.
+        (shortEngine as unknown as { expirationTick: () => void }).expirationTick();
+
+        const after = shortEngine.getFact(f.fact_id)!;
+        expect(after.state).toBe("published");
+        expect(after.claimed_by).toBeNull();
+        expect(after.claimed_at).toBeNull();
+      } finally {
+        shortEngine.shutdown();
+        rmSync(TEST_DIR + "-claim-to", { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("Glob query", () => {
+    it("queryFacts matches glob patterns in fact_type", () => {
+      engine.publishFact(publishableFact({ fact_type: "bug.found" }));
+      engine.publishFact(publishableFact({ fact_type: "bug.fixed" }));
+      engine.publishFact(publishableFact({ fact_type: "deploy.started" }));
+
+      expect(engine.queryFacts({ fact_type: "bug.*" }).length).toBe(2);
+      expect(engine.queryFacts({ fact_type: "*.found" }).length).toBe(1);
+      expect(engine.queryFacts({ fact_type: "bug.found" }).length).toBe(1);
+      expect(engine.queryFacts({ fact_type: "nomatch.*" }).length).toBe(0);
+    });
+
+    it("queryFacts filters by claimed_by", () => {
+      const f1 = publishableFact({ fact_type: "task.a", mode: "exclusive" });
+      const f2 = publishableFact({ fact_type: "task.b", mode: "exclusive" });
+      engine.publishFact(f1);
+      engine.publishFact(f2);
+      engine.claimFact(f1.fact_id, "worker-a");
+      engine.claimFact(f2.fact_id, "worker-b");
+
+      expect(engine.queryFacts({ claimed_by: "worker-a" }).length).toBe(1);
+      expect(engine.queryFacts({ claimed_by: "worker-a" })[0].fact_id).toBe(f1.fact_id);
+    });
+  });
 
   describe("Admin", () => {
     it("runs GC", () => {

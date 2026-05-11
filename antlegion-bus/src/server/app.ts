@@ -69,7 +69,10 @@ export function createApp(config?: Partial<BusConfig>) {
       domain_tags: body.domain_tags ?? [],
       need_capabilities: body.need_capabilities ?? [],
       priority: body.priority ?? 3,
-      mode: body.mode ?? "exclusive",
+      // Default to broadcast — most LLM-published facts are observations meant
+      // for shared context, not exclusive tasks. Callers wanting exclusive
+      // semantics must opt in.
+      mode: body.mode ?? "broadcast",
       source_ant_id: body.source_ant_id,
       created_at: body.created_at ?? Date.now() / 1000,
       ttl_seconds: body.ttl_seconds ?? 86400,
@@ -91,6 +94,7 @@ export function createApp(config?: Partial<BusConfig>) {
     const factType = c.req.query("fact_type");
     const state = c.req.query("state") as FactState | undefined;
     const sourceAntId = c.req.query("source_ant_id");
+    const claimedBy = c.req.query("claimed_by");
     const limit = parseInt(c.req.query("limit") ?? "100", 10);
     const sinceSequence = c.req.query("since_sequence");
     const sinceSeq = sinceSequence ? parseInt(sinceSequence, 10) : undefined;
@@ -99,6 +103,7 @@ export function createApp(config?: Partial<BusConfig>) {
       fact_type: factType,
       state,
       source_ant_id: sourceAntId,
+      claimed_by: claimedBy,
       limit: sinceSeq != null ? 10_000 : limit,
     });
 
@@ -116,8 +121,9 @@ export function createApp(config?: Partial<BusConfig>) {
 
   app.get("/facts/cursor", (c) => {
     const stats = engine.getStats() as { facts: { total: number } };
-    const all = engine.queryFacts({ limit: 1 });
-    const head = all.length > 0 ? all[0].sequence_number : 0;
+    // Use the engine's monotonic sequence counter, not "newest by created_at"
+    // (createdAt can be client-supplied and isn't strictly monotonic).
+    const head = engine.headSequence();
     return c.json({ head_sequence: head, total: stats.facts.total });
   });
 
@@ -404,6 +410,7 @@ function factToResponse(fact: Fact): Record<string, unknown> {
     created_at: fact.created_at,
     ttl_seconds: fact.ttl_seconds,
     claimed_by: fact.claimed_by,
+    claimed_at: fact.claimed_at,
     effective_priority: fact.effective_priority,
     causation_depth: fact.causation_depth,
     causation_chain: fact.causation_chain,

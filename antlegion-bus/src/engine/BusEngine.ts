@@ -31,7 +31,7 @@ import {
 } from "../types/protocol.js";
 import { transition, canTransition } from "./WorkflowStateMachine.js";
 import { recomputeEpistemic } from "./EpistemicStateMachine.js";
-import { evaluateFilter, arbitrate } from "./FilterEngine.js";
+import { evaluateFilter, arbitrate, globMatch } from "./FilterEngine.js";
 import { PublishGate, applyAging } from "./FlowControl.js";
 import { recordEvent, shouldAcceptPublication, ErrorEvent, type ErrorEventValue } from "./ReliabilityManager.js";
 import { computeContentHash } from "./ContentHasher.js";
@@ -129,6 +129,7 @@ export class BusEngine {
         if (existing) {
           existing.state = fact.state;
           existing.claimed_by = fact.claimed_by;
+          existing.claimed_at = fact.claimed_at;
           existing.resolved_at = fact.resolved_at;
         }
       } else if (event === "release") {
@@ -136,6 +137,7 @@ export class BusEngine {
         if (existing) {
           existing.state = "published";
           existing.claimed_by = null;
+          existing.claimed_at = null;
         }
       } else if (event === "redispatch") {
         const existing = this.facts.get(fact.fact_id);
@@ -184,7 +186,8 @@ export class BusEngine {
       recovered++;
     }
 
-    // Rebuild active claims
+    // Rebuild active claims + restore sequence counter so new facts don't collide
+    let maxSeq = 0;
     for (const fact of this.facts.values()) {
       if (
         fact.claimed_by &&
@@ -195,10 +198,12 @@ export class BusEngine {
           (this.activeClaims.get(fact.claimed_by) ?? 0) + 1,
         );
       }
+      if (fact.sequence_number > maxSeq) maxSeq = fact.sequence_number;
     }
+    this.sequenceCounter = maxSeq;
 
     if (recovered > 0) {
-      console.log(`[BusEngine] Recovered ${recovered} fact events from store`);
+      console.log(`[BusEngine] Recovered ${recovered} fact events from store (head_sequence=${maxSeq})`);
     }
   }
 
@@ -249,12 +254,34 @@ export class BusEngine {
 
   private expirationTick(): void {
     const now = Date.now() / 1000;
+    const claimTimeout = this.config.bus.claimTimeoutSeconds;
     for (const fact of this.facts.values()) {
       if (
         (fact.state === "published" || fact.state === "matched") &&
         now > fact.created_at + fact.ttl_seconds
       ) {
         this.markDead(fact, "ttl_expired");
+        continue;
+      }
+
+      // Claim timeout: release stale claims back to the pool so they can be
+      // re-dispatched. Without this, a crashed claimer pins a fact in
+      // `claimed` until TTL — undesirable when TTL is hours/days.
+      if (
+        fact.state === "claimed" &&
+        fact.claimed_at != null &&
+        now > fact.claimed_at + claimTimeout
+      ) {
+        const claimer = fact.claimed_by;
+        if (claimer) {
+          const claims = this.activeClaims.get(claimer) ?? 0;
+          if (claims > 0) this.activeClaims.set(claimer, claims - 1);
+        }
+        transition(fact, "published");
+        fact.claimed_by = null;
+        fact.claimed_at = null;
+        this.store.append(fact, "release", { releaser: "bus:claim_timeout" });
+        this.dispatchFact(fact, claimer ? new Set([claimer]) : undefined);
       }
     }
   }
@@ -315,6 +342,11 @@ export class BusEngine {
 
   private nextSequence(): number {
     return ++this.sequenceCounter;
+  }
+
+  /** Current max assigned sequence number (== count of accepted publishes since boot, plus recovered ones). */
+  headSequence(): number {
+    return this.sequenceCounter;
   }
 
   private computeSignature(fact: Fact): string {
@@ -540,6 +572,7 @@ export class BusEngine {
     // Atomic: single tick, no await
     transition(fact, "claimed");
     fact.claimed_by = antId;
+    fact.claimed_at = Date.now() / 1000;
     this.activeClaims.set(antId, (this.activeClaims.get(antId) ?? 0) + 1);
     this.store.append(fact, "claim", { claimer: antId });
 
@@ -671,6 +704,7 @@ export class BusEngine {
 
     transition(fact, "published");
     fact.claimed_by = null;
+    fact.claimed_at = null;
 
     this.store.append(fact, "release", { releaser: antId });
     this.recordActivity(antId, "release", factId, fact.fact_type);
@@ -691,14 +725,22 @@ export class BusEngine {
     fact_type?: string;
     state?: FactState;
     source_ant_id?: string;
+    claimed_by?: string;
     limit?: number;
   }): Fact[] {
     const limit = opts?.limit ?? 100;
+    const hasGlob = opts?.fact_type && /[*?]/.test(opts.fact_type);
     const results: Fact[] = [];
     for (const fact of this.facts.values()) {
-      if (opts?.fact_type && fact.fact_type !== opts.fact_type) continue;
+      if (opts?.fact_type) {
+        const matches = hasGlob
+          ? globMatch(opts.fact_type, fact.fact_type)
+          : fact.fact_type === opts.fact_type;
+        if (!matches) continue;
+      }
       if (opts?.state && fact.state !== opts.state) continue;
       if (opts?.source_ant_id && fact.source_ant_id !== opts.source_ant_id) continue;
+      if (opts?.claimed_by && fact.claimed_by !== opts.claimed_by) continue;
       results.push(fact);
     }
     return results.sort((a, b) => b.created_at - a.created_at).slice(0, limit);

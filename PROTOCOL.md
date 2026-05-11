@@ -115,6 +115,7 @@ A Fact has two structural zones:
 | `state` | enum | Workflow state (§4.1) |
 | `epistemic_state` | enum | Trust state (§4.2) |
 | `claimed_by` | string \| null | Consumer that claimed (exclusive only) |
+| `claimed_at` | float \| null | Claim timestamp; used for claim-timeout reaping (§4.1) |
 | `resolved_at` | float \| null | Resolution timestamp |
 | `superseded_by` | string | Set when a newer fact supersedes this one |
 | `corroborations` | string[] | Consumers that have corroborated |
@@ -165,8 +166,15 @@ Tracks lifecycle. Explicit transitions driven by bus operations.
 | `published` → `resolved` | Direct resolution (broadcast only) |
 | `published` → `dead` | TTL expiry, no match |
 | `claimed` → `resolved` | RESOLVE by claimer |
-| `claimed` → `published` | RELEASE by claimer (returns to pool) |
-| `claimed` → `dead` | Claim timeout, consumer failure |
+| `claimed` → `published` | RELEASE by claimer, **or claim timeout** (returns to pool, re-dispatched) |
+| `claimed` → `dead` | Hard failure (not used by the current implementation; reserved) |
+
+**Claim timeout** — if a fact has been in `claimed` longer than the bus's
+configured `claimTimeoutSeconds` (default 600s = 10 min, §11), the bus
+auto-releases it back to `published` and re-dispatches it. This is the
+recovery path when a claimer crashes between CLAIM and RESOLVE. The bus
+excludes the previous claimer from the next dispatch round to prevent a
+crash-loop pinning the same fact.
 | `dead` → `published` | Administrative redispatch (OPTIONAL) |
 
 ### 4.2 Epistemic State
@@ -314,7 +322,7 @@ POST /facts
   "source_ant_id": "...", "token": "...",      // token optional
   "content_hash": "...",                       // empty string → bus computes
   "created_at": <unix-seconds>,
-  "mode": "broadcast" | "exclusive",
+  "mode": "broadcast" | "exclusive",           // default: broadcast
   "priority": 0..7, "ttl_seconds": <int>,
   "parent_fact_id": "...", "subject_key": "...", "supersedes": "...",
   "semantic_kind": "...", "confidence": 0..1,
@@ -338,13 +346,21 @@ Any check failing rejects the publish.
 ### 7.3 Query (the polling cursor)
 
 ```
-GET /facts?fact_type=...&state=...&since_sequence=N&limit=50
+GET /facts?fact_type=...&state=...&claimed_by=...&source_ant_id=...&since_sequence=N&limit=50
 → JSON array, sorted by sequence_number ascending when since_sequence is set
    Response header: X-Antlegion-Max-Sequence: <max sequence returned>
 ```
 
 Clients drive their own polling loop by passing the previous response's max
 sequence back as `since_sequence`. This is the canonical pattern.
+
+`fact_type` accepts a **glob** pattern (`*` matches any substring, `?` matches
+one character). `bug.*` matches `bug.found`, `bug.fixed`, etc. A pattern with
+no glob characters is matched exactly.
+
+`claimed_by` filters facts currently held by a specific consumer. Useful for
+a daemon that wants to find its own orphaned claims on restart:
+`GET /facts?state=claimed&claimed_by=my-daemon-1`.
 
 ```
 GET /facts/cursor
@@ -585,6 +601,8 @@ signatures unverifiable across restarts.
 | Parameter | Default | Source |
 |---|:---:|---|
 | Default fact TTL | 86400s (24h) | Implementation choice; was 1800s before, raised for client polling |
+| Default fact `mode` | `broadcast` | §7.2 — most LLM-published facts are observations, not tasks |
+| Claim timeout | 600s (10 min) | §4.1 — claimed facts auto-released back to `published` |
 | Causation depth limit | 16 | §9.5 |
 | Consensus / refutation quorum | 2 | §4.2 |
 | Dedup window | 10s | §9.5 |

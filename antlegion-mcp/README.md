@@ -80,24 +80,37 @@ The bus does not push events to MCP clients. Each client decides its own
 cadence:
 
 ```
-cursor = 0
 loop:
-  result = antlegion_query(since_sequence=cursor, limit=50)
+  result = antlegion_query(limit=50)           # since_sequence defaults to the persisted cursor
   for fact in result.facts:
       decide what to do
-  cursor = result.next_cursor
   sleep(your_interval)
 ```
 
 For a Claude Code session, the "loop" is the human typing. For a daemon, it
 is a real `setInterval`. The bus does not care.
 
+### Cursor persistence
+
+The adapter persists the last-seen sequence number to
+`~/.antlegion/cursor-<ANTLEGION_AGENT_NAME>.json`. This means:
+
+- `antlegion_query` calls **automatically advance** the cursor across restarts.
+- Cron-driven Codex / one-shot Claude invocations don't re-scan history from 0.
+- To scan from the beginning anyway, pass `since_sequence: 0` explicitly.
+
+### Glob queries
+
+`antlegion_query({ fact_type: "bug.*" })` matches any fact_type with that
+prefix. The bus supports `*` (any substring) and `?` (one character). A
+pattern with no glob characters is matched exactly.
+
 ## Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `ANTLEGION_BUS_URL` | `http://localhost:28080` | Bus REST endpoint. |
-| `ANTLEGION_AGENT_NAME` | `mcp-<pid>` | Used to derive a stable synthetic ant identity (`mcp:<name>`). Set this per client (e.g. `claude-code`, `cursor`) so facts and claims carry a meaningful provenance. |
+| `ANTLEGION_AGENT_NAME` | `<hostname>-<pid>` | Used directly as `source_ant_id` on every operation. Set this per client (e.g. `claude-code`, `cursor`) for readable provenance. If unset, the default uniquely identifies each process so two windows/machines don't collide. |
 
 ## Identity model
 
