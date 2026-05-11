@@ -428,37 +428,6 @@ describe("BusEngine", () => {
   // -----------------------------------------------------------------------
 
   describe("Admin", () => {
-    it("deletes a fact", () => {
-      const f = publishableFact();
-      engine.publishFact(f);
-      const [ok] = engine.adminDeleteFact(f.fact_id);
-      expect(ok).toBe(true);
-      expect(engine.getFact(f.fact_id)).toBeUndefined();
-    });
-
-    it("finds broken chains", () => {
-      const f = publishableFact({
-        causation_chain: ["missing-ancestor"],
-        causation_depth: 1,
-      });
-      engine.publishFact(f);
-      const broken = engine.findBrokenChains();
-      expect(broken).toHaveLength(1);
-      expect(broken[0].missing_ancestors).toEqual(["missing-ancestor"]);
-    });
-
-    it("repairs broken chains", () => {
-      const f = publishableFact({
-        causation_chain: ["missing-ancestor"],
-        causation_depth: 1,
-      });
-      engine.publishFact(f);
-      const result = engine.repairCausationChains();
-      expect(result.count).toBe(1);
-      expect(engine.getFact(f.fact_id)!.causation_chain).toEqual([]);
-      expect(engine.getFact(f.fact_id)!.causation_depth).toBe(0);
-    });
-
     it("runs GC", () => {
       const f = publishableFact();
       engine.publishFact(f);

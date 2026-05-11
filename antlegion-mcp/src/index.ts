@@ -21,38 +21,19 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 const BUS_URL = (process.env.ANTLEGION_BUS_URL ?? "http://localhost:28080").replace(/\/$/, "");
-const AGENT_NAME = process.env.ANTLEGION_AGENT_NAME ?? `mcp-${process.pid}`;
-const AGENT_DESCRIPTION = process.env.ANTLEGION_AGENT_DESCRIPTION ?? "MCP client";
+const AGENT_NAME = process.env.ANTLEGION_AGENT_NAME ?? `mcp-client-${process.pid}`;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bus client (lazy ant registration)
+// Bus client
+//
+// We use a stable synthetic ant_id derived from AGENT_NAME and never register
+// with the bus. The protocol accepts publish/claim/resolve from unregistered
+// ant_ids (the bus simply skips reliability tracking for them). This keeps the
+// bus from accumulating one phantom ant per Claude Code / Cursor restart.
 // ─────────────────────────────────────────────────────────────────────────────
 
-let antId: string | null = null;
-let token: string | null = null;
+const SYNTHETIC_ANT_ID = AGENT_NAME;
 let lastSeenSequence = 0;
-
-async function ensureRegistered(): Promise<{ antId: string; token: string }> {
-  if (antId && token) return { antId, token };
-  const res = await fetch(`${BUS_URL}/ants/connect`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: AGENT_NAME,
-      description: AGENT_DESCRIPTION,
-      fact_type_patterns: ["*"],
-      modes: ["broadcast", "exclusive"],
-      max_concurrent_claims: 16,
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`bus connect failed: ${res.status} ${await res.text()}`);
-  }
-  const data = (await res.json()) as { ant_id: string; token: string };
-  antId = data.ant_id;
-  token = data.token;
-  return { antId, token };
-}
 
 async function busPost(path: string, body: Record<string, unknown>): Promise<unknown> {
   const res = await fetch(`${BUS_URL}${path}`, {
@@ -109,7 +90,6 @@ async function toolPublish(args: {
   domain_tags?: string[];
   need_capabilities?: string[];
 }) {
-  const { antId, token } = await ensureRegistered();
   const data = (await busPost("/facts", {
     fact_type: args.fact_type,
     payload: args.payload,
@@ -121,8 +101,7 @@ async function toolPublish(args: {
     domain_tags: args.domain_tags ?? [],
     need_capabilities: args.need_capabilities ?? [],
     semantic_kind: "observation",
-    source_ant_id: antId,
-    token,
+    source_ant_id: SYNTHETIC_ANT_ID,
     content_hash: "",
     created_at: Date.now() / 1000,
   })) as { fact_id: string; state: string; sequence_number: number };
@@ -161,10 +140,8 @@ async function toolQuery(args: QueryArgs) {
 }
 
 async function toolClaim(args: { fact_id: string }) {
-  const { antId, token } = await ensureRegistered();
   const data = await busPost(`/facts/${args.fact_id}/claim`, {
-    ant_id: antId,
-    token,
+    ant_id: SYNTHETIC_ANT_ID,
   });
   return data;
 }
@@ -177,10 +154,8 @@ async function toolResolve(args: {
     mode?: "broadcast" | "exclusive";
   }>;
 }) {
-  const { antId, token } = await ensureRegistered();
   const data = await busPost(`/facts/${args.fact_id}/resolve`, {
-    ant_id: antId,
-    token,
+    ant_id: SYNTHETIC_ANT_ID,
     result_facts: args.result_facts ?? [],
   });
   return data;
@@ -191,11 +166,9 @@ async function toolObserve(args: {
   verdict: "corroborate" | "contradict";
   reason?: string;
 }) {
-  const { antId, token } = await ensureRegistered();
   const endpoint = args.verdict === "corroborate" ? "corroborate" : "contradict";
   const data = await busPost(`/facts/${args.fact_id}/${endpoint}`, {
-    ant_id: antId,
-    token,
+    ant_id: SYNTHETIC_ANT_ID,
   });
   return { ...(data as object), reason: args.reason ?? null };
 }
@@ -387,7 +360,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  process.stderr.write(`[antlegion-mcp] connected to bus at ${BUS_URL}\n`);
+  process.stderr.write(`[antlegion-mcp] ready · bus=${BUS_URL} · ant=${SYNTHETIC_ANT_ID}\n`);
 }
 
 main().catch((err) => {

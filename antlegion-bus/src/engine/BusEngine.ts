@@ -780,81 +780,6 @@ export class BusEngine {
   // Admin
   // -------------------------------------------------------------------------
 
-  adminDeleteFact(factId: string): [boolean, string] {
-    const fact = this.facts.get(factId);
-    if (!fact) return [false, "fact not found"];
-
-    this.facts.delete(factId);
-    if (
-      fact.claimed_by &&
-      (fact.state === "claimed" || fact.state === "processing")
-    ) {
-      const claims = this.activeClaims.get(fact.claimed_by) ?? 0;
-      if (claims > 0) this.activeClaims.set(fact.claimed_by, claims - 1);
-    }
-    if (fact.subject_key) {
-      const sk = `${fact.subject_key}:${fact.fact_type}`;
-      if (this.subjectIndex.get(sk) === factId) this.subjectIndex.delete(sk);
-    }
-    this.store.append(fact, "purge", { reason: "admin" });
-    return [true, "ok"];
-  }
-
-  findBrokenChains(): Array<{
-    fact_id: string;
-    missing_ancestors: string[];
-    causation_chain: string[];
-  }> {
-    const out: Array<{
-      fact_id: string;
-      missing_ancestors: string[];
-      causation_chain: string[];
-    }> = [];
-    for (const [fid, fact] of this.facts) {
-      const missing = fact.causation_chain.filter((a) => !this.facts.has(a));
-      if (missing.length > 0) {
-        out.push({
-          fact_id: fid,
-          missing_ancestors: missing,
-          causation_chain: [...fact.causation_chain],
-        });
-      }
-    }
-    return out;
-  }
-
-  repairCausationChains(factId?: string): {
-    repaired: string[];
-    count: number;
-  } {
-    const toTouch: Fact[] = [];
-    if (factId) {
-      const f = this.facts.get(factId);
-      if (f) toTouch.push(f);
-    } else {
-      for (const f of this.facts.values()) {
-        if (f.causation_chain.some((a) => !this.facts.has(a))) {
-          toTouch.push(f);
-        }
-      }
-    }
-
-    const repaired: string[] = [];
-    for (const fact of toTouch) {
-      const newChain = fact.causation_chain.filter((a) => this.facts.has(a));
-      if (
-        newChain.length !== fact.causation_chain.length ||
-        newChain.some((v, i) => v !== fact.causation_chain[i])
-      ) {
-        fact.causation_chain = newChain;
-        fact.causation_depth = newChain.length;
-        this.store.append(fact, "causation_repair");
-        repaired.push(fact.fact_id);
-      }
-    }
-    return { repaired, count: repaired.length };
-  }
-
   adminRunGc(): { removed: number; fact_ids: string[] } {
     const now = Date.now() / 1000;
     const toDelete = this.gcCollectCandidates(now);
@@ -872,47 +797,7 @@ export class BusEngine {
     return { stale_entries_removed: removed };
   }
 
-  /** Redispatch a dead/expired fact back to published. */
-  adminRedispatch(factId: string): [boolean, string] {
-    const fact = this.facts.get(factId);
-    if (!fact) return [false, "fact not found"];
-
-    transition(fact, "published", true);
-    fact.claimed_by = null;
-    fact.effective_priority = fact.priority;
-    fact.created_at = Date.now() / 1000;
-
-    this.store.append(fact, "redispatch");
-    this.dispatchFact(fact);
-    return [true, fact.state];
-  }
-
-  /** Force-isolate a ant (emergency stop). */
-  adminIsolateAnt(antId: string): [boolean, string] {
-    const ant = this.ants.get(antId);
-    if (!ant) return [false, "ant not found"];
-    ant.state = "isolated";
-    ant.transmit_error_counter = 256;
-    ant.reliability_score = 0.0;
-    return [true, ant.state];
-  }
-
-  /** Restore an isolated ant to active. */
-  adminRestoreAnt(antId: string): [boolean, string] {
-    const ant = this.ants.get(antId);
-    if (!ant) return [false, "ant not found"];
-    ant.state = "active";
-    ant.transmit_error_counter = 0;
-    ant.reliability_score = 1.0;
-    return [true, ant.state];
-  }
-
-  /** Get dead-letter facts. */
-  getDeadLetterFacts(limit = 100): Fact[] {
-    return this.queryFacts({ state: "dead", limit });
-  }
-
-  /** Get detailed metrics. */
+  /** Detailed metrics — storage stats + fact-state breakdown + derived rates. */
   getMetrics(): Record<string, unknown> {
     const stats = this.getStats() as {
       facts: { total: number; by_state: Record<string, number> };
@@ -929,42 +814,6 @@ export class BusEngine {
         pending_facts: (byState.published ?? 0) + (byState.matched ?? 0),
       },
     };
-  }
-
-  /** Bulk delete facts by state/age with optional dry-run. */
-  adminCleanupFacts(opts: {
-    fact_states?: string[];
-    older_than_seconds?: number;
-    keep_most_recent?: number;
-    dry_run?: boolean;
-  }): { dry_run: boolean; count: number; fact_ids?: string[]; deleted?: string[] } {
-    const stateFilter = new Set(opts.fact_states ?? ["resolved", "dead"]);
-    const now = Date.now() / 1000;
-    const candidates: Array<[string, Fact]> = [];
-
-    for (const [fid, fact] of this.facts) {
-      if (!stateFilter.has(fact.state)) continue;
-      if (opts.older_than_seconds != null) {
-        if (now - fact.created_at < opts.older_than_seconds) continue;
-      }
-      candidates.push([fid, fact]);
-    }
-
-    candidates.sort((a, b) => b[1].created_at - a[1].created_at);
-    const keepN = opts.keep_most_recent ?? 0;
-    const toDelete = keepN > 0 ? candidates.slice(keepN) : candidates;
-    const ids = toDelete.map(([fid]) => fid);
-
-    if (opts.dry_run) {
-      return { dry_run: true, count: ids.length, fact_ids: ids };
-    }
-
-    const deleted: string[] = [];
-    for (const fid of ids) {
-      const [ok] = this.adminDeleteFact(fid);
-      if (ok) deleted.push(fid);
-    }
-    return { dry_run: false, count: deleted.length, deleted };
   }
 
   /** Storage stats. */

@@ -44,7 +44,7 @@ system.
 │   - dispatches events                                       │
 │   - arbitrates exclusive claims                             │
 └──────────────────────────┬─────────────────────────────────┘
-                           │  REST / WebSocket
+                           │  HTTP / JSON
                            │  (this protocol)
                            │
               ┌────────────┴────────────┐
@@ -290,8 +290,8 @@ MUST NOT age into CRITICAL — that level is reserved for genuine emergencies.
 
 ## 7. Bus Operations (Wire Format)
 
-All operations are HTTP/1.1 + JSON. WebSocket is optional and only carries
-event push for legacy clients; MCP clients do not need it.
+All operations are HTTP/1.1 + JSON. There is no event push channel; clients
+poll with `since_sequence` (§7.3).
 
 ### 7.1 Connect
 
@@ -405,32 +405,43 @@ POST /ants/:ant_id/disconnect       { "token": "..." }
 Heartbeats are used by Fault Confinement (§9.2) to track liveness.
 Disconnects are graceful.
 
+### 7.8 Operator surface (non-normative)
+
+For operators running the bus itself:
+
+```
+POST /admin/storage/gc          → run GC sweep now, return { removed, fact_ids }
+POST /admin/storage/compact     → compact the JSONL log, return { stale_entries_removed }
+GET  /admin/storage/stats       → JSONL log stats + fact count
+GET  /admin/metrics             → stats + derived rates (resolution_rate, dead_letter_rate, …)
+```
+
+These four are the entire admin surface. Per-fact remediation (delete /
+redispatch / dead-letter listing) and per-ant remediation (isolate / restore)
+were intentionally removed: they accumulated complexity without a stated
+user. Operators who need them can write a thin admin client against the
+public APIs.
+
 ---
 
-## 8. Events (WebSocket)
+## 8. Events (non-normative)
 
-For pure HTTP polling clients, events are unnecessary — they reconstruct
-state by querying with `since_sequence`. For consumers that prefer push, the
-bus MAY expose a WebSocket endpoint that delivers:
+This protocol is **poll-only**. Clients drive their own scan loop via
+`GET /facts?since_sequence=N` (§7.3). The bus has no push channel.
 
-| Event | Trigger |
-|---|---|
-| `fact_available` | A new fact matches the consumer's filter |
-| `fact_claimed` | Someone claimed an exclusive fact |
-| `fact_resolved` | A fact was resolved |
-| `fact_dead` | A fact entered dead state |
-| `fact_trust_changed` | Epistemic state changed |
-| `fact_superseded` | A fact was superseded |
-| `ant_state_changed` | A consumer transitioned active/degraded/isolated |
-
-Polling-only deployments MAY omit WebSocket entirely. The MCP adapter does
-not use it.
+An earlier draft included a WebSocket per-ant event push (`fact_available` /
+`fact_claimed` / `fact_resolved` / `fact_dead` / `fact_trust_changed` /
+`fact_superseded` / `ant_state_changed`). It was removed because the
+canonical client interface (MCP, §2) cannot make use of it: MCP transports
+are request/response over stdio. Implementations MAY add their own out-of-tree
+event channel for legacy clients, but it is not part of this protocol and
+conforming implementations need not provide it.
 
 ---
 
 ## 9. Optional Extensions
 
-The core protocol covers Sections 3–8. Extensions add bounded, well-defined
+The core protocol covers Sections 3–7. Extensions add bounded, well-defined
 capability on top.
 
 ### 9.1 Epistemic States — *Stable*
@@ -586,7 +597,6 @@ signatures unverifiable across restarts.
 | GC retain dead | 86400s | Bumped from 3600s |
 | GC max facts in memory | 10,000 | Implementation choice |
 | JSONL compaction interval | 3600s | Implementation choice |
-| WebSocket replay on reconnect | 50 facts | Implementation choice |
 
 ---
 

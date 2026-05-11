@@ -247,53 +247,11 @@ describe("HTTP API", () => {
     expect(compact.status).toBe(200);
   });
 
-  it("admin delete fact", async () => {
-    const { factRes } = await connectAndPublish();
-    const del = await req("DELETE", `/admin/facts/${factRes.fact_id}`);
-    expect(del.status).toBe(200);
-
-    const get = await req("GET", `/facts/${factRes.fact_id}`);
-    expect(get.status).toBe(404);
-  });
-
-  it("admin redispatch dead fact", async () => {
-    const { factRes, antId, token } = await connectAndPublish();
-    // Claim and resolve to make it non-dead; we'll just redispatch a published fact
-    const rd = await req("POST", `/admin/facts/${factRes.fact_id}/redispatch`);
-    expect(rd.status).toBe(200);
-    expect((rd.json as any).success).toBe(true);
-  });
-
-  it("admin isolate and restore ant", async () => {
-    const { json: antRes } = await req("POST", "/ants/connect", { name: "target" });
-    const antId = (antRes as any).ant_id;
-
-    const iso = await req("POST", `/admin/ants/${antId}/isolate`);
-    expect(iso.status).toBe(200);
-    expect((iso.json as any).state).toBe("isolated");
-
-    const restore = await req("POST", `/admin/ants/${antId}/restore`);
-    expect(restore.status).toBe(200);
-    expect((restore.json as any).state).toBe("active");
-  });
-
-  it("admin dead-letter endpoint", async () => {
-    const dl = await req("GET", "/admin/dead-letter");
-    expect(dl.status).toBe(200);
-    expect(Array.isArray(dl.json)).toBe(true);
-  });
-
   it("admin metrics endpoint", async () => {
     const m = await req("GET", "/admin/metrics");
     expect(m.status).toBe(200);
     expect((m.json as any).computed).toBeDefined();
     expect((m.json as any).computed.resolution_rate).toBeDefined();
-  });
-
-  it("admin cleanup with dry_run", async () => {
-    const cl = await req("POST", "/admin/facts/cleanup", { dry_run: true });
-    expect(cl.status).toBe(200);
-    expect((cl.json as any).dry_run).toBe(true);
   });
 
   it("admin storage stats", async () => {
