@@ -8,7 +8,27 @@ import {
 import { createFact, Priority } from "../src/types/protocol.js";
 
 describe("ContentHasher", () => {
-  // Test vectors from Python reference implementation
+  // Spec-conformant test vectors per PROTOCOL.md §10.1 — canonical immutable
+  // record, sort_keys=True, ensure_ascii=False, sha256 of the resulting JSON.
+  //
+  // Each vector below has been verified to produce the same digest in Python:
+  //
+  //   def canonical(fact):
+  //       record = { 'fact_type': ..., 'payload': ..., 'source_ant_id': ...,
+  //                  'created_at': ..., 'mode': ..., 'priority': ...,
+  //                  'ttl_seconds': ..., 'causation_depth': ... }
+  //       # Optional fields included only when present (non-empty / non-null).
+  //       if pid: record['parent_fact_id'] = pid
+  //       if fact.confidence is not None: record['confidence'] = fact.confidence
+  //       if fact.domain_tags: record['domain_tags'] = sorted(fact.domain_tags)
+  //       if fact.need_capabilities: record['need_capabilities'] = sorted(...)
+  //       return record
+  //
+  //   hashlib.sha256(json.dumps(canonical(fact), sort_keys=True,
+  //                             ensure_ascii=False).encode()).hexdigest()
+  //
+  // If you change the canonical record format, update these vectors and the
+  // matching reference in PROTOCOL.md §10.1 in the same commit.
   const VECTOR_1 = {
     fact: createFact({
       fact_type: "test",
@@ -21,7 +41,7 @@ describe("ContentHasher", () => {
       priority: Priority.NORMAL,
     }),
     expectedHash:
-      "fc153af9663c21aa0febc6b3d8e05b95c8f49f2e7fde7cb6956fc1d3ba970d1c",
+      "33dc6c76a43bdd85073c6591f858f6fa2702474930954845378fc3ec8620ba21",
   };
 
   const VECTOR_2 = {
@@ -39,7 +59,7 @@ describe("ContentHasher", () => {
       confidence: 0.9,
     }),
     expectedHash:
-      "82c21858aaf2b9334e6c218727b611a812c362bfbcfc3eda0afcfafc1ad0f882",
+      "c5c909b45716af4f9909bd81e5e4c00101441ea478024a1e66cab45d3c411800",
   };
 
   const VECTOR_3 = {
@@ -55,20 +75,20 @@ describe("ContentHasher", () => {
       priority: Priority.NORMAL,
     }),
     expectedHash:
-      "5b395740dce50a9bd7f7c87f5acd46cf546c9f36f02c455a1cee6853f1dbfe59",
+      "8d9682806eb8ec7d6db23914a5bda0275f5018b0d5dd38369033e8fbc27b04e2",
   };
 
-  it("matches Python hash (vector 1: simple fact)", () => {
+  it("matches canonical record hash (vector 1: simple fact)", () => {
     const hash = computeContentHash(VECTOR_1.fact);
     expect(hash).toBe(VECTOR_1.expectedHash);
   });
 
-  it("matches Python hash (vector 2: with tags, capabilities, confidence)", () => {
+  it("matches canonical record hash (vector 2: with tags, capabilities, confidence)", () => {
     const hash = computeContentHash(VECTOR_2.fact);
     expect(hash).toBe(VECTOR_2.expectedHash);
   });
 
-  it("matches Python hash (vector 3: with causation_chain)", () => {
+  it("matches canonical record hash (vector 3: with causation_chain)", () => {
     const hash = computeContentHash(VECTOR_3.fact);
     expect(hash).toBe(VECTOR_3.expectedHash);
   });
