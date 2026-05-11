@@ -149,6 +149,7 @@ export interface Fact {
   state: FactState;
   epistemic_state: EpistemicState;
   claimed_by: string | null;
+  claimed_at: number | null;
   resolved_at: number | null;
   effective_priority: number | null;
   sequence_number: number;
@@ -193,6 +194,7 @@ export function createFact(overrides: Partial<Fact> = {}): Fact {
     state: "created",
     epistemic_state: "asserted",
     claimed_by: null,
+    claimed_at: null,
     resolved_at: null,
     effective_priority: null,
     sequence_number: 0,
@@ -472,6 +474,7 @@ export interface BusConfig {
   bus: {
     maxCausationDepth: number;
     defaultTtlSeconds: number;
+    claimTimeoutSeconds: number;
     gcRetainResolvedSeconds: number;
     gcRetainDeadSeconds: number;
     gcMaxFacts: number;
@@ -501,6 +504,7 @@ export const DEFAULT_CONFIG: BusConfig = {
   bus: {
     maxCausationDepth: 16,
     defaultTtlSeconds: 86400,
+    claimTimeoutSeconds: 600,
     gcRetainResolvedSeconds: 86400,
     gcRetainDeadSeconds: 86400,
     gcMaxFacts: 10000,

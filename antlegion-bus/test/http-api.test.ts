@@ -110,6 +110,10 @@ describe("HTTP API", () => {
       payload: { key: "value" },
       source_ant_id: ant_id,
       token,
+      // Default to exclusive in the test helper because most existing tests
+      // claim/resolve. Individual tests that want broadcast override via
+      // factOverrides.
+      mode: "exclusive",
       ...factOverrides,
     });
     return { antId: ant_id, token, factRes: factRes as any, status };

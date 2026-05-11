@@ -34,7 +34,7 @@ function createMatchResult(): MatchResult {
 }
 
 /** Simple glob matcher (supports * and ?). */
-function globMatch(pattern: string, text: string): boolean {
+export function globMatch(pattern: string, text: string): boolean {
   const regex = new RegExp(
     "^" +
       pattern
