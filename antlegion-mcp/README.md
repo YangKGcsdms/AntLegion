@@ -1,3 +1,5 @@
+<!-- lang-nav --> 🌐 **English** · [简体中文](README.zh-CN.md)
+
 # antlegion-mcp (v1 / legacy)
 
 > ⚠️ **Legacy.** This adapter fronts the **v1** bus (`../antlegion-bus/src/`,

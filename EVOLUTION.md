@@ -1,3 +1,5 @@
+<!-- lang-nav --> 🌐 **English** · [简体中文](EVOLUTION.zh-CN.md)
+
 # Evolution notes — why the runtime got cut
 
 This file documents why the trunk was trimmed from a 5-agent collaboration

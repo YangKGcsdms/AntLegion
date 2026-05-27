@@ -1,3 +1,5 @@
+<!-- lang-nav --> 🌐 **English** · [简体中文导读](PROTOCOL.zh-CN.md)
+
 # AntLegion Protocol — v2.0
 
 > One primitive. One write. One read. Everything else is derived.

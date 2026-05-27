@@ -1,3 +1,5 @@
+<!-- lang-nav --> 🌐 **English** · [简体中文](README.zh-CN.md)
+
 # antlegion-bus
 
 The fact-bus server. This package contains **two generations** (see

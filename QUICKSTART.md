@@ -1,3 +1,5 @@
+<!-- lang-nav --> 🌐 **English** · [简体中文](QUICKSTART.zh-CN.md)
+
 # Quickstart — AntLegion v2 (append-only fact bus)
 
 Five minutes from clone to two agents coordinating through immutable facts.
