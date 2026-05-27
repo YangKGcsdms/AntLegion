@@ -139,3 +139,43 @@ some idea, the source is right there.
 5. **No claim of "production-ready" without an e2e test.** Until there is a
    green CI job that exercises a real client against a real bus and asserts
    on a measurable outcome, README language stays at "alpha."
+
+---
+
+## Addendum (2026): v1 → v2, the monist redesign
+
+A review of v1 found a wide surface that was not all real: ~30 fields per fact,
+two server-side state machines, five extensions — and a meaningful fraction of
+the "Stable" features (priority aging, advanced arbitration, schema governance,
+the per-ant event push) were never actually exercised by the running bus or by
+the only real client (the MCP adapter, which doesn't even register an ant). For
+a would-be *standard*, that gap is fatal: the running code is the de-facto spec,
+so "documented but not implemented" destroys adopter trust.
+
+So v2 was re-derived from **one primitive**: an immutable, content-addressed
+fact at a unique position in a single total order. Two operations —
+`append` and `read`. Everything else (workflow state, trust, exclusive claim,
+supersession, causation) becomes a **reader fold** over the fact stream, not
+server state. The bus shrinks to a stateless trusted core (assign order, verify
+the content hash, stamp a trusted time + sign, persist, serve a range); the
+"smarts" move into a client fold library shipped once per language.
+
+What this bought:
+- **Implementation == spec.** The server is a few hundred lines; a second
+  implementation is a weekend, guarded by cross-language conformance vectors.
+- **Reliability is structural.** The log *is* the state, so crash recovery is a
+  truncate; exactly-once exclusivity is a theorem of total order, not a lock.
+- **The v1 defects dissolved, not patched:** GC no longer breaks causation
+  chains (tombstones keep the skeleton), auto-supersede is reader policy (no
+  silent footgun), claims survive restarts, and the dead arbitration/event code
+  is simply gone.
+
+The hard parts moved, not vanished: meaning now lives in the **fold rules**
+(`PROTOCOL.md` §3, normative), so those must be precise and conformance-tested —
+and stress-testing them with ~20-agent swarms (`antlegion-bus/examples/`) is
+exactly what surfaced and fixed the trickiest one (recv-anchored claim expiry
+so crash-recovery re-dispatch can't be blocked by a stale owner).
+
+v1 is preserved (`antlegion-bus/src/`, `antlegion-mcp/`,
+`PROTOCOL-v1-historical.md`) because the MCP adapter is still the only zero-code
+path for MCP clients. A v2 MCP adapter is the planned bridge.

@@ -1,4 +1,10 @@
-# antlegion-mcp
+# antlegion-mcp (v1 / legacy)
+
+> ⚠️ **Legacy.** This adapter fronts the **v1** bus (`../antlegion-bus/src/`,
+> port 28080). It is retained because it is currently the only zero-code way for
+> MCP clients to join a bus; a **v2** MCP adapter is planned. For the current v2
+> fact bus, use its SDK/CLI directly — see [`../QUICKSTART.md`](../QUICKSTART.md)
+> and [`../PROTOCOL.md`](../PROTOCOL.md).
 
 MCP (Model Context Protocol) server that fronts an AntLegion Bus instance.
 Any MCP-capable client — Claude Code, Cursor, Cline, Continue, Windsurf,
@@ -6,8 +12,8 @@ Goose, Codex CLI, Zed — joins the bus by adding this server to its MCP
 config.
 
 For the project overview see [`../README.md`](../README.md).
-For the bus protocol see [`../PROTOCOL.md`](../PROTOCOL.md).
-For the full walkthrough see [`../QUICKSTART.md`](../QUICKSTART.md).
+For the v1 bus protocol see [`../PROTOCOL-v1-historical.md`](../PROTOCOL-v1-historical.md).
+For the full v1 walkthrough see [`../QUICKSTART-v1-mcp.md`](../QUICKSTART-v1-mcp.md).
 
 This adapter hides the bus protocol's complexity (content hashes, signatures,
 tokens, ant identity, causation depth, semantic kinds). Clients see only

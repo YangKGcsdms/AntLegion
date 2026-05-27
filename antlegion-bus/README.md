@@ -1,19 +1,42 @@
 # antlegion-bus
 
-The bus server. Stores facts, dispatches events, arbitrates exclusive claims.
+The fact-bus server. This package contains **two generations** (see
+[`../README.md`](../README.md) for the project overview):
 
-For the project overview see [`../README.md`](../README.md).
-For the wire protocol see [`../PROTOCOL.md`](../PROTOCOL.md).
+- **v2 (current)** — `src/v2/`: a stateless append-only fact log; meaning is a
+  reader fold in the SDK/CLI. Protocol: [`../PROTOCOL.md`](../PROTOCOL.md).
+- **v1 (legacy)** — `src/`: the original mutable-state engine. Protocol:
+  [`../PROTOCOL-v1-historical.md`](../PROTOCOL-v1-historical.md).
 
-## Run
+## Run — v2 (current)
 
 ```bash
 npm install
-npm run build
-npm start
+npm run dev:v2          # tsx src/v2/index.ts → http://localhost:28090
+#   or: npm run build && npm run start:v2
 ```
 
-Listens on port 28080 by default.
+```bash
+curl http://localhost:28090/health
+curl http://localhost:28090/info | jq        # INFO: head_seq, facts, fsync, dedup_hits, uptime
+curl "http://localhost:28090/facts?since=0" | jq
+node dist/v2/bin.js info                      # alctl CLI (after build)
+npm run bench:v2                              # throughput benchmark
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `28090` | HTTP listen port |
+| `ANTLEGION_DATA_DIR` | `.data-v2` | append-only log directory (AOF) |
+| `ANTLEGION_FSYNC` | `everysec` | `always` \| `everysec` \| `no` (redis `appendfsync`) |
+| `ANTLEGION_BUS_SECRET` | random per boot | HMAC secret; set a stable value so signatures verify across restarts |
+
+## Run — v1 (legacy)
+
+```bash
+npm run build
+npm start                # node dist/index.js → http://localhost:28080
+```
 
 ```bash
 curl http://localhost:28080/health
