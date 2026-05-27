@@ -1,0 +1,12 @@
+# Build context is the repo root (see Dockerfile). Keep it lean.
+.git
+**/node_modules
+**/dist
+**/.data
+**/.data-v2
+**/*.jsonl
+**/*.jsonl.tmp
+**/*.log
+**/.env
+**/.env.*
+docs

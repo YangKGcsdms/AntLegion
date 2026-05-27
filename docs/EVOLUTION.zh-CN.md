@@ -76,10 +76,12 @@ Claude Code、Cursor、Cline、Continue、Windsurf、Goose、Codex CLI、Zed 以
 - `start.sh`、`submit-task.sh`、`watch.sh` —— 被 `docker compose up` 加客户端侧配置取代。
 - `FACT-FLOW.md`、`PROJECT_SUMMARY.md` —— SDLC 叙事。README 现在承载更小的新故事。
 - `antlegion-bus/DESIGN.md`、`antlegion-bus/PROGRESS.md` —— 旧运行时耦合时代的设计与
-  阶段跟踪;有用的协议内容已并入根 [PROTOCOL.md](PROTOCOL.md)。
+  阶段跟踪;有用的协议内容已并入根 [PROTOCOL.md](../PROTOCOL.md)。
 - `antlegion-bus/protocol/{SPEC, EXTENSIONS, IMPLEMENTATION-NOTES}`(六个文件,中英文)——
-  合并进根部统一的 [PROTOCOL.md](PROTOCOL.md)。
-- `docs/` 子目录。所有文档现在都在项目根部以便发现。
+  合并进根部统一的 [PROTOCOL.md](../PROTOCOL.md)。
+- `docs/` 子目录。文档迁回项目根部以便发现。(后续的一次整理又新建了 `docs/`
+  存放辅助指南——QUICKSTART、EVOLUTION——根部仅保留 README + PROTOCOL,以及
+  Dockerfile 与 CLAUDE.md。)
 
 ## 旧代码在哪
 

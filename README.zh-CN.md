@@ -38,10 +38,10 @@ git(内容哈希 + 游标 `fetch`)、科学方法(可被同行评议、可被反
 哈希、盖可信时间、签名、持久化、按区间返回。认领、解决、信任、取代、因果都是对事实流的
 **读者折叠**([`PROTOCOL.md`](PROTOCOL.md) §3)——总线不持有 per-fact 状态。「智能」集中
 在一处:客户端 SDK / `alctl` CLI / MCP 适配器,均在
-[`antlegion-bus/src/`](antlegion-bus/src)。从这里开始:[`QUICKSTART.md`](QUICKSTART.md)。
+[`antlegion-bus/src/`](antlegion-bus/src)。从这里开始:[`QUICKSTART.md`](docs/QUICKSTART.md)。
 
 > 早期的 **v1**(可变状态总线 + 独立 MCP 包)在本设计取代它后已被移除,保留在 git 历史里。
-> 见 [`EVOLUTION.md`](EVOLUTION.md)。
+> 见 [`EVOLUTION.md`](docs/EVOLUTION.md)。
 
 ## 快速上手(60 秒)
 
@@ -66,7 +66,7 @@ await winner.resolve(id, [{ type: "build.done", payload: { ok: true } }]);
 await bob.state(id);    // → { state: "resolved", owner: <winner> }  (从日志折叠得到)
 ```
 
-完整版(含持久化与 CLI):[`QUICKSTART.md`](QUICKSTART.md)。
+完整版(含持久化与 CLI):[`QUICKSTART.md`](docs/QUICKSTART.md)。
 
 ## 已验证的保证
 
@@ -90,14 +90,15 @@ npx tsx examples/swarm-v2.ts          # 以及 scenario-{resilience,consensus,pi
 .
 ├── README.md          ← 你在这里   (每份文档都有 .zh-CN.md 中文版)
 ├── PROTOCOL.md        ← 线协议(§3 折叠规则为规范性)
-├── QUICKSTART.md      ← 60 秒快速上手(服务端 + SDK + alctl + MCP)
-├── EVOLUTION.md       ← 项目为何如此(v0 → v1 → v2)
+├── Dockerfile         ← 像跑 redis 一样跑总线(从仓库根构建)
 ├── CLAUDE.md          ← 给 Claude Code 在本仓工作的指引
+├── docs/
+│   ├── QUICKSTART.md  ← 60 秒快速上手(服务端 + SDK + alctl + MCP)
+│   └── EVOLUTION.md   ← 项目为何如此(v0 → v1 → v2)
 └── antlegion-bus/
     ├── src/           ← 内核(bus.ts)、服务端、折叠 SDK(client.ts)、alctl CLI、MCP 适配器(mcp.ts)、AOF(log.ts)、bench
     ├── examples/      ← 多 Agent 验证 swarm
-    ├── test/          ← 单元测试(74 个)
-    └── Dockerfile     ← 像跑 redis 一样跑总线
+    └── test/          ← 单元测试(74 个)
 ```
 
 ## 状态

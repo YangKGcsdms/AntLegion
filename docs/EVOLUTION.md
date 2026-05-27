@@ -98,14 +98,16 @@ all support it. One MCP adapter unlocks all of them at once.
   carries the new, smaller story.
 - `antlegion-bus/DESIGN.md`, `antlegion-bus/PROGRESS.md` — implementation
   design and phase tracking for the old runtime-coupled era. Their useful
-  protocol content was folded into the root [PROTOCOL.md](PROTOCOL.md).
+  protocol content was folded into the root [PROTOCOL.md](../PROTOCOL.md).
 - `antlegion-bus/protocol/{SPEC, EXTENSIONS, IMPLEMENTATION-NOTES}` (six
   files, English + Chinese). Merged into a single unified
-  [PROTOCOL.md](PROTOCOL.md) at root, with §12 (Node Implementation
+  [PROTOCOL.md](../PROTOCOL.md) at root, with §12 (Node Implementation
   Responsibilities) and Appendix C (Agent Decision Guide) removed — those
   now live in the MCP adapter.
-- The `docs/` subdirectory. All documentation now lives at the project root
-  for discoverability.
+- The `docs/` subdirectory. Documentation moved to the project root for
+  discoverability. (A later tidy-up re-introduced a `docs/` folder for the
+  ancillary guides — QUICKSTART, EVOLUTION — keeping only README + PROTOCOL,
+  plus the Dockerfile and CLAUDE.md, at the root.)
 
 ## Where to find the old code
 

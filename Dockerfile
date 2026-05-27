@@ -1,13 +1,14 @@
 # AntLegion v2 — append-only fact bus, run it like you run redis.
+# Build context is the repo root; the source package lives in antlegion-bus/.
 #
-#   docker build -f Dockerfile-v2 -t antlegion-v2 .
+#   docker build -t antlegion-v2 .          # run from the repo root
 #   docker run -p 28090:28090 -v antlegion-data:/data \
 #     -e ANTLEGION_BUS_SECRET=change-me -e ANTLEGION_FSYNC=everysec antlegion-v2
 FROM node:20-alpine AS build
 WORKDIR /app
-COPY package*.json tsconfig.json ./
+COPY antlegion-bus/package*.json antlegion-bus/tsconfig.json ./
 RUN npm ci
-COPY src ./src
+COPY antlegion-bus/src ./src
 RUN npm run build
 
 FROM node:20-alpine
@@ -16,7 +17,7 @@ ENV NODE_ENV=production
 ENV PORT=28090
 ENV ANTLEGION_DATA_DIR=/data
 ENV ANTLEGION_FSYNC=everysec
-COPY package*.json ./
+COPY antlegion-bus/package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 VOLUME ["/data"]

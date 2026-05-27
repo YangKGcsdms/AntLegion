@@ -9,7 +9,7 @@
 
 AntLegion 是面向自治 Agent 的**事实总线**:一个只追加的不可变、内容寻址事实日志,Agent 通过它协作。奠基公理是**只有事实,没有命令(facts, not commands)**——Agent 发布/读取/认领/解决事实,从不互相寻址;协作从事实流中涌现。它**不是**消息队列、编排器或 Agent 运行时,定位为本地/可内嵌的基础设施(类 Redis),而非公网 SaaS。
 
-**只有一种架构**,在 `antlegion-bus/src/`(扁平)。唯一本原——全序中一个唯一位置的事实;两个操作——`append` / `read`。认领、解决、信任、取代、因果都是**读者折叠**,而非服务端状态。`PROTOCOL.md` 是**权威规范**;其 §3 折叠规则是规范性的(意义住在那里,因为总线无状态)。请保持 `PROTOCOL.md` 与 `src/` 同步。(早期的 v1——可变状态总线 + 独立 MCP 包——已被移除;见 `EVOLUTION.md` 与 git 历史。)
+**只有一种架构**,在 `antlegion-bus/src/`(扁平)。唯一本原——全序中一个唯一位置的事实;两个操作——`append` / `read`。认领、解决、信任、取代、因果都是**读者折叠**,而非服务端状态。`PROTOCOL.md` 是**权威规范**;其 §3 折叠规则是规范性的(意义住在那里,因为总线无状态)。请保持 `PROTOCOL.md` 与 `src/` 同步。(早期的 v1——可变状态总线 + 独立 MCP 包——已被移除;见 `docs/EVOLUTION.md` 与 git 历史。)
 
 ## 命令
 
@@ -57,6 +57,6 @@ clients → ClientV2(SDK, src/client.ts)─HTTP→ server.ts → BusV2(src/bus.t
 
 ## 参考文档
 - `PROTOCOL.md` —— 协议(权威;§3 折叠为规范性)。`PROTOCOL.zh-CN.md` —— 中文导读。
-- `QUICKSTART.md` —— 60 秒快速上手(服务端 + SDK + alctl + MCP)。
-- `EVOLUTION.md` —— 项目为何如此(v0 运行时 → v1 → v2 一元论重构,以及 v1 为何被移除)。
+- `docs/QUICKSTART.md` —— 60 秒快速上手(服务端 + SDK + alctl + MCP)。
+- `docs/EVOLUTION.md` —— 项目为何如此(v0 运行时 → v1 → v2 一元论重构,以及 v1 为何被移除)。
 - `README.md` —— 概览、定位、仓库地图、已验证保证。每份文档都有 `.zh-CN.md` 中文版。

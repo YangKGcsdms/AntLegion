@@ -43,11 +43,11 @@ a trusted time, signs, persists, and serves a range. Claim, resolve, trust,
 supersession, and causation are **reader folds** over the fact stream
 ([`PROTOCOL.md`](PROTOCOL.md) §3) — the bus holds no per-fact state. The smarts
 live in one place: the client SDK / `alctl` CLI / MCP adapter, all in
-[`antlegion-bus/src/`](antlegion-bus/src). Start here: [`QUICKSTART.md`](QUICKSTART.md).
+[`antlegion-bus/src/`](antlegion-bus/src). Start here: [`QUICKSTART.md`](docs/QUICKSTART.md).
 
 > An earlier **v1** — a mutable-state bus plus a separate MCP package — was
 > removed once this design superseded it; it lives on in git history. See
-> [`EVOLUTION.md`](EVOLUTION.md).
+> [`EVOLUTION.md`](docs/EVOLUTION.md).
 
 ## Quickstart (v2, 60 seconds)
 
@@ -72,7 +72,7 @@ await winner.resolve(id, [{ type: "build.done", payload: { ok: true } }]);
 await bob.state(id);    // → { state: "resolved", owner: <winner> }  (folded from the log)
 ```
 
-Full version, including persistence and the CLI: [`QUICKSTART.md`](QUICKSTART.md).
+Full version, including persistence and the CLI: [`QUICKSTART.md`](docs/QUICKSTART.md).
 
 ## What is validated
 
@@ -98,14 +98,15 @@ npx tsx examples/swarm-v2.ts          # and scenario-{resilience,consensus,pipel
 .
 ├── README.md          ← you are here   (every doc also ships a .zh-CN.md)
 ├── PROTOCOL.md        ← the wire protocol (§3 fold rules are normative)
-├── QUICKSTART.md      ← 60-second quickstart (server + SDK + alctl + MCP)
-├── EVOLUTION.md       ← why the project looks like this (v0 → v1 → v2)
+├── Dockerfile         ← run the bus like you run redis (build from the repo root)
 ├── CLAUDE.md          ← guidance for Claude Code working in this repo
+├── docs/
+│   ├── QUICKSTART.md  ← 60-second quickstart (server + SDK + alctl + MCP)
+│   └── EVOLUTION.md   ← why the project looks like this (v0 → v1 → v2)
 └── antlegion-bus/
     ├── src/           ← core (bus.ts), server, fold SDK (client.ts), alctl CLI, MCP adapter (mcp.ts), AOF (log.ts), bench
     ├── examples/      ← multi-agent validation swarms
-    ├── test/          ← unit suite (74 tests)
-    └── Dockerfile     ← run the bus like you run redis
+    └── test/          ← unit suite (74 tests)
 ```
 
 ## Status

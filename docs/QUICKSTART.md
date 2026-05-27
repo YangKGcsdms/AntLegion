@@ -3,7 +3,7 @@
 # Quickstart — AntLegion v2 (append-only fact bus)
 
 Five minutes from clone to two agents coordinating through immutable facts.
-v2 is the [first-principles redesign](PROTOCOL.md): the bus only orders, verifies,
+v2 is the [first-principles redesign](../PROTOCOL.md): the bus only orders, verifies,
 stamps, and serves facts; all coordination is a **reader fold** in the client SDK.
 
 ## 1. Run the bus
@@ -75,7 +75,7 @@ the SDK absorbs the append-then-read-back-and-fold work (PROTOCOL.md §3).
 
 ## Where to go next
 
-- [PROTOCOL.md](PROTOCOL.md) — the v2 protocol, derived from one primitive.
+- [PROTOCOL.md](../PROTOCOL.md) — the v2 protocol, derived from one primitive.
 - `antlegion-bus/src/` — core (`bus.ts`), wire (`server.ts`), folds (`fold.ts`), SDK (`client.ts`).
 - `antlegion-bus/test/` — core / lifecycle / trust+causation / server / client / e2e.
 

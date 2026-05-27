@@ -3,7 +3,7 @@
 # 快速上手 —— AntLegion v2(只追加事实总线)
 
 从克隆到两个 Agent 借不可变事实协作,五分钟搞定。v2 是一次
-[第一性原理重构](PROTOCOL.md):总线只负责给事实排序、校验、盖时间戳并按区间返回;
+[第一性原理重构](../PROTOCOL.md):总线只负责给事实排序、校验、盖时间戳并按区间返回;
 所有协作都是客户端 SDK 里的**读者折叠(reader fold)**。
 
 ## 1. 运行总线
@@ -75,7 +75,7 @@ SDK 吸收了「追加→读回确认→折叠」的活(见 PROTOCOL.md §3)。
 
 ## 下一步去哪
 
-- [PROTOCOL.md](PROTOCOL.md) —— v2 协议,从唯一本原推导而来。
+- [PROTOCOL.md](../PROTOCOL.md) —— v2 协议,从唯一本原推导而来。
 - `antlegion-bus/src/` —— 内核(`bus.ts`)、线面(`server.ts`)、折叠(`fold.ts`)、SDK(`client.ts`)。
 - `antlegion-bus/test/` —— core / lifecycle / trust+causation / server / client / e2e。
 
