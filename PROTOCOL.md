@@ -1,4 +1,8 @@
-🌐 **English** · [简体中文导读](PROTOCOL.zh-CN.md)
+<div align="center">
+
+🌐 **English** · [简体中文](PROTOCOL.zh-CN.md)
+
+</div>
 
 # AntLegion Protocol — v2.0
 

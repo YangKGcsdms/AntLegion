@@ -1,85 +1,211 @@
+<div align="center">
+
 🌐 **English** · [简体中文](QUICKSTART.zh-CN.md)
 
-# Quickstart — AntLegion v2 (append-only fact bus)
+</div>
+
+# Quickstart — AntLegion v2
 
 Five minutes from clone to two agents coordinating through immutable facts.
-v2 is the [first-principles redesign](../PROTOCOL.md): the bus only orders, verifies,
-stamps, and serves facts; all coordination is a **reader fold** in the client SDK.
+
+The bus only orders, verifies, stamps, and serves facts. All coordination —
+claim, resolve, trust, causation — is a **reader fold** in the client SDK.
+See [PROTOCOL.md](../PROTOCOL.md) for the full spec.
 
 ## 1. Run the bus
 
 ```bash
 cd antlegion-bus
 npm install
-npm run dev          # tsx src/index.ts — http://localhost:28090
-#   or: npm run build && npm run start
+npm run dev
+# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
+
+# or build once and run:
+npm run build && npm run start
 ```
 
-Verify:
+Verify it's up:
 
 ```bash
 curl http://localhost:28090/health
-# → {"status":"ok","protocol":"2.0","head_seq":0}
+# {"status":"ok","protocol":"2.0","head_seq":0}
+```
+
+**Or with Docker** (build from the repo root):
+
+```bash
+docker build -t antlegion ..
+docker run -p 28090:28090 -e ANTLEGION_BUS_SECRET=your-stable-secret antlegion
 ```
 
 ## 2. The whole wire surface (one write, one read)
 
 ```bash
-# append a fact (the bus assigns seq, recv, id, sig)
+# Append a fact — the bus assigns seq, recv, id, sig
 curl -sX POST http://localhost:28090/facts \
   -H 'content-type: application/json' \
   -d '{"type":"demo.hello","author":"me","ts":1748300000,"payload":{"msg":"hi"}}'
-# → 201 {"seq":1,"recv":...,"id":"…","sig":"…","deduped":false}
+# 201 {"seq":1,"recv":1748300000.4,"id":"b3f1…","sig":"…","deduped":false}
 
-# read from a cursor (git-fetch style)
+# Read from a cursor (git-fetch style)
 curl -s "http://localhost:28090/facts?since=0"
+
+# Useful filters
+curl -s "http://localhost:28090/facts?since=0&type=task.*"
+curl -s "http://localhost:28090/facts?since=0&refs.claim_of=<id>"
+
+# Check the head (start a reader at "newest only")
+curl -s http://localhost:28090/facts/head
+# {"head_seq":1}
+
+# Bus info (INFO analog)
+curl -s http://localhost:28090/info | jq
+# {"protocol":"2.0","head_seq":1,"facts":1,"fsync":"everysec","sig_failures":0,…}
 ```
 
 That is the entire bus API. `claim`, `resolve`, `vote`, `trust`, `state` are
 **not** endpoints — they are facts about facts, folded by the client.
 
-## 3. Coordinate from code (the folding SDK)
+## 3. Drive it from the terminal (`alctl`)
 
-```ts
+`alctl` is the `redis-cli` analog. Build once, then:
+
+```bash
+# Publish
+node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
+# {"id":"b3f1…","seq":1,"deduped":false}
+
+# Claim (exactly one wins)
+node dist/bin.js claim b3f1… --author bob
+# {"won":false,"winner":"alice"}
+
+# Check lifecycle state
+node dist/bin.js state b3f1…
+# {"state":"claimed","owner":"alice"}
+
+# Tail the live stream
+node dist/bin.js tail
+
+# Bus info
+node dist/bin.js info
+```
+
+## 4. Coordinate from code (the folding SDK)
+
+```typescript
 import { ClientV2, httpTransport } from "antlegion-bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
 
+// Publish a work item
 const { id } = await alice.publish("task.build", { target: "todo-app" });
 
-// both race; exactly one wins (lowest seq — a theorem of total order)
+// Both race to claim; lowest seq wins — deterministic, no locks
 const [ra, rb] = await Promise.all([alice.claim(id), bob.claim(id)]);
 const winner = ra.won ? alice : bob;
 
+// Winner resolves, optionally emitting child facts (causation chain)
 await winner.resolve(id, [{ type: "build.done", payload: { ok: true } }]);
 
-await alice.state(id);  // → { state: "resolved", owner: <winner> }
-await bob.state(id);    // same — any client folds the same state from the log
+// Any client folds the same state from the same immutable log
+await alice.state(id);  // { state: "resolved", owner: <winner> }
+await bob.state(id);    // identical — deterministic fold
 ```
 
-The client surface stays as small as v1's MCP tools
-(`publish / claim / resolve / release / observe / state / trustOf / causation`);
-the SDK absorbs the append-then-read-back-and-fold work (PROTOCOL.md §3).
+The client surface: `publish` / `claim` / `resolve` / `release` / `observe` /
+`state` / `trustOf` / `causation` / `query` / `snapshot`.
 
-## 4. What makes a fact
+The SDK absorbs the append-then-read-back-and-fold work (PROTOCOL.md §3).
+
+## 5. What makes a fact
 
 ```jsonc
-{ "type": "build.failed", "author": "ci", "ts": 1748300000,
-  "payload": { "...": "..." },
-  "refs": { "parent": "<id>", "claim_of": "<id>", "vote": "<id>", "supersedes": "<id>" } }
+{
+  "seq":    1,              // bus-assigned (trusted)
+  "recv":   1748300000.4,   // bus-assigned trusted time — fold on this, not ts
+  "id":     "b3f1…",        // sha256(canonical(record))
+  "type":   "build.failed", // dotted; reserved types begin with "_."
+  "author": "ci",
+  "ts":     1748300000,     // author-stated (advisory only)
+  "payload": { "…": "…" },
+  "refs": {                 // always fact ids, never agent ids
+    "parent":    "<id>",    // causal predecessor
+    "claim_of":  "<id>",    // exclusive claim on target
+    "resolves":  "<id>",    // target is done
+    "vote":      "<id>",    // corroborate / contradict
+    "supersedes":"<id>",    // this replaces target
+    "tombstones":"<id>"     // target is deleted/GC'd
+  }
+}
 ```
 
-`refs` is the only relational mechanism. Reserved fact types `_.claim`,
-`_.resolve`, `_.release`, `_.vote`, `_.tombstone` carry the coordination verbs.
+## 6. Connect via MCP
+
+Any MCP-capable agent (Claude Code, Cursor, Cline, Windsurf, Zed, …) can
+connect with a one-liner:
+
+```bash
+npm run build   # compile once
+
+ANTLEGION_BUS_URL=http://localhost:28090 \
+ANTLEGION_AGENT_NAME=my-agent \
+node dist/mcp.js
+```
+
+Seven tools: `antlegion_publish`, `antlegion_query`, `antlegion_claim`,
+`antlegion_resolve`, `antlegion_observe`, `antlegion_causation`,
+`antlegion_state`.
+
+One resource: `antlegion://facts/recent` — the 20 most recent facts as JSON.
+
+## 7. Validate the multi-agent swarms
+
+```bash
+# 21 agents, 50-item fan-out/in, exactly-once (dupes=0 missing=0)
+npx tsx examples/swarm-v2.ts
+
+# Crash + claim-timeout re-dispatch
+npx tsx examples/scenario-resilience.ts
+
+# Peer review: decider acts only on consensus
+npx tsx examples/scenario-consensus.ts
+
+# Causal pipeline build→test→deploy + supersession
+npx tsx examples/scenario-pipeline.ts
+```
+
+## 8. Persistence and recovery
+
+The bus writes a single `facts-v2.jsonl` file in `ANTLEGION_DATA_DIR` (default `.data-v2`).
+Kill and restart it with the same `ANTLEGION_BUS_SECRET` — it recovers completely:
+
+```bash
+# Start, write some facts, stop
+ANTLEGION_BUS_SECRET=stable node dist/index.js &
+curl -sX POST http://localhost:28090/facts \
+  -H 'content-type: application/json' \
+  -d '{"type":"t","author":"u","ts":1,"payload":{}}'
+kill %1
+
+# Restart — head_seq is restored, sig_failures=0
+ANTLEGION_BUS_SECRET=stable node dist/index.js &
+curl -s http://localhost:28090/info | jq '.head_seq, .sig_failures'
+# 1
+# 0
+```
+
+Compaction (the BGREWRITEAOF analog):
+
+```bash
+curl -sX POST http://localhost:28090/admin/rewrite | jq
+# {"stripped": 0}   # payloads dropped from tombstoned/superseded facts
+```
 
 ## Where to go next
 
-- [PROTOCOL.md](../PROTOCOL.md) — the v2 protocol, derived from one primitive.
+- [PROTOCOL.md](../PROTOCOL.md) — the full v2 spec (§3 fold rules are normative).
+- [EVOLUTION.md](EVOLUTION.md) — why the project looks like this.
 - `antlegion-bus/src/` — core (`bus.ts`), wire (`server.ts`), folds (`fold.ts`), SDK (`client.ts`).
-- `antlegion-bus/test/` — core / lifecycle / trust+causation / server / client / e2e.
-
-## Status
-
-Alpha. Reachable but not yet built: a v2 MCP adapter (N3), cross-language
-conformance vectors (N6), and public-facing auth/rate-limit hardening (N7).
+- `antlegion-bus/conformance/` — cross-language interop vectors + Python verifier.
+- `antlegion-bus/test/` — 136 tests (vitest).
