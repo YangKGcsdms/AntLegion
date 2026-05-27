@@ -1,0 +1,1118 @@
+{
+  "version": "2.0",
+  "description": "AntLegion Protocol v2 conformance vectors. hash[] = canonical/id (§4); folds = normative reader folds (§3). A conforming implementation MUST reproduce every value byte-for-byte.",
+  "secret": "conformance-secret",
+  "defaults": {
+    "claimTimeout": 600,
+    "quorum": 2
+  },
+  "hash": [
+    {
+      "name": "minimal",
+      "input": {
+        "type": "build.failed",
+        "author": "claude-code",
+        "ts": 1748300000,
+        "payload": {}
+      },
+      "canonical": "{\"author\": \"claude-code\", \"payload\": {}, \"ts\": 1748300000.0, \"type\": \"build.failed\"}",
+      "id": "db64979e46661a2e0574b6cc597db98203e335c9b6d404676d9b4a8e8de4254a"
+    },
+    {
+      "name": "with-refs",
+      "input": {
+        "type": "_.claim",
+        "author": "alice",
+        "ts": 1748300001.5,
+        "payload": {},
+        "refs": {
+          "claim_of": "abc123"
+        }
+      },
+      "canonical": "{\"author\": \"alice\", \"payload\": {}, \"refs\": {\"claim_of\": \"abc123\"}, \"ts\": 1748300001.5, \"type\": \"_.claim\"}",
+      "id": "6ffbe7e45ff925109ee42a79d4ec1d75458d347f0ec95c53d040eb46a4310c0a"
+    },
+    {
+      "name": "with-nonce",
+      "input": {
+        "type": "_.claim",
+        "author": "bob",
+        "ts": 1,
+        "payload": {},
+        "refs": {
+          "claim_of": "abc123"
+        },
+        "nonce": "k7x9"
+      },
+      "canonical": "{\"author\": \"bob\", \"nonce\": \"k7x9\", \"payload\": {}, \"refs\": {\"claim_of\": \"abc123\"}, \"ts\": 1.0, \"type\": \"_.claim\"}",
+      "id": "f96b54c25f991e0ab33c044e9409bd4d9bffafe648e032f56313fb090cf62a52"
+    },
+    {
+      "name": "nested-payload-key-sort",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 2,
+        "payload": {
+          "z": 1,
+          "a": {
+            "d": 4,
+            "b": 2
+          },
+          "m": [
+            3,
+            1,
+            2
+          ]
+        }
+      },
+      "canonical": "{\"author\": \"u\", \"payload\": {\"a\": {\"b\": 2, \"d\": 4}, \"m\": [3, 1, 2], \"z\": 1}, \"ts\": 2.0, \"type\": \"t\"}",
+      "id": "e5014ff8c6b330cbf4e75b90c8fe1fb777248d3863088e09015e6bcd6afcc707"
+    },
+    {
+      "name": "whole-number-ts-renders-float",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 100,
+        "payload": {}
+      },
+      "canonical": "{\"author\": \"u\", \"payload\": {}, \"ts\": 100.0, \"type\": \"t\"}",
+      "id": "c1751bb0d5944e1f0d0239de26b2a63884c1edcb5dc5dbe3bb57f4015bfc3c2b"
+    },
+    {
+      "name": "unicode-payload",
+      "input": {
+        "type": "事实",
+        "author": "张三",
+        "ts": 3,
+        "payload": {
+          "msg": "你好, world ✅"
+        }
+      },
+      "canonical": "{\"author\": \"张三\", \"payload\": {\"msg\": \"你好, world ✅\"}, \"ts\": 3.0, \"type\": \"事实\"}",
+      "id": "bcb1e5bbb903e2f6f76a6c668053591c30eacb84b9ca344999a3073a624a22d2"
+    },
+    {
+      "name": "empty-refs-omitted-from-canonical",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 4,
+        "payload": {},
+        "refs": {}
+      },
+      "canonical": "{\"author\": \"u\", \"payload\": {}, \"ts\": 4.0, \"type\": \"t\"}",
+      "id": "0dd3567fad419937c823d6a9a7601cdf3c89a1e47e1a8ca2bd2aa8d6c822f724"
+    }
+  ],
+  "folds": {
+    "lifecycle": [
+      {
+        "name": "open",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "open",
+          "owner": null
+        }
+      },
+      {
+        "name": "claimed",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "a",
+            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "claimed",
+          "owner": "alice"
+        }
+      },
+      {
+        "name": "exactly-once-lowest-seq-wins",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "a",
+            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+          },
+          {
+            "seq": 3,
+            "recv": 102,
+            "id": "ef241db94c612043a4deb186a79ad066e20f42b055270498f97db49b5693dd69",
+            "type": "_.claim",
+            "author": "bob",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "b",
+            "sig": "017fc5ae7ef5d60b3241c18dc0b244c6d0d0e39402098a6915f086158f799b78"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "claimed",
+          "owner": "alice"
+        }
+      },
+      {
+        "name": "resolved-by-winner-terminal",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "a",
+            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+          },
+          {
+            "seq": 3,
+            "recv": 102,
+            "id": "d785d8ae774f8d2f0d4cccc7e4611aee601c14cbeee13d423c5185c435c58617",
+            "type": "_.resolve",
+            "author": "alice",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "resolves": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "r",
+            "sig": "f4e8c4275d59fabb4e77a33989c7725c65a94eee8d2fd17eabe34c2342bc8836"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "resolved",
+          "owner": "alice"
+        }
+      },
+      {
+        "name": "resolve-by-non-winner-ignored",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "a",
+            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+          },
+          {
+            "seq": 3,
+            "recv": 102,
+            "id": "8de59dd15e9da4c3410daa6bb7ab9e49e3d05421e12bb519b980043e9f26d880",
+            "type": "_.resolve",
+            "author": "mallory",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "resolves": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "r",
+            "sig": "c17ddc6d49faec81fa7e073798d4a65756a5a7784b7334c4aa2bde24cf96e080"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "claimed",
+          "owner": "alice"
+        }
+      },
+      {
+        "name": "broadcast-resolve-never-claimed",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "1392dc4e42afd8745ce522c77179997be53b72ed54df2adfe6d5dd02c1017062",
+            "type": "announce",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "1f5e45c093011eddf6a142b5943c3d0d5eae940edd980c220088144d38dc373d"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "77f22e0f9144a586caf63b5b7238b5961ec9ed7f34398c270957d4610f28b85b",
+            "type": "_.resolve",
+            "author": "anyone",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "resolves": "1392dc4e42afd8745ce522c77179997be53b72ed54df2adfe6d5dd02c1017062"
+            },
+            "nonce": "r",
+            "sig": "94c1462e363dc63cd9420dcb394c365236e4d53af7cd945b97625d5fd3fc9b08"
+          }
+        ],
+        "target": "1392dc4e42afd8745ce522c77179997be53b72ed54df2adfe6d5dd02c1017062",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "resolved",
+          "owner": null
+        }
+      },
+      {
+        "name": "released-back-to-open",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "a",
+            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+          },
+          {
+            "seq": 3,
+            "recv": 102,
+            "id": "d12075eb3bb98f8b3474c1e5c4e4dbf84534a108f0ff28b29080246a32a04c58",
+            "type": "_.release",
+            "author": "alice",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "release_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "x",
+            "sig": "5ce52bb66c0e0b81d3a7f7b4a848dcf73e764ef9bffc763e68e53f28688a81a2"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "open",
+          "owner": null
+        }
+      },
+      {
+        "name": "dead-via-tombstone",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "8b79826061d81f57d7d3f5b39fe3ee33357e5df310c7abfae356ab0bc13e8ef3",
+            "type": "_.tombstone",
+            "author": "gc",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "tombstones": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "t",
+            "sig": "efd0ce34801813217209e7a71ce6ea4a1f7ae30030d3a524a97a6c7252b3eeef"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "dead",
+          "owner": null
+        }
+      },
+      {
+        "name": "timeout-redispatch-recv-anchored",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1000,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "a6a610ad805e65b396cffb224013d4bd519f38bde63099ab1bf74c69ba6deec8"
+          },
+          {
+            "seq": 2,
+            "recv": 1001,
+            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "a",
+            "sig": "a4ad70d4e78feb77b39b0952350f75a54b7f56f611df5c9112956060401e3a2e"
+          },
+          {
+            "seq": 3,
+            "recv": 2000,
+            "id": "ef241db94c612043a4deb186a79ad066e20f42b055270498f97db49b5693dd69",
+            "type": "_.claim",
+            "author": "bob",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "b",
+            "sig": "28d6e979c3b70f590d21bcce5fe15258898f6711c3b29e95d5cadcf4980202ea"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 2050,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "claimed",
+          "owner": "bob"
+        }
+      },
+      {
+        "name": "resolve-before-expiry-stays-terminal",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1000,
+            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "a6a610ad805e65b396cffb224013d4bd519f38bde63099ab1bf74c69ba6deec8"
+          },
+          {
+            "seq": 2,
+            "recv": 1001,
+            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "a",
+            "sig": "a4ad70d4e78feb77b39b0952350f75a54b7f56f611df5c9112956060401e3a2e"
+          },
+          {
+            "seq": 3,
+            "recv": 1100,
+            "id": "d785d8ae774f8d2f0d4cccc7e4611aee601c14cbeee13d423c5185c435c58617",
+            "type": "_.resolve",
+            "author": "alice",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "resolves": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "r",
+            "sig": "1df917bdde61708bc12b1ffb611d92b9a6c3d6c50e4e3586fe6031fe66d33f46"
+          },
+          {
+            "seq": 4,
+            "recv": 9000,
+            "id": "461b6e0d512ea78ee1cf3ed4ed10a79a8fd621821b8b76d16bf90bb31fb03539",
+            "type": "_.claim",
+            "author": "bob",
+            "ts": 4,
+            "payload": {},
+            "refs": {
+              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+            },
+            "nonce": "b",
+            "sig": "30ec1357b6be852d12d7118b49be2de36507164203af03c923db9b218224da22"
+          }
+        ],
+        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "opts": {
+          "now": 9999,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "resolved",
+          "owner": "alice"
+        }
+      }
+    ],
+    "trust": [
+      {
+        "name": "asserted-no-votes",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+          }
+        ],
+        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "quorum": 2,
+        "expect": "asserted"
+      },
+      {
+        "name": "corroborated-one-vote",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 2,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "1",
+            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+          }
+        ],
+        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "quorum": 2,
+        "expect": "corroborated"
+      },
+      {
+        "name": "consensus-quorum-2",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 2,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "1",
+            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "c26b9c7f00e4ecb5c9f20a3f382f6568bd8697d1fcd03ec03654da248ac80dac",
+            "type": "_.vote",
+            "author": "carol",
+            "ts": 3,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "2",
+            "sig": "004bbc73edf011e6e791b2e6099035604bb3646dbf3c4033b1a118958fd3f32e"
+          }
+        ],
+        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "quorum": 2,
+        "expect": "consensus"
+      },
+      {
+        "name": "contested-one-contradict",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 2,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "1",
+            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "01e7d1cb74556aaeb76d7c8b0fa1cbad5900bc84d398edc81ff0a7b80d929d90",
+            "type": "_.vote",
+            "author": "carol",
+            "ts": 3,
+            "payload": {
+              "verdict": "contradict"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "2",
+            "sig": "1c7714c184bed2d8d53122fc707c806bb9e89d95af83ba5fc24ccef84c348b68"
+          }
+        ],
+        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "quorum": 2,
+        "expect": "contested"
+      },
+      {
+        "name": "refuted-quorum-2",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "667cde9f1316063b4e0286b773a09f74b384783d7860f67b858bfe928e0389b5",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 2,
+            "payload": {
+              "verdict": "contradict"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "1",
+            "sig": "3b835b6b706d36eea55a42f1a18b5eaafb47e9c956c1a52b2384e8a9d089005b"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "01e7d1cb74556aaeb76d7c8b0fa1cbad5900bc84d398edc81ff0a7b80d929d90",
+            "type": "_.vote",
+            "author": "carol",
+            "ts": 3,
+            "payload": {
+              "verdict": "contradict"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "2",
+            "sig": "1c7714c184bed2d8d53122fc707c806bb9e89d95af83ba5fc24ccef84c348b68"
+          }
+        ],
+        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "quorum": 2,
+        "expect": "refuted"
+      },
+      {
+        "name": "self-vote-ignored",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "60998648cdcfaef512ac2abd7d89e55fbda7fb3b61c3a93eb63c6e7180e633cf",
+            "type": "_.vote",
+            "author": "alice",
+            "ts": 2,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "1",
+            "sig": "d36af192927a222e9967d5825aeedd70372c7042531207c6a44bfeb0e8e1af69"
+          }
+        ],
+        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "quorum": 2,
+        "expect": "asserted"
+      },
+      {
+        "name": "latest-vote-wins-per-author",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 2,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "1",
+            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "44f425af697ca34a8d21fbd7acc42e83eb395f39e09c85166c4c8ee30fcedcc3",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 3,
+            "payload": {
+              "verdict": "contradict"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "2",
+            "sig": "8d5b7818ae0fe3d189e504540e53758cd1924de0a1a839a0fe4b28431c8188db"
+          }
+        ],
+        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "quorum": 2,
+        "expect": "contested"
+      },
+      {
+        "name": "superseded-beats-trust",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 2,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "1",
+            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "99d791bcda7647b9c32eb10c022720d7d19f75d81d1f506d1cd48849e20a1b95",
+            "type": "obs",
+            "author": "carol",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "supersedes": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+            },
+            "nonce": "s",
+            "sig": "2d2cb9b05bccfde19b649d6364f9581ef89f889dd515b1910b108bea25e20a9b"
+          }
+        ],
+        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "quorum": 2,
+        "expect": "superseded"
+      }
+    ],
+    "supersession": [
+      {
+        "name": "not-superseded",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
+            "type": "obs",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "af294f6a554f8dd4367575d4b550e3d91a1f0de461367010e4c8059d4607a627"
+          }
+        ],
+        "target": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
+        "expect": null
+      },
+      {
+        "name": "explicit-supersedes",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
+            "type": "obs",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "af294f6a554f8dd4367575d4b550e3d91a1f0de461367010e4c8059d4607a627"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "82b26843ad5341e1a31557580679e61905587bb18db657b291fb291e6de58b6c",
+            "type": "obs",
+            "author": "b",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "supersedes": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00"
+            },
+            "nonce": "g",
+            "sig": "6095a022bea0e4ee795f7ab94a429f85cb8af5576b3db9abda8590770f363240"
+          }
+        ],
+        "target": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
+        "expect": "82b26843ad5341e1a31557580679e61905587bb18db657b291fb291e6de58b6c"
+      },
+      {
+        "name": "subject-latest-wins",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "c187d6a5e74243a3693eb29439b709fb98a509fc7d05daacc8ed73065d2ff378",
+            "type": "status",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "798b93da616688780a56cb47f865cecdb90e85408ac8fd0d2c2bfd91dfded65f"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "8cbcca01b3a9e7bd1e00f61a230a7fd936e08ce1f5ea0907b3fd66e26b317032",
+            "type": "status",
+            "author": "b",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "8be989e5a49ecf4b065ae73116e35d4a4e2eb89db51f95629ceb5fb40365c8dc"
+          }
+        ],
+        "target": "c187d6a5e74243a3693eb29439b709fb98a509fc7d05daacc8ed73065d2ff378",
+        "expect": "8cbcca01b3a9e7bd1e00f61a230a7fd936e08ce1f5ea0907b3fd66e26b317032"
+      },
+      {
+        "name": "tombstone-is-not-supersession",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
+            "type": "obs",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "af294f6a554f8dd4367575d4b550e3d91a1f0de461367010e4c8059d4607a627"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "0265b7340c78c95e3156fcee6626462fd6c5e671ea2682ae2602833f7222e633",
+            "type": "_.tombstone",
+            "author": "gc",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "tombstones": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00"
+            },
+            "nonce": "t",
+            "sig": "6ac8db57b7f9936f577990d9b50008922e80b73a569d1fa1ec4a519228b502c9"
+          }
+        ],
+        "target": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
+        "expect": null
+      }
+    ],
+    "causation": [
+      {
+        "name": "root-only",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "4fb66ce499bef7b8c0e797f641177e5b65d973da9161becf3bacbab286a7b76e",
+            "type": "root",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "f87cb4609400ee684da7c923fff4e7ae5f08056b7cafa711e25022b84fbe0a44"
+          }
+        ],
+        "target": "4fb66ce499bef7b8c0e797f641177e5b65d973da9161becf3bacbab286a7b76e",
+        "expect": [
+          "4fb66ce499bef7b8c0e797f641177e5b65d973da9161becf3bacbab286a7b76e"
+        ]
+      },
+      {
+        "name": "chain-root-to-fact",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "f0c9dbb3bab23d8ba0b7749403d0348a2dad408288af9af0893200d83ea59489",
+            "type": "build",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "e8f59b1d4a391a7db2fa016f77280b2846ac8a213b6761f571b1ae0be863c2e5"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "efd5f2894d05bfc9ce692d8d6f3ff25873b8e07ed902b7b3e5fe1555e3d5ab1c",
+            "type": "test",
+            "author": "a",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "parent": "f0c9dbb3bab23d8ba0b7749403d0348a2dad408288af9af0893200d83ea59489"
+            },
+            "sig": "c0a0db796aa1c6e7c28a4d813a055bb45c371098cf1bacd1d46476a807081618"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "114b12195f53091026cd4d070074e61af55851a413c05b6ae63e130557f98d18",
+            "type": "deploy",
+            "author": "a",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "parent": "efd5f2894d05bfc9ce692d8d6f3ff25873b8e07ed902b7b3e5fe1555e3d5ab1c"
+            },
+            "sig": "ce3e6f46ab03d31207a1915aae0a5e5d175e058f0dcb70a276ecfee00eaf117b"
+          }
+        ],
+        "target": "114b12195f53091026cd4d070074e61af55851a413c05b6ae63e130557f98d18",
+        "expect": [
+          "f0c9dbb3bab23d8ba0b7749403d0348a2dad408288af9af0893200d83ea59489",
+          "efd5f2894d05bfc9ce692d8d6f3ff25873b8e07ed902b7b3e5fe1555e3d5ab1c",
+          "114b12195f53091026cd4d070074e61af55851a413c05b6ae63e130557f98d18"
+        ]
+      }
+    ]
+  }
+}

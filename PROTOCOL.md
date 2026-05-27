@@ -299,6 +299,12 @@ content-addressed store like git: identical content is one object; you change
 the content to get a new one.
 
 The bus signs every accepted fact: `sig = hmac_sha256(secret, "id|author|type|ts|recv|seq")`.
+A verifier recomputes that HMAC and compares (constant-time) to `sig`; because
+the key is symmetric, **only a holder of the secret can verify** — the bus on
+recovery (a failing `sig` means the log was tampered or written under a
+different secret), or a read-replica that shares the secret. An unauthenticated
+HTTP reader cannot verify `sig`; for it, the content address `id` is the
+integrity check, and `seq`/`recv` are trusted by trusting the bus.
 Operators MUST set a stable `ANTLEGION_BUS_SECRET` so signatures verify across
 restarts. A **canonical cross-language conformance vector set** ships with the
 protocol; any implementation (TS, Python, Go, …) MUST reproduce its hashes
@@ -312,8 +318,12 @@ Kept deliberately minimal: just enough to stop an append-only log from being
 weaponized into unbounded growth or cycles. Everything else is a reader concern.
 
 1. **Integrity** — reject `id` ≠ `hash(record)` (§4).
-2. **Causation sanity** — reject if `refs.parent` forms a cycle, or if causation
-   depth (computed by walking `parent`) exceeds a configured max (default 64).
+2. **Causation depth** — reject if causation depth (computed by walking
+   `parent`) exceeds a configured max (default 64). A `refs.parent` **cycle is
+   structurally impossible** under content addressing — closing a loop A→B→A
+   would need A's `id` (and thus A's frozen content, which already names B) to be
+   known before A is hashed, i.e. a sha256 pre-image — so only depth is
+   enforceable, and the depth walk always terminates.
 3. **Admission rate** — a bus MAY apply a per-author token bucket and a global
    rate cap to bound log growth. Rejections are facts-not-written, never state
    mutations.

@@ -35,7 +35,7 @@ npm run bench                                   # throughput benchmark
 ## Tests
 
 ```bash
-npm test           # vitest run (74)
+npm test           # vitest run (136)
 npm run test:watch # vitest watch
 ```
 

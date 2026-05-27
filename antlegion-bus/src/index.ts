@@ -14,7 +14,7 @@ import { loadConfig } from "./config.js";
 
 const cfg = loadConfig();
 
-const { app, bus } = createServerV2({ dataDir: cfg.dataDir, fsync: cfg.fsync, secret: cfg.secret });
+const { app, bus } = createServerV2({ dataDir: cfg.dataDir, fsync: cfg.fsync, secret: cfg.secret, maxDepth: cfg.maxDepth });
 
 const server = serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(`[antlegion-v2] append-only fact bus on http://localhost:${info.port} (fsync=${cfg.fsync})`);

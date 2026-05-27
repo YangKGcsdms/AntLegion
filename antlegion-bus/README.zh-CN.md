@@ -35,7 +35,7 @@ npm run bench                                   # 吞吐 benchmark
 ## 测试
 
 ```bash
-npm test           # vitest run(74)
+npm test           # vitest run(136)
 npm run test:watch # vitest watch
 ```
 

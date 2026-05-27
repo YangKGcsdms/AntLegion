@@ -23,10 +23,14 @@ npm run bench           # throughput benchmark (redis-benchmark analog)
 node dist/bin.js <cmd>  # alctl CLI (publish/read/tail/claim/resolve/state/trust/causation/info); needs build + a running bus
 npx tsx examples/swarm-v2.ts   # multi-agent validation swarms (also scenario-{resilience,consensus,pipeline})
 
-# tests (74)
+# tests (136)
 npm test                                    # vitest run
 npx vitest run test/fold-lifecycle.test.ts  # single file
 npx vitest run -t "exactly-once"            # by name
+
+# conformance vectors (the §4 interop contract)
+npx tsx conformance/generate.ts   # regenerate vectors.json (only on an intentional protocol change — a changed hash is wire-breaking)
+python3 conformance/verify.py     # independent cross-language check: reproduce every committed hash byte-for-byte
 ```
 
 No lint config. `npx tsc --noEmit` typechecks.
@@ -54,6 +58,8 @@ The **Fact**: `{seq, recv, id, type, author, ts, payload, refs, nonce?, sig}`. `
 - **Idempotent by `id`**: re-appending identical content returns the existing fact; set a fresh `nonce` for a genuinely new action.
 - **Server config is env-driven** (`config.ts`, the `redis.conf` analog): `PORT` (28090), `ANTLEGION_DATA_DIR` (`.data-v2`), `ANTLEGION_FSYNC` (`always|everysec|no`, default `everysec`), `ANTLEGION_BUS_SECRET`. Set a **stable** `ANTLEGION_BUS_SECRET` — unset, the bus mints a fresh HMAC key each boot and `sig`s written before a restart can no longer be verified.
 - ESM (`"type":"module"`); intra-package imports use explicit `.js` extensions from `.ts` sources.
+- **Spec safety rules are enforced, not just documented (§4/§5).** `append` rejects causation depth > `maxDepth` (`ANTLEGION_MAX_DEPTH`, default 64); parent *cycles* need no check — content addressing makes them unconstructible. The bus verifies every fact's `sig` on recovery when the secret is stable and surfaces `sig_failures` via INFO (`hash.ts:verifySig`, constant-time; HMAC is symmetric so only the bus / a secret-sharing replica can verify, never an HTTP client).
+- **`conformance/vectors.json` is the §4 interop contract** (not prose): the TS suite (`test/conformance.test.ts`) and an independent Python verifier (`conformance/verify.py`) both reproduce its hashes + fold outputs. Regenerate only on an intentional protocol change and review the diff — a changed hash is wire-breaking.
 
 ## Reference docs
 - `PROTOCOL.md` — the protocol (authoritative; §3 folds are normative). `PROTOCOL.zh-CN.md` — Chinese reader's guide.

@@ -9,7 +9,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { computeId, computeSig } from "./hash.js";
+import { computeId, computeSig, verifySig } from "./hash.js";
 import { JsonlLog, type FsyncPolicy } from "./log.js";
 import { RESERVED, type AppendResult, type Fact, type FactInput } from "./types.js";
 import { isSuperseded } from "./fold.js";
@@ -28,16 +28,19 @@ export class BusV2 {
   private readonly secret: string;
   private readonly secretStable: boolean;
   private readonly log: JsonlLog;
+  private readonly maxDepth: number;            // §5 causation depth cap
   private readonly facts: Fact[] = [];          // ordered by seq, in-memory projection
   private readonly byId = new Map<string, Fact>(); // id → fact (dedup + lookup)
   private seqCounter = 0;
   private dedupHits = 0;
+  private sigFailures = 0;                       // §4: facts whose sig didn't verify on recovery
   private readonly startedAt = Date.now();
 
-  constructor(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy }) {
+  constructor(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy; maxDepth?: number }) {
     const providedSecret = opts?.secret ?? process.env.ANTLEGION_BUS_SECRET;
     this.secretStable = providedSecret != null;
     this.secret = providedSecret ?? randomBytes(32).toString("hex");
+    this.maxDepth = opts?.maxDepth ?? 64;
     this.log = new JsonlLog(opts?.dataDir, opts?.fsync ?? "always");
     this.recover();
   }
@@ -47,7 +50,29 @@ export class BusV2 {
       this.facts.push(f);
       this.byId.set(f.id, f);
       if (f.seq > this.seqCounter) this.seqCounter = f.seq;
+      // §4: with a stable secret the HMAC must verify; a failure means the log
+      // was tampered or written under a different secret. Counted (not rejected,
+      // so a secret rotation can't brick the bus) and surfaced via INFO.
+      if (this.secretStable && !verifySig(this.secret, f)) this.sigFailures++;
     }
+  }
+
+  /**
+   * §5 causation-depth guard. Walks the resolvable `refs.parent` ancestry of a
+   * would-be fact and returns its depth (1 = no present parent). Parent *cycles*
+   * are impossible under content addressing — closing a loop A→B→A would require
+   * A's id to be known before A is hashed — so only depth is enforceable here.
+   * The walk is still bounded by maxDepth as a defensive cap.
+   */
+  private depthOf(parentId: string | undefined): number {
+    let depth = 1;
+    let cur = parentId ? this.byId.get(parentId) : undefined;
+    while (cur) {
+      depth++;
+      if (depth > this.maxDepth) break; // bounded walk; caller rejects on > maxDepth
+      cur = cur.refs.parent ? this.byId.get(cur.refs.parent) : undefined;
+    }
+    return depth;
   }
 
   /** The single write. Idempotent by id (§4): a repeat returns the existing fact. */
@@ -62,6 +87,11 @@ export class BusV2 {
     if (existing) {
       this.dedupHits++;
       return { seq: existing.seq, recv: existing.recv, id, sig: existing.sig, deduped: true };
+    }
+
+    // §5 safety: bound causation depth (cycles are structurally impossible, see depthOf).
+    if (this.depthOf(input.refs?.parent) > this.maxDepth) {
+      throw new Error(`causation depth exceeds max (${this.maxDepth})`);
     }
 
     const seq = ++this.seqCounter;
@@ -157,6 +187,8 @@ export class BusV2 {
       fsync: this.log.fsyncPolicy,
       dedup_hits: this.dedupHits,
       secret_stable: this.secretStable,
+      sig_failures: this.sigFailures,
+      max_depth: this.maxDepth,
       uptime_seconds: Math.floor((Date.now() - this.startedAt) / 1000),
     };
   }

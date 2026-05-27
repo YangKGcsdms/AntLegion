@@ -97,16 +97,18 @@ npx tsx examples/swarm-v2.ts          # 以及 scenario-{resilience,consensus,pi
 │   └── EVOLUTION.md   ← 项目为何如此(v0 → v1 → v2)
 └── antlegion-bus/
     ├── src/           ← 内核(bus.ts)、服务端、折叠 SDK(client.ts)、alctl CLI、MCP 适配器(mcp.ts)、AOF(log.ts)、bench
+    ├── conformance/   ← vectors.json(§4 互操作契约)+ generate.ts + 一个 Python 校验器
     ├── examples/      ← 多 Agent 验证 swarm
-    └── test/          ← 单元测试(74 个)
+    └── test/          ← 单元测试(136 个)
 ```
 
 ## 状态
 
 **Alpha。** 已完成:无状态内核、HTTP 线面、折叠 SDK、`alctl` CLI、**MCP 适配器**
-(`npm run mcp`)、带 `appendfsync` 策略 + 压缩的只追加持久化、`INFO`、benchmark
-(进程内约 16 万 append/s)、Docker 镜像,以及 74 个通过的单测 + 4 个多 Agent 验证 swarm。
-尚未具备:多语言客户端 SDK / 跨语言一致性向量、集群/复制,以及已发布的包或预编译二进制
+(`npm run mcp`)、带 `appendfsync` 策略 + 压缩的只追加持久化、`INFO`、**§5 因果深度上限强制**、
+恢复时**签名校验**、**跨语言一致性向量**(`conformance/vectors.json` + 一个逐字节复现全部哈希的
+独立 Python 校验器)、benchmark(进程内约 16 万 append/s)、Docker 镜像,以及 136 个通过的单测
++ 4 个多 Agent 验证 swarm。尚未具备:多语言客户端 SDK、集群/复制,以及已发布的包或预编译二进制
 (目前需从源码构建)。
 
 ## 许可

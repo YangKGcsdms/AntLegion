@@ -105,18 +105,22 @@ npx tsx examples/swarm-v2.ts          # and scenario-{resilience,consensus,pipel
 │   └── EVOLUTION.md   ← why the project looks like this (v0 → v1 → v2)
 └── antlegion-bus/
     ├── src/           ← core (bus.ts), server, fold SDK (client.ts), alctl CLI, MCP adapter (mcp.ts), AOF (log.ts), bench
+    ├── conformance/   ← vectors.json (the §4 interop contract) + generate.ts + a Python verifier
     ├── examples/      ← multi-agent validation swarms
-    └── test/          ← unit suite (74 tests)
+    └── test/          ← unit suite (136 tests)
 ```
 
 ## Status
 
 **Alpha.** Done: stateless core, HTTP wire, fold SDK, `alctl` CLI, **MCP adapter**
 (`npm run mcp`), append-only persistence with `appendfsync` policy + compaction,
-`INFO`, benchmark (~160k appends/s in-process), Docker image, and 74 passing
-tests + 4 multi-agent validation swarms. Not yet: multi-language client SDKs /
-cross-language conformance vectors, clustering/replication, and a published
-package or prebuilt binary (build from source for now).
+`INFO`, `§5` causation-depth enforcement, signature **verification** on recovery,
+**cross-language conformance vectors** (`conformance/vectors.json` + an
+independent Python verifier that reproduces every hash byte-for-byte),
+benchmark (~160k appends/s in-process), Docker image, and 136 passing
+tests + 4 multi-agent validation swarms. Not yet: multi-language client SDKs,
+clustering/replication, and a published package or prebuilt binary (build from
+source for now).
 
 ## License
 

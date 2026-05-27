@@ -16,7 +16,7 @@ import type { ReadQuery } from "./bus.js";
 import type { FsyncPolicy } from "./log.js";
 import type { FactInput } from "./types.js";
 
-export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy }) {
+export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy; maxDepth?: number }) {
   const bus = new BusV2(opts);
   const app = new Hono();
   app.use("*", cors());

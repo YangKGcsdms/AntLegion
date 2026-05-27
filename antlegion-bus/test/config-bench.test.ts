@@ -5,7 +5,7 @@ import { runBench } from "../src/bench.js";
 describe("R4 — config (the redis.conf analog)", () => {
   it("sane defaults from empty env", () => {
     const c = loadConfig({});
-    expect(c).toEqual({ port: 28090, dataDir: ".data-v2", fsync: "everysec", secret: undefined });
+    expect(c).toEqual({ port: 28090, dataDir: ".data-v2", fsync: "everysec", secret: undefined, maxDepth: 64 });
   });
 
   it("env overrides are honored", () => {
@@ -14,12 +14,18 @@ describe("R4 — config (the redis.conf analog)", () => {
       ANTLEGION_DATA_DIR: "/data",
       ANTLEGION_FSYNC: "always",
       ANTLEGION_BUS_SECRET: "s3cret",
+      ANTLEGION_MAX_DEPTH: "128",
     });
-    expect(c).toEqual({ port: 9000, dataDir: "/data", fsync: "always", secret: "s3cret" });
+    expect(c).toEqual({ port: 9000, dataDir: "/data", fsync: "always", secret: "s3cret", maxDepth: 128 });
   });
 
   it("an invalid fsync value falls back to everysec", () => {
     expect(loadConfig({ ANTLEGION_FSYNC: "bogus" }).fsync).toBe("everysec");
+  });
+
+  it("an invalid max-depth falls back to 64", () => {
+    expect(loadConfig({ ANTLEGION_MAX_DEPTH: "0" }).maxDepth).toBe(64);
+    expect(loadConfig({ ANTLEGION_MAX_DEPTH: "nope" }).maxDepth).toBe(64);
   });
 });
 
