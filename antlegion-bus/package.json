@@ -8,7 +8,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
+    "start:v2": "node dist/v2/index.js",
+    "dev:v2": "tsx src/v2/index.ts",
+    "bench:v2": "tsx src/v2/bench.ts",
     "test": "vitest run",
+    "test:v2": "vitest run test/v2",
     "test:watch": "vitest"
   },
   "author": "Carter.Yang",
