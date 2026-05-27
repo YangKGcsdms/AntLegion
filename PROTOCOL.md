@@ -1,689 +1,424 @@
-# AntLegion Bus Protocol
+# AntLegion Protocol — v2.0
 
-> Single-source protocol reference. The wire format every conforming bus
-> implementation MUST honor.
+> One primitive. One write. One read. Everything else is derived.
 >
-> Designed by **Carter.Yang**. Protocol version: **1.0**.
+> Designed by **Carter.Yang**. Re-derived from first principles, 2026.
+> v1.0 is archived at [`PROTOCOL-v1-historical.md`](PROTOCOL-v1-historical.md).
 
-The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **MAY**, and
-**OPTIONAL** are interpreted per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
-
----
-
-## 1. Axioms
-
-These are non-negotiable. Removing any one produces a fundamentally different
-system.
-
-1. **Facts, not commands.** The bus carries statements about reality, never
-   directives. `"file auth.py modified"` is a fact; `"ant-B, review auth.py"`
-   is a command and is forbidden.
-2. **Facts are immutable.** A published fact's content cannot be modified.
-   Only the bus's assessment of it (workflow state, epistemic state) evolves.
-   New facts may supersede old facts; old facts never mutate.
-3. **Broadcast medium, local filtering.** All facts exist in a single shared
-   space. The bus delivers facts to consumers whose declared filters match.
-   There is no orchestrator.
-4. **Facts are contestable.** Any consumer may corroborate or contradict any
-   other consumer's fact. The bus records evidence; it does not adjudicate
-   truth.
-5. **Causal chains are the organizational structure.** Facts reference their
-   parents. Workflow emerges from causation, not from a central planner.
-6. **Fail-safe degradation.** Misbehaving consumers are progressively
-   isolated. No single consumer failure can crash the bus.
+The key words **MUST**, **MUST NOT**, **SHOULD**, **MAY** are per
+[RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
 ---
 
-## 2. Topology
+## 0. The derivation (why v2 looks like this)
 
-```
-┌────────────────────────────────────────────────────────────┐
-│   AntLegion Bus  (one per cluster)                          │
-│   - stores facts                                            │
-│   - enforces protocol invariants                            │
-│   - dispatches events                                       │
-│   - arbitrates exclusive claims                             │
-└──────────────────────────┬─────────────────────────────────┘
-                           │  HTTP / JSON
-                           │  (this protocol)
-                           │
-              ┌────────────┴────────────┐
-              │      MCP adapter         │  ◀── canonical client interface
-              │  (antlegion-mcp/)        │      (6 tools, hides protocol detail)
-              └────────────┬────────────┘
-                           │
-       ┌──────┬──────┬─────┴─────┬──────┬──────┐
-       ▼      ▼      ▼           ▼      ▼      ▼
-   Claude  Cursor  Cline    Continue Codex  Goose  …
-    Code                              CLI
-```
+### 0.1 The single primitive (一元论)
 
-**Bus** — the shared communication medium. Exactly one per cluster.
+There is exactly one kind of thing in this system:
 
-**MCP adapter** — the canonical client interface. Speaks MCP to clients,
-HTTP to the bus, hides content hashing, signing, tokens, ant identity,
-causation depth, and semantic kinds.
+> **A Fact: an immutable, content-addressed statement, placed at a unique
+> position in a single total order.**
 
-**Clients** — anything that speaks MCP. The protocol does not distinguish
-between AI agents, human-driven IDEs, cron jobs, or CI runners. They all
-poll the bus on whatever cadence they choose.
+That is the whole ontology. There are no separate "tasks," "claims," "votes,"
+"trust levels," or "states." Those words name *patterns of facts* — a fact is
+all there is. This is the monist move, and every rule below is a *consequence*
+of it, not an addition to it.
 
-This document specifies the **bus**. The MCP adapter is documented in
-[`antlegion-mcp/README.md`](antlegion-mcp/README.md). Direct HTTP clients that
-bypass MCP MUST implement the same wire format described here.
+Two operations act on the primitive, and only two:
 
----
+- **append(fact) → seq** — add a fact; the bus assigns it the next position in
+  the total order.
+- **read(since_seq) → fact[]** — return facts after a position, in order.
 
-## 3. The Fact
+### 0.2 What the bus is (and is not)
 
-The atomic unit of communication.
+From the primitive, the trusted core that the bus MUST provide is small and
+fixed:
 
-A Fact has two structural zones:
+1. **Order** — assign a strictly increasing `seq`. This total order is the
+   bus's *only* authority.
+2. **Integrity** — verify `id == hash(record)`; reject mismatches.
+3. **Durability** — append to a log that survives restart.
+4. **Range read** — return `seq > since` in order.
 
-- **Immutable Record** — set by the publisher, frozen after publish, covered
-  by `content_hash`.
-- **Mutable Bus State** — managed exclusively by the bus, changes as the fact
-  moves through its lifecycle.
+The bus has **no mutable per-fact state**, no state machine, no claim table, no
+trust computation, no dispatch, no arbitration, no push. It is a *verifiable,
+totally-ordered, append-only log* — the smallest object on which the rest can
+be derived. (Compare: a single signed Kafka partition, or git with a sequence.)
 
-### 3.1 Immutable Record
+> **Axiom of non-adjudication.** The bus orders and preserves facts. It never
+> decides what they *mean*. Meaning is computed by readers (§3). This is why
+> trust, lifecycle, and exclusivity are reader folds, not server state.
 
-| Field | Type | Req. | Description |
-|---|---|---|---|
-| `fact_id` | string | MUST | Globally unique identifier |
-| `fact_type` | string | MUST | Dot-notation taxonomy, e.g. `code.review.needed` |
-| `payload` | object | MUST | Fact data. Schema determined by `fact_type` |
-| `source_ant_id` | string | MUST | Publisher's identifier |
-| `created_at` | float | MUST | Unix timestamp (seconds) |
-| `mode` | enum | MUST | `exclusive` (one handler) or `broadcast` (all matching) |
-| `priority` | int 0–7 | MUST | Lower = higher priority (CAN convention); see §6 |
-| `ttl_seconds` | int | MUST | Time to live. After expiry → `dead` |
-| `parent_fact_id` | string | OPTIONAL | Direct causal parent. Empty for root facts |
-| `causation_chain` | string[] | OPTIONAL | Full ancestor path. Last element MUST match `parent_fact_id` if both present |
-| `causation_depth` | int | MUST | 0 for root facts. Bus MUST enforce a maximum |
-| `confidence` | float 0–1 | OPTIONAL | Publisher's self-assessed certainty. Absent ≠ certain |
-| `domain_tags` | string[] | OPTIONAL | Content domain tags, e.g. `["python", "auth"]` |
-| `need_capabilities` | string[] | OPTIONAL | Capabilities needed to handle this fact |
-| `semantic_kind` | enum | OPTIONAL | `observation` / `assertion` / `request` / `resolution` / `correction` / `signal` |
-| `subject_key` | string | OPTIONAL | Groups facts about the same entity for auto-supersession |
-| `supersedes` | string | OPTIONAL | Explicit `fact_id` this fact replaces |
-| `content_hash` | string | MUST | SHA-256 of canonical record (§10) |
+### 0.3 Everything else, derived
 
-### 3.2 Mutable Bus State
-
-| Field | Type | Description |
-|---|---|---|
-| `state` | enum | Workflow state (§4.1) |
-| `epistemic_state` | enum | Trust state (§4.2) |
-| `claimed_by` | string \| null | Consumer that claimed (exclusive only) |
-| `claimed_at` | float \| null | Claim timestamp; used for claim-timeout reaping (§4.1) |
-| `resolved_at` | float \| null | Resolution timestamp |
-| `superseded_by` | string | Set when a newer fact supersedes this one |
-| `corroborations` | string[] | Consumers that have corroborated |
-| `contradictions` | string[] | Consumers that have contradicted |
-| `sequence_number` | int | Monotonic, assigned at acceptance. Used as polling cursor |
-| `signature` | string | HMAC over `(fact_id, content_hash, source_ant_id, fact_type, created_at)` |
-
-Implementations MAY track additional internal state (`effective_priority`,
-TEC counters, …) but it MUST NOT appear in protocol-visible responses.
-
----
-
-## 4. State Machines
-
-Each fact carries **two orthogonal** state machines.
-
-### 4.1 Workflow State
-
-Tracks lifecycle. Explicit transitions driven by bus operations.
-
-```
-            PUBLISH
-  ─────────────────────▶ published ─────┐
-                              │         │
-                    exclusive │         │ broadcast
-                              ▼         │
-                          claimed       │
-                              │         │
-                              ▼         ▼
-                          resolved   resolved
-                              │
-                              └──▶ may emit child facts
-
-  Any non-terminal state ──▶ dead   (TTL expiry, all releases, failure)
-```
-
-| State | Description |
+| v1 concept | v2 derivation |
 |---|---|
-| `published` | Accepted by the bus, visible to matching consumers |
-| `claimed` | One consumer has exclusive responsibility (exclusive mode only) |
-| `resolved` | Processing complete. May have produced child facts |
-| `dead` | Could not be processed (TTL expired, no claim, explicit failure) |
+| workflow state (`published/claimed/resolved/dead`) | a **fold** over claim/resolve/tombstone facts referencing the target |
+| `epistemic_state` + quorum config | a **fold** over `vote` facts; quorum is the *reader's* policy |
+| atomic `claim` endpoint + arbitration | append a `claim` fact; **lowest `seq` referencing the target wins** — exactly-once is a theorem of total order |
+| `supersedes` / auto-supersede index | a fact carries `supersedes`; reader keeps highest `seq` per subject |
+| `causation_chain` + `causation_depth` | walk `parent` links; depth is computed, not stored |
+| TTL → `dead` transition | reader-side filter / compaction hint; never a server state change |
+| acceptance filter / dispatch | reader-side query predicate (server MAY offer it as a pure read optimization) |
+| event push / WebSocket | removed; read advances the cursor |
+| `semantic_kind`, `schema_version`, `priority`, `confidence`, TEC, reliability | optional payload/ref hints; **none** are interpreted by the trusted core |
 
-| Transition | Trigger |
-|---|---|
-| — → `published` | PUBLISH accepted |
-| `published` → `claimed` | CLAIM (exclusive only) |
-| `published` → `resolved` | Direct resolution (broadcast only) |
-| `published` → `dead` | TTL expiry, no match |
-| `claimed` → `resolved` | RESOLVE by claimer |
-| `claimed` → `published` | RELEASE by claimer, **or claim timeout** (returns to pool, re-dispatched) |
-| `claimed` → `dead` | Hard failure (not used by the current implementation; reserved) |
+The fact's wire shape shrinks from ~30 fields to a handful (§1). The two
+server state machines disappear. The "smart" logic moves into one shared
+**client fold library** (§3), shipped once per language instead of
+re-implemented inside every bus.
 
-**Claim timeout** — if a fact has been in `claimed` longer than the bus's
-configured `claimTimeoutSeconds` (default 600s = 10 min, §11), the bus
-auto-releases it back to `published` and re-dispatches it. This is the
-recovery path when a claimer crashes between CLAIM and RESOLVE. The bus
-excludes the previous claimer from the next dispatch round to prevent a
-crash-loop pinning the same fact.
-| `dead` → `published` | Administrative redispatch (OPTIONAL) |
-
-### 4.2 Epistemic State
-
-Tracks trust. **Derived** from accumulated evidence — not driven by explicit
-transitions. Implementations MUST recompute after every corroborate /
-contradict / supersede.
-
-```
-                  corroborations ≥ quorum
-   asserted ─corroborate──▶ corroborated ─more─▶ consensus
-       │
-       │── contradict
-       ▼
-   contested ─contradictions ≥ quorum──▶ refuted
-
-   superseded_by set  ──▶ superseded  (overrides everything)
-```
-
-Recomputation rule (evaluated in order):
-
-1. `superseded_by` set → `superseded`
-2. `|contradictions| ≥ refute_quorum` → `refuted`
-3. `contradictions` non-empty → `contested`
-4. `|corroborations| ≥ consensus_quorum` → `consensus`
-5. `corroborations` non-empty → `corroborated`
-6. otherwise → `asserted`
-
-Quorum defaults: `consensus_quorum = refute_quorum = 2`.
-
-**Rank for filter comparison:**
-
-| State | Rank |
-|---|:---:|
-| `superseded` | -3 |
-| `refuted` | -2 |
-| `contested` | -1 |
-| `asserted` | 0 |
-| `corroborated` | +1 |
-| `consensus` | +2 |
-
-`superseded` lives in the same enum as the trust values because **freshness
-takes precedence over confidence**. A once-consensus fact that has been
-superseded is stale knowledge in every filter decision.
-
-### 4.3 Supersession
-
-Two paths.
-
-1. **Explicit**: `fact.supersedes = old_fact_id`. Bus marks the target
-   superseded.
-2. **Automatic**: `fact.subject_key` is set and another non-terminal fact
-   shares the same `(subject_key, fact_type)`. Bus marks the older one
-   superseded.
-
-Auto-supersession is appropriate for *latest-wins* fact types (sensor
-readings, deployment status). It is **inappropriate** for accumulating
-diagnostics, multi-source observations, or parallel analyses. To gate
-auto-supersession, implementations SHOULD require either:
-
-- the fact_type's registered schema declares `auto_supersede: true`, or
-- `semantic_kind ∈ {observation, signal, correction}`.
-
-Publishers can opt out per-fact by omitting `subject_key` and using explicit
-`supersedes` instead.
+**Where the elegance goes.** v1's MCP adapter stayed elegant by *forwarding*
+(call `/claim`, get 200/409). Under v2 the adapter must *fold* (append a claim,
+read back to confirm, project state/trust). The client-facing surface — e.g.
+the 6 MCP tools — can stay exactly as simple, but only because the adapter / fold
+library now absorbs that work. v2 makes the **bus** trivial and the **adapter**
+slightly heavier; a raw client that skips the adapter trades a single
+round-trip for append-plus-fold. This is a deliberate relocation of complexity
+to the one place it can be written once and conformance-tested — not a deletion.
 
 ---
 
-## 5. Acceptance Filter
+## 1. The Fact
 
-A consumer's declaration of what facts it wants. Content-based.
+```jsonc
+{
+  "seq":     1337,                  // bus-assigned position in the total order. Absent until appended.
+  "recv":    1748300000.4,          // bus-assigned TRUSTED receive time (unix s). Set by bus. Time-based folds use THIS.
+  "id":      "b3f1…",               // = hash of the canonical record (§4). Content address. MUST.
+  "type":    "build.failed",        // dotted taxonomy. MUST.
+  "author":  "claude-code",         // who appended it. MUST.
+  "ts":      1748300000.0,          // unix seconds, author-stated. ADVISORY only (spoofable). MUST.
+  "payload": { "...": "..." },      // arbitrary JSON. MUST (MAY be {}).
+  "refs":    { "...": "..." },      // links to other facts — the ONLY relational mechanism. MAY be absent.
+  "nonce":   "k7…",                 // optional uniqueness token: a legitimate repeat (e.g. re-claim) gets a distinct id (§4). MAY be absent.
+  "sig":     "hmac…"                // bus signature over (id, author, type, ts, recv, seq). Set by bus.
+}
+```
 
-| Dimension | Type | Description |
+`refs` is where every relationship lives. Defined keys:
+
+| `refs` key | Value | Meaning (a reader fold interprets it) |
 |---|---|---|
-| `capability_offer` | string[] | What this consumer can do |
-| `domain_interests` | string[] | What domains it subscribes to |
-| `fact_type_patterns` | string[] | Glob patterns, e.g. `code.*`, `deploy.*.completed` |
-| `priority_range` | [int, int] | Accepted priority range (low, high) |
-| `modes` | enum[] | `["broadcast"]`, `["exclusive"]`, or both |
-| `semantic_kinds` | enum[] | Empty = accept all |
-| `min_epistemic_rank` | int | Minimum trust level (default -3 = accept all) |
-| `min_confidence` | float | Minimum publisher confidence (default 0.0) |
-| `exclude_superseded` | bool | Default true |
+| `parent` | fact id | This fact was caused by that one. Causation = transitive `parent`. |
+| `claim_of` | fact id | Author asserts exclusive responsibility for the target. |
+| `resolves` | fact id | The target is considered handled; payload MAY carry the result. |
+| `release_of` | fact id | Author abandons a prior claim. |
+| `vote` | fact id | Combine with `payload.verdict ∈ {corroborate, contradict}`. |
+| `supersedes` | fact id | The target is **replaced by a successor** (this fact). |
+| `subject` | string | Group key for latest-wins supersession without naming an id. |
+| `tombstones` | fact id | A `_.tombstone` marks the target **deleted / GC'd** — distinct from `supersedes`, which means *replaced*. Folds MUST tell the two apart. |
 
-A fact reaches a consumer iff ALL pass:
+A bus MUST accept unknown `refs` keys (forward compatibility) and MUST NOT
+interpret them — only readers do. The trusted core looks at `refs.parent` *only*
+to enforce the one structural safety rule (§5, depth/cycle), nothing else.
 
-1. Consumer state ∈ {active, degraded} (not isolated/offline)
-2. `fact.priority ∈ filter.priority_range`
-3. `fact.mode ∈ filter.modes`
-4. If `filter.semantic_kinds` non-empty: `fact.semantic_kind ∈ filter.semantic_kinds`
-5. `epistemic_rank(fact) ≥ filter.min_epistemic_rank`
-6. `fact.confidence ≥ filter.min_confidence` (if set)
-7. If `filter.exclude_superseded`: `fact.epistemic_state ≠ superseded`
-8. **Content match** — at least one of:
-   - `fact.need_capabilities ∩ filter.capability_offer ≠ ∅`
-   - `fact.domain_tags ∩ filter.domain_interests ≠ ∅`
-   - `fact.fact_type` matches any `filter.fact_type_patterns` (glob)
-   - All three lists are empty (monitor mode)
+**`ts` vs `recv`.** `ts` is what the author *claims* the time was; it is part of
+the content hash and is **advisory** (a skewed or hostile clock can set it
+anywhere). `recv` is what the bus *witnessed*, is signed, and is **trusted**.
+Every time-based fold (claim-timeout §3.1, TTL) MUST key on `recv`, never `ts`
+— otherwise different readers reach different conclusions and the fold stops
+being deterministic. `seq` and `recv` are the bus's two trusted stamps: `seq`
+for order, `recv` for time.
 
----
-
-## 6. Priority
-
-3-bit field (0–7), CAN convention (lower = higher).
-
-| Value | Name | Description |
-|:---:|---|---|
-| 0 | CRITICAL | System failures, data-loss prevention |
-| 1 | HIGH | User-facing blocking issues |
-| 2 | ELEVATED | Important but not blocking |
-| 3 | NORMAL | Default |
-| 4 | LOW | Background work |
-| 5 | BACKGROUND | Housekeeping, optimization |
-| 6 | IDLE | Best-effort |
-| 7 | BULK | Batch processing |
-
-Buses SHOULD implement aging so low-priority facts are not starved. Facts
-MUST NOT age into CRITICAL — that level is reserved for genuine emergencies.
+Everything removed from v1's fact (state, claimed_by, corroborations[],
+effective_priority, …) is now **derivable** and therefore MUST NOT be stored on
+the fact. `priority`, `confidence`, `ttl`, `semantic_kind` etc. — if a use case
+wants them — live in `payload` and are honored only by readers that care.
 
 ---
 
-## 7. Bus Operations (Wire Format)
+## 2. Bus operations (the entire wire surface)
 
-All operations are HTTP/1.1 + JSON. There is no event push channel; clients
-poll with `since_sequence` (§7.3).
-
-### 7.1 Connect
-
-```
-POST /ants/connect
-{ "name": "...", "description": "...",
-  "capability_offer": [], "domain_interests": [], "fact_type_patterns": ["*"],
-  "modes": ["broadcast", "exclusive"], "max_concurrent_claims": 1 }
-→ { "ant_id": "...", "token": "...", "state": "active" }
-```
-
-The token is required for CLAIM / RESOLVE / RELEASE. PUBLISH MAY be performed
-without a token (anonymous publish; bus skips reliability tracking).
-
-### 7.2 Publish
+### 2.1 Append
 
 ```
 POST /facts
-{ "fact_type": "...", "payload": {...},
-  "source_ant_id": "...", "token": "...",      // token optional
-  "content_hash": "...",                       // empty string → bus computes
-  "created_at": <unix-seconds>,
-  "mode": "broadcast" | "exclusive",           // default: broadcast
-  "priority": 0..7, "ttl_seconds": <int>,
-  "parent_fact_id": "...", "subject_key": "...", "supersedes": "...",
-  "semantic_kind": "...", "confidence": 0..1,
-  "domain_tags": [], "need_capabilities": [] }
-→ 201 Created with the full fact object (bus-assigned fields populated)
+  { type, author, ts, payload, refs?, id? }
+→ 201 { seq, id, sig }            // id/sig echoed; id MAY be sent as "" for the bus to compute
+→ 409 { error: "id mismatch" }    // integrity failure
 ```
 
-Admission checks run in this order (cheapest first):
+Append is the only write. The bus assigns `seq`, verifies/derives `id`, signs,
+persists, returns. No mode, no token-gated claim, no priority. (Auth, if any, is
+a transport concern — see §6.)
 
-1. Content hash verification (MUST)
-2. Causation depth limit (MUST)
-3. Causation cycle detection (SHOULD)
-4. Deduplication window on `(source_ant_id, fact_type, content_hash)` (SHOULD)
-5. Per-source rate limit (SHOULD)
-6. Global load breaker (MAY)
-7. Reliability gate (MAY, requires Fault Confinement, §9.2)
-8. Schema validation (MAY, requires Schema Governance, §9.4)
-
-Any check failing rejects the publish.
-
-### 7.3 Query (the polling cursor)
+### 2.2 Read
 
 ```
-GET /facts?fact_type=...&state=...&claimed_by=...&source_ant_id=...&since_sequence=N&limit=50
-→ JSON array, sorted by sequence_number ascending when since_sequence is set
-   Response header: X-Antlegion-Max-Sequence: <max sequence returned>
+GET /facts?since=<seq>&limit=<n>&type=<glob>&author=<id>&refs.<key>=<id>
+→ 200 [ fact… ]                   // ascending by seq
+   header: X-Max-Seq: <highest seq returned>
 ```
 
-Clients drive their own polling loop by passing the previous response's max
-sequence back as `since_sequence`. This is the canonical pattern.
-
-`fact_type` accepts a **glob** pattern (`*` matches any substring, `?` matches
-one character). `bug.*` matches `bug.found`, `bug.fixed`, etc. A pattern with
-no glob characters is matched exactly.
-
-`claimed_by` filters facts currently held by a specific consumer. Useful for
-a daemon that wants to find its own orphaned claims on restart:
-`GET /facts?state=claimed&claimed_by=my-daemon-1`.
+`since` is the cursor: pass back the previous `X-Max-Seq` to get only new facts.
+This is the *canonical* access pattern — closer to `git fetch` than to a queue.
+All query parameters are **pure filters over the same totally-ordered stream**;
+they change which facts are returned, never their meaning or order. A minimal
+conforming bus MAY ignore every filter except `since`/`limit` and remain
+correct — filters are an optimization, the fold (§3) is the semantics.
 
 ```
-GET /facts/cursor
-→ { "head_sequence": <int>, "total": <int> }
+GET /facts/head → { head_seq }    // start a fresh reader at "newest only"
+GET /facts/<id> → fact            // fetch one by content address
 ```
 
-Useful for starting a new client at "newest only" (initial `cursor = head_sequence`).
-
-### 7.4 Claim / Resolve / Release
-
-```
-POST /facts/:fact_id/claim
-{ "ant_id": "...", "token": "..." }
-→ 200 { "success": true }   |   409 { "error": "already claimed by ..." }
-
-POST /facts/:fact_id/resolve
-{ "ant_id": "...", "token": "...",
-  "result_facts": [{ "fact_type": "...", "payload": {...}, "mode": "..." }] }
-→ 200 { "success": true }
-
-POST /facts/:fact_id/release
-{ "ant_id": "...", "token": "..." }
-→ 200 { "success": true }
-```
-
-CLAIM is atomic. If two consumers attempt CLAIM concurrently, exactly one
-succeeds. The bus MUST reject RESOLVE / RELEASE from anyone other than the
-current claimer.
-
-`result_facts` are published as children: each inherits
-`causation_chain = parent.chain + [parent.id]` and `causation_depth = parent.depth + 1`.
-
-### 7.5 Corroborate / Contradict
-
-```
-POST /facts/:fact_id/corroborate     { "ant_id": "...", "token": "..." }
-POST /facts/:fact_id/contradict      { "ant_id": "...", "token": "..." }
-→ 200 { "success": true, "epistemic_state": "..." }
-```
-
-A consumer MUST NOT corroborate or contradict its own facts; the bus MUST
-reject such attempts.
-
-### 7.6 Causation walk
-
-```
-GET /facts/:fact_id/causation
-→ JSON array, root → fact (the fact itself is the last entry)
-```
-
-### 7.7 Heartbeat / Disconnect
-
-```
-POST /ants/:ant_id/heartbeat        { "current_action": "...", "status_text": "..." }
-POST /ants/:ant_id/disconnect       { "token": "..." }
-```
-
-Heartbeats are used by Fault Confinement (§9.2) to track liveness.
-Disconnects are graceful.
-
-### 7.8 Operator surface (non-normative)
-
-For operators running the bus itself:
-
-```
-POST /admin/storage/gc          → run GC sweep now, return { removed, fact_ids }
-POST /admin/storage/compact     → compact the JSONL log, return { stale_entries_removed }
-GET  /admin/storage/stats       → JSONL log stats + fact count
-GET  /admin/metrics             → stats + derived rates (resolution_rate, dead_letter_rate, …)
-```
-
-These four are the entire admin surface. Per-fact remediation (delete /
-redispatch / dead-letter listing) and per-ant remediation (isolate / restore)
-were intentionally removed: they accumulated complexity without a stated
-user. Operators who need them can write a thin admin client against the
-public APIs.
+That is the complete bus API: **one write, one read, two read conveniences.**
 
 ---
 
-## 8. Events (non-normative)
+## 3. Reader folds (where meaning lives)
 
-This protocol is **poll-only**. Clients drive their own scan loop via
-`GET /facts?since_sequence=N` (§7.3). The bus has no push channel.
+A reader replays facts in `seq` order and folds them into whatever projection
+it needs. These fold rules are **normative** — conformance lives here, not in
+the bus. Two readers that fold identically will always agree, because they
+consume the same totally-ordered, immutable stream.
 
-An earlier draft included a WebSocket per-ant event push (`fact_available` /
-`fact_claimed` / `fact_resolved` / `fact_dead` / `fact_trust_changed` /
-`fact_superseded` / `ant_state_changed`). It was removed because the
-canonical client interface (MCP, §2) cannot make use of it: MCP transports
-are request/response over stdio. Implementations MAY add their own out-of-tree
-event channel for legacy clients, but it is not part of this protocol and
-conforming implementations need not provide it.
+### 3.1 Lifecycle of a target fact `F`
+
+Scan all facts whose `refs` point at `F`:
+
+Fold the facts referencing `F` in `seq` order, maintaining the set of **active
+claims** (claims not yet released or expired). **`resolved` and `dead` are
+terminal** — decided when their fact appears and never revisited:
+
+```
+fold(F):
+  active ← []                       # claims still holding F, each = {author, seq, recv}
+  for fact in (facts referencing F, ascending seq):
+    if tombstone(F)                       → return dead                       # terminal
+    active ← [c ∈ active where fact.recv ≤ c.recv + Δ]   # deterministic expiry, anchored on recv
+    if fact.refs.claim_of   == F          → active.push(fact)
+    if fact.refs.release_of == F          → drop fact.author from active
+    if fact.refs.resolves   == F:
+        owner ← lowest-seq author in active (or null)
+        if fact.author == owner or owner == null  → return resolved(owner)    # terminal
+  active ← [c ∈ active where now ≤ c.recv + Δ]           # trailing expiry vs wall clock
+  return active ? claimed(lowest-seq author in active) : open
+```
+
+**Why recv-anchored expiry.** A claim times out (the crash-recovery path) when
+time has provably advanced past `claim.recv + Δ`. Wherever a *later fact*
+exists, that proof is the later fact's own bus-stamped `recv` — identical for
+every reader, so the fold is **deterministic**. Only a *trailing* claim with no
+successor falls back to wall-clock `now`, and that only affects the advisory
+"should a new claimant try?" hint, never a terminal decision.
+
+This is what makes crash recovery correct in both directions:
+- A `resolve` issued *before* its claim expires is honored and terminal forever
+  — timeout (a crash-recovery mechanism) never undoes a real completion.
+- A claim that *did* time out is expired by the recv of the next claim, so the
+  **re-dispatched** agent becomes the legitimate owner and *its* resolve is
+  honored. (A naive "owner = first claimer, releases only" rule is wrong: a
+  crashed claimer's stale claim would block the recovering agent's resolve, and
+  the item would be re-done forever.)
+
+**Exclusive coordination is a theorem, not a lock.** If several authors append
+`claim_of: F`, the one with the **lowest `seq` wins** — every reader computes the
+same winner from the same totally-ordered, `recv`-stamped stream. No atomic
+endpoint, no leader election, no hot-path arbitration. A claimer confirms it won
+by reading `F`'s claim set back and seeing no live `claim_of: F` at a lower
+`seq`; to keep that O(claims-on-F) instead of O(log), a bus SHOULD support the
+`?refs.claim_of=<id>` filter (§2.2). Timeout-based release is deterministic
+**only because it keys on the bus-stamped `recv`**, not the author's `ts`; a
+`release_of` by the claim's author ends the claim immediately regardless of Δ.
+
+**A `resolve` is authorization-gated by the fold**: a `resolves: F` is honored
+only from `F`'s current claim winner. This stops a non-claimer from marking
+someone else's claimed work done. (For never-claimed broadcast facts, any author
+may resolve and the lowest-seq resolve wins.)
+
+### 3.2 Trust of a fact `F`
+
+Fold `vote` facts referencing `F`. A reader MUST ignore self-votes
+(`vote.author == F.author`) and MUST count only each author's **latest** vote
+(highest `seq`), so a voter who changes their mind is never double-counted:
+
+```
+trust(F, quorum):                       // quorum is the READER'S choice, default 2
+  C = authors whose latest vote = corroborate
+  X = authors whose latest vote = contradict
+  if superseded(F)         → superseded  // freshness beats confidence
+  elif |X| ≥ quorum        → refuted
+  elif |X| > 0             → contested
+  elif |C| ≥ quorum        → consensus
+  elif |C| > 0             → corroborated
+  else                     → asserted
+```
+
+The bus stores none of this. Different readers MAY pick different quorums —
+the bus does not adjudicate truth (§0.2). Trust **does not** propagate to
+descendants automatically; a reader that cares about a chain's validity walks
+`parent` and checks ancestors itself.
+
+**Trust has no global value, so never coordinate on it.** Because quorum is the
+reader's choice, two readers can legitimately disagree on whether `F` is
+`refuted` or `consensus`. Any decision that all participants must agree on — who
+does the work, whether to proceed — MUST be built on exclusive claim
+(`seq`-deterministic, §3.1), which every reader computes identically. Trust is
+for *advice and triage*, not for arbitration.
+
+### 3.3 Supersession
+
+For facts sharing a `refs.subject` (or linked by `refs.supersedes`), the reader
+keeps the **highest `seq`** as current and projects the rest as `superseded`.
+Latest-wins is thus a *reader policy*: a reader accumulating multi-source
+observations simply doesn't apply it. (v1's auto-supersede footgun is gone —
+there is no server index silently replacing facts.)
+
+### 3.4 Causation
+
+`chain(F)` = follow `refs.parent` transitively to a root. Depth = chain length.
+Because facts are immutable and removed only by explicit `tombstone` (§5.2),
+a chain never silently loses an ancestor — a reader encountering a tombstoned
+ancestor sees the tombstone, not a gap.
 
 ---
 
-## 9. Optional Extensions
+## 4. Identity & integrity
 
-The core protocol covers Sections 3–7. Extensions add bounded, well-defined
-capability on top.
+`id` is the content address: `id = sha256(canonical(record))`, where the
+canonical record is the JSON object of `{type, author, ts, payload, refs, nonce}`
+(`nonce` included only when present) with recursively sorted keys and floats
+rendered with a trailing `.0` (Python-`json.dumps`-compatible). `seq`, `recv`,
+`sig`, and `id` itself are excluded — they are bus-assigned, not content.
 
-### 9.1 Epistemic States — *Stable*
+Content addressing gives dedup for free, but with a sharp edge that the protocol
+resolves **one** way, explicitly: **append is idempotent by `id`.** The bus keeps
+an `id → seq` index (rebuilt from the log on recovery — a pure projection, not
+authoritative state); appending an `id` that already exists returns the existing
+`{seq, recv, sig}` and does **not** write a second copy. "Resubmit is safe" is
+therefore the default. The consequence: a *legitimate repeat* — re-claiming `F`
+after releasing it — would otherwise collapse into the original, so a client
+wanting a genuinely **new** action MUST make the content distinct, normally by
+setting a fresh `nonce` (§1). Relational facts (`_.claim`, `_.resolve`,
+`_.vote`) SHOULD always carry a `nonce`. This is exactly the model of a
+content-addressed store like git: identical content is one object; you change
+the content to get a new one.
 
-Adds the `epistemic_state` field, the recomputation rule (§4.2), and the
-`fact_trust_changed` event. When refuted/contested, the bus SHOULD include
-`parent_fact_id` in the event so consumers can trace affected chains.
+The bus signs every accepted fact: `sig = hmac_sha256(secret, "id|author|type|ts|recv|seq")`.
+Operators MUST set a stable `ANTLEGION_BUS_SECRET` so signatures verify across
+restarts. A **canonical cross-language conformance vector set** ships with the
+protocol; any implementation (TS, Python, Go, …) MUST reproduce its hashes
+byte-for-byte. This vector set — not prose — is the interop contract.
 
-The bus MUST NOT cascade epistemic state changes to descendants —
-that would violate the non-adjudication axiom. Consumers performing causal
-chain queries SHOULD check ancestor states themselves.
+---
 
-### 9.2 Fault Confinement — *Stable*
+## 5. The only safety rules the bus enforces
 
-Per-consumer error counters (CAN-style).
+Kept deliberately minimal: just enough to stop an append-only log from being
+weaponized into unbounded growth or cycles. Everything else is a reader concern.
 
-| Field on consumer | Description |
+1. **Integrity** — reject `id` ≠ `hash(record)` (§4).
+2. **Causation sanity** — reject if `refs.parent` forms a cycle, or if causation
+   depth (computed by walking `parent`) exceeds a configured max (default 64).
+3. **Admission rate** — a bus MAY apply a per-author token bucket and a global
+   rate cap to bound log growth. Rejections are facts-not-written, never state
+   mutations.
+
+### 5.2 Deletion is a fact
+
+The bus never mutates or silently drops a stored fact. Removal is itself an
+appended `tombstone` fact (`type: "_.tombstone"`, `refs.tombstones` → target).
+Deletion gets its **own** ref key, never `supersedes`: superseding means *a
+successor replaced this*; tombstoning means *this is gone*. The folds (lifecycle
+§3.1, trust §3.2) MUST distinguish them — a GC'd fact is `dead`, not
+`superseded`. Compaction (§7) MAY then physically drop a fact's
+*payload*, but MUST retain its full skeleton — `{id, seq, recv, author, refs,
+sig}` — because every fold depends on it: causation walks need `refs.parent`;
+the claim winner needs `seq` + `author` + `refs.claim_of`; trust needs `author`
++ `refs.vote`. Dropping `refs` or `author` would destroy the very relationships
+the folds are computed from. Retaining the skeleton is how v2 keeps both
+causation and coordination durable across compaction.
+
+---
+
+## 6. Auth (transport-layer, optional)
+
+v1 baked tokens into claim/resolve. v2 removes per-operation auth from the
+semantics: since exclusivity is decided by `seq` order and *who* claimed is just
+`author`, authentication is purely about "is this author who they say." That is
+a **transport concern** (mTLS, a gateway, an API key header), out of scope for
+the fact model. A deployment MAY run the bus open (trusted network) or behind
+an authenticating proxy that stamps/validates `author`. The protocol does not
+mandate a scheme, but a public deployment SHOULD authenticate `author` and
+SHOULD NOT expose write access unauthenticated.
+
+---
+
+## 7. Storage & recovery
+
+The bus is an append-only log (one JSON record per line, fsync per append or
+per batch). Recovery: read the log in order; on a torn final record, truncate to
+the last byte offset that parses, then resume appending. There is **no
+in-memory state machine to rebuild** — the log *is* the state, and `seq` is
+restored from the last record. This is the reliability dividend of §0.2.
+
+Compaction folds the log to a checkpoint: snapshot the current projection
+(optional, derived, never authoritative) and drop superseded/tombstoned
+*payloads* while retaining the full `{id, seq, recv, author, refs, sig}`
+skeleton (§5.2). Compaction MUST use temp-file + atomic rename.
+
+**Total order ⇒ a single logical appender.** `seq` is one global sequence, so
+all writes funnel through a single logical append point. High availability is
+therefore *single-writer with failover* (e.g. Raft replicating the append
+position), **not** multi-master — there is no way to merge two independent
+orders without losing the exactly-once guarantee (§3.1). Reads scale out freely
+across log replicas. A deployment that genuinely needs multi-region writes must
+shard into independent buses (e.g. by `type` or `subject`), each with its own
+order; cross-shard coordination is then a client concern, not the bus's.
+
+A bus MAY serve a **materialized view** (`GET /facts/<id>/state`,
+`/trust`, …) as a cache of §3 folds. Such views are conveniences and MUST be
+bit-identical to a from-scratch fold; they are never a second source of truth.
+
+---
+
+## 8. Defaults
+
+| Parameter | Default | Note |
+|---|---|---|
+| Causation depth cap | 64 | §5 — generous; cycles are the real risk, not depth |
+| Reader quorum (trust) | 2 | §3.2 — reader policy, not server config |
+| Claim-timeout (on `recv`) | 600 s | §3.1 — a claim whose bus-stamped `recv` is older than this folds as released |
+| Per-author rate (if enabled) | 20 burst / 5 per s | §5 |
+| Log fsync | per append | trade for per-batch under load |
+
+Note these are mostly **reader** or **operator** knobs. The trusted core has
+almost nothing to configure — another consequence of §0.2.
+
+---
+
+## 9. v1 → v2 mapping (for migrators)
+
+| v1 | v2 |
 |---|---|
-| `transmit_error_counter` (TEC) | Incremented on errors, decremented on successes |
-| `reliability_score` ∈ [0, 1] | Derived from TEC |
+| `POST /facts {mode, priority, ttl, …}` | `POST /facts {type, author, ts, payload, refs}` |
+| `POST /facts/:id/claim` | `POST /facts { type:"_.claim", refs:{claim_of:id} }` |
+| `POST /facts/:id/resolve {result_facts}` | `POST /facts { type:"_.resolve", refs:{resolves:id} }` + child facts with `refs.parent:id` |
+| `POST /facts/:id/corroborate` | `POST /facts { type:"_.vote", payload:{verdict:"corroborate"}, refs:{vote:id} }` |
+| `GET /facts?state=published` | `GET /facts?since=N` then fold §3.1 client-side (or hit a materialized view) |
+| fact.`state` / `epistemic_state` | `fold(stream)` §3 |
+| ant connect / heartbeat / TEC | removed; `author` is a free-form string, reliability is a reader fold over outcomes if wanted |
 
-| TEC range | State | `reliability_score` |
-|---|:---:|:---:|
-| 0 – 127 | active | 1.0 |
-| 128 – 255 | degraded | 0.5 |
-| ≥ 256 | isolated | 0.0 |
+A v1→v2 shim can run as a reader: it folds the v2 stream and re-exposes the v1
+REST surface for legacy clients, with zero changes to the trusted core.
 
-| Event | TEC Δ |
-|---|:---:|
-| Fact contradicted | +8 |
-| Schema validation failure | +8 |
-| Fact expired unresolved | +2 |
-| Rate limit exceeded | +1 |
-| Fact corroborated | -1 |
-| Fact resolved | -1 |
-| Heartbeat OK | -1 |
+---
 
-TEC floor is 0. Isolated consumers cannot win exclusive arbitration. A
-degraded consumer competes at half weight.
+## 10. Lineage
 
-### 9.3 Advanced Arbitration — *Stable*
-
-```
-score = (capability_overlap × 10 + domain_overlap × 5 + type_pattern_hit × 3)
-        × reliability_score
-```
-
-Tiebreakers: score → reliability_score → ant_id (lexicographic).
-
-Without Advanced Arbitration, the bus uses first-arrival.
-
-### 9.4 Schema Governance — *Experimental*
-
-A schema registry per `fact_type`. Modes: `OPEN` (no validation),
-`WARN` (log but accept), `STRICT` (reject invalid). Schema evolution
-follows the usual rules:
-
-| Change | Status |
+| Source | What v2 takes |
 |---|---|
-| Add optional field | Backward-compatible |
-| Remove required field | Breaking — bump version or new `fact_type` |
-| Change field type | Breaking |
-
-### 9.5 Storm Protection — *Stable*
-
-Concrete parameters for the SHOULD-level admission checks in §7.2.
-
-| Check | Recommended value |
-|---|---|
-| Causation depth limit | 16 |
-| Cycle detection | Verify `fact_id` not in ancestor chain |
-| Dedup key | `(source_ant_id, fact_type, content_hash)` |
-| Dedup window | 10s |
-| Per-source rate limit | Token bucket, capacity 20, refill 5/s |
-| Global load breaker | 200 facts / 5s window → accept only priority ≤ 1 |
-| Priority aging | Every 30s, priority -= 1, floor = 1 (never CRITICAL) |
+| **Event sourcing / CQRS** | the log is the only truth; state is a projection |
+| **Git** | content-addressed, immutable, append-only; `fetch` by cursor |
+| **Lamport / total order** | exactly-once exclusivity as a *theorem* of order |
+| **CAN bus** | content-addressed broadcast + local (reader) filtering |
+| **Scientific method** | contestable facts (corroborate/contradict), no central arbiter |
 
 ---
 
-## 10. Content Hash & Signing
-
-### 10.1 Canonical record
-
-The canonical record covers the **complete immutable record**, not just
-payload. Optional fields are included **only when present** (non-null,
-non-empty).
-
-```python
-canonical = {
-    "fact_type":       fact.fact_type,
-    "payload":         fact.payload,           # raw dict, not re-serialised
-    "source_ant_id":   fact.source_ant_id,
-    "created_at":      fact.created_at,
-    "mode":            fact.mode,
-    "priority":        fact.priority,
-    "ttl_seconds":     fact.ttl_seconds,
-    "causation_depth": fact.causation_depth,
-}
-if fact.parent_fact_id:    canonical["parent_fact_id"]    = fact.parent_fact_id
-if fact.confidence is not None: canonical["confidence"]    = fact.confidence
-if fact.domain_tags:       canonical["domain_tags"]       = sorted(fact.domain_tags)
-if fact.need_capabilities: canonical["need_capabilities"] = sorted(fact.need_capabilities)
-if fact.subject_key:       canonical["subject_key"]       = fact.subject_key
-if fact.supersedes:        canonical["supersedes"]        = fact.supersedes
-if fact.semantic_kind:     canonical["semantic_kind"]     = fact.semantic_kind
-```
-
-Serialization:
-
-```python
-canonical_str = json.dumps(canonical, sort_keys=True, ensure_ascii=False)
-content_hash  = sha256(canonical_str.encode()).hexdigest()
-```
-
-List fields are sorted for order-independent hashing.
-
-`fact_id` is **excluded** — it may be bus-assigned. If the client
-pre-generates it, they SHOULD include it in their own integrity checks but
-NOT in the cross-implementation canonical record.
-
-If a publisher sends `content_hash`, it MUST equal the bus's computation.
-Because `created_at` is part of the canonical record, clients pre-computing
-the hash MUST send the same `created_at`. The simplest path is to send
-`content_hash = ""` and let the bus compute it.
-
-### 10.2 Bus signature
-
-```
-message   = f"{fact_id}|{content_hash}|{source_ant_id}|{fact_type}|{created_at}"
-signature = hmac_sha256(bus_secret, message)
-```
-
-The bus signs every accepted fact. Set `ANTLEGION_BUS_SECRET` to a stable
-value in production — a fresh random secret on each boot makes existing
-signatures unverifiable across restarts.
-
----
-
-## 11. Mandatory and Recommended Defaults
-
-| Parameter | Default | Source |
-|---|:---:|---|
-| Default fact TTL | 86400s (24h) | Implementation choice; was 1800s before, raised for client polling |
-| Default fact `mode` | `broadcast` | §7.2 — most LLM-published facts are observations, not tasks |
-| Claim timeout | 600s (10 min) | §4.1 — claimed facts auto-released back to `published` |
-| Causation depth limit | 16 | §9.5 |
-| Consensus / refutation quorum | 2 | §4.2 |
-| Dedup window | 10s | §9.5 |
-| Per-source rate limit | 20 burst, 5/s sustained | §9.5 |
-| Global load breaker | 200 facts / 5s → only priority ≤ 1 | §9.5 |
-| Priority aging | -1 every 30s, floor 1 | §9.5 |
-| Fault Confinement degraded threshold | TEC = 128 | §9.2 |
-| Fault Confinement isolated threshold | TEC = 256 | §9.2 |
-| GC retain resolved | 86400s | Bumped from 600s for polling-friendly retention |
-| GC retain dead | 86400s | Bumped from 3600s |
-| GC max facts in memory | 10,000 | Implementation choice |
-| JSONL compaction interval | 3600s | Implementation choice |
-
----
-
-## 12. Storage and Recovery
-
-The reference implementation uses an append-only JSONL log:
-
-- Each lifecycle event (publish / claim / resolve / release / supersede /
-  corroborate / contradict / purge) is one JSON line.
-- Compaction removes entries for facts no longer in memory.
-- Recovery on startup replays the log to rebuild in-memory state.
-
-### Tail corruption
-
-A process killed mid-write may leave a partial final line. On startup:
-
-1. Read line by line with a streaming parser.
-2. Skip any line that fails JSON parsing (log a warning with byte offset).
-3. Accept only lines that deserialize into a recognized event schema.
-4. After recovery, truncate the file to the last successfully parsed byte
-   boundary before appending new events.
-
-Compaction MUST use a temp file + atomic rename (`os.replace`) so a partial
-compaction cannot corrupt the primary log.
-
----
-
-## 13. Safety Invariants the Bus MUST Enforce
-
-| Invariant | Notes |
-|---|---|
-| Content integrity | Reject facts where `content_hash` mismatches |
-| Causation depth limit | Reject facts exceeding the configured maximum |
-| Immutability | Never modify the immutable record after publish |
-| Claim exclusivity | At most one consumer holds a claim on any exclusive fact at any time |
-| TTL enforcement | Expire facts past `created_at + ttl_seconds` |
-| Cross-domain by derivation only | A fact's `fact_type` and other immutable fields MUST NOT be modified to change its domain; cross-domain propagation MUST publish a new derived fact with `parent_fact_id` linkage |
-
----
-
-## 14. Glossary
-
-| Term | Meaning |
-|---|---|
-| **Fact** | Immutable statement about reality, the atomic coordination unit |
-| **Bus** | The shared communication medium connecting all consumers |
-| **Consumer / Ant** | Any process connected to the bus — AI agent, MCP adapter, gateway, monitor |
-| **Acceptance Filter** | A consumer's declaration of what facts it wants to receive |
-| **Causation Depth** | How many ancestor facts led to this one |
-| **Parent Fact** | Direct causal predecessor |
-| **Corroboration** | Another consumer confirming a fact's validity |
-| **Contradiction** | Another consumer disputing a fact's validity |
-| **Exclusive** | Mode where at most one consumer handles the fact |
-| **Broadcast** | Mode where all matching consumers see the fact |
-| **Dead** | Terminal state for a fact that could not be processed |
-| **Superseded** | Replaced by a newer fact (subject_key or explicit `supersedes`) |
-| **TEC** | Transmit Error Counter, per-consumer reliability metric |
-
----
-
-## Appendix A: Lineage
-
-| Source | What we take |
-|---|---|
-| **CAN Bus (ISO 11898)** | Content-addressed messaging, broadcast + local filtering, priority arbitration, TEC error state machine, no central master |
-| **Event Sourcing** | Immutable append-only log, idempotent consumption, choreography over orchestration |
-| **Scientific method** | Peer review (corroborate / contradict), confidence reporting, knowledge supersession |
-| **Git** | Append-only, content-hashed, immutable history; client-driven `fetch` via sequence cursor |
-
----
-
-*Protocol designed by Carter.Yang. Architecture Sovereignty Notice applies.*
+*Protocol v2.0 by Carter.Yang. The bus orders and preserves; readers decide
+meaning. Keep the trusted core small enough that a second implementation is a
+weekend, and let the conformance vectors — not prose — guarantee interop.*
