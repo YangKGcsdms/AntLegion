@@ -1,4 +1,4 @@
-<!-- lang-nav --> 🌐 **English** · [简体中文](EVOLUTION.zh-CN.md)
+🌐 **English** · [简体中文](EVOLUTION.zh-CN.md)
 
 # Evolution notes — why the runtime got cut
 

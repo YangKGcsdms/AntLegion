@@ -1,4 +1,4 @@
-<!-- lang-nav --> 🌐 [English](PROTOCOL.md) · **简体中文导读**
+🌐 [English](PROTOCOL.md) · **简体中文导读**
 
 # AntLegion 协议 —— v2.0(中文导读)
 

@@ -1,4 +1,4 @@
-<!-- lang-nav --> 🌐 [English](QUICKSTART.md) · **简体中文**
+🌐 [English](QUICKSTART.md) · **简体中文**
 
 # 快速上手 —— AntLegion v2(只追加事实总线)
 

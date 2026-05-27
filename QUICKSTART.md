@@ -1,4 +1,4 @@
-<!-- lang-nav --> 🌐 **English** · [简体中文](QUICKSTART.zh-CN.md)
+🌐 **English** · [简体中文](QUICKSTART.zh-CN.md)
 
 # Quickstart — AntLegion v2 (append-only fact bus)
 

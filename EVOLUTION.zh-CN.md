@@ -1,4 +1,4 @@
-<!-- lang-nav --> 🌐 [English](EVOLUTION.md) · **简体中文**
+🌐 [English](EVOLUTION.md) · **简体中文**
 
 # 演进笔记 —— 运行时为何被砍掉
 

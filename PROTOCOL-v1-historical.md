@@ -1,4 +1,4 @@
-<!-- lang-nav --> 🌐 **English** · [简体中文说明](PROTOCOL-v1-historical.zh-CN.md)
+🌐 **English** · [简体中文说明](PROTOCOL-v1-historical.zh-CN.md)
 
 # AntLegion Bus Protocol — v1.0 (HISTORICAL / SUPERSEDED)
 

@@ -1,4 +1,4 @@
-<!-- lang-nav --> 🌐 [English](CLAUDE.md) · **简体中文**
+🌐 [English](CLAUDE.md) · **简体中文**
 
 # CLAUDE.md
 

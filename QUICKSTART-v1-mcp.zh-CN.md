@@ -1,4 +1,4 @@
-<!-- lang-nav --> 🌐 [English](QUICKSTART-v1-mcp.md) · **简体中文**
+🌐 [English](QUICKSTART-v1-mcp.md) · **简体中文**
 
 # 快速上手 —— Claude Code + AntLegion Bus(v1 / MCP · legacy)
 
