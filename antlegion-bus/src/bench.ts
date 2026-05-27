@@ -4,7 +4,7 @@
  * Measures raw append + full-scan read throughput of the core (in-process, no
  * HTTP), to confirm the bus is fast enough to be treated as infrastructure.
  *
- *   ANTLEGION_BENCH_N=50000 ANTLEGION_FSYNC=no tsx src/v2/bench.ts
+ *   ANTLEGION_BENCH_N=50000 ANTLEGION_FSYNC=no tsx src/bench.ts
  */
 
 import { mkdtempSync } from "node:fs";

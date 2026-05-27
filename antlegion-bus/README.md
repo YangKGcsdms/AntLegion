@@ -2,29 +2,28 @@
 
 # antlegion-bus
 
-The fact-bus server. This package contains **two generations** (see
-[`../README.md`](../README.md) for the project overview):
+The fact-bus: a stateless, append-only fact log plus the folding SDK, `alctl`
+CLI, and MCP adapter that drive it. See [`../README.md`](../README.md) for the
+project overview and [`../PROTOCOL.md`](../PROTOCOL.md) for the protocol.
 
-- **v2 (current)** — `src/v2/`: a stateless append-only fact log; meaning is a
-  reader fold in the SDK/CLI. Protocol: [`../PROTOCOL.md`](../PROTOCOL.md).
-- **v1 (legacy)** — `src/`: the original mutable-state engine. Protocol:
-  [`../PROTOCOL-v1-historical.md`](../PROTOCOL-v1-historical.md).
-
-## Run — v2 (current)
+## Run
 
 ```bash
 npm install
-npm run dev:v2          # tsx src/v2/index.ts → http://localhost:28090
-#   or: npm run build && npm run start:v2
+npm run dev          # tsx src/index.ts → http://localhost:28090
+#   or: npm run build && npm run start
 ```
 
 ```bash
 curl http://localhost:28090/health
-curl http://localhost:28090/info | jq        # INFO: head_seq, facts, fsync, dedup_hits, uptime
+curl http://localhost:28090/info | jq          # INFO: head_seq, facts, fsync, dedup_hits, uptime
 curl "http://localhost:28090/facts?since=0" | jq
-node dist/v2/bin.js info                      # alctl CLI (after build)
-npm run bench:v2                              # throughput benchmark
+node dist/bin.js info                           # alctl CLI (after build)
+npm run mcp                                     # MCP stdio adapter (after build)
+npm run bench                                   # throughput benchmark
 ```
+
+## Environment
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -33,40 +32,17 @@ npm run bench:v2                              # throughput benchmark
 | `ANTLEGION_FSYNC` | `everysec` | `always` \| `everysec` \| `no` (redis `appendfsync`) |
 | `ANTLEGION_BUS_SECRET` | random per boot | HMAC secret; set a stable value so signatures verify across restarts |
 
-## Run — v1 (legacy)
-
-```bash
-npm run build
-npm start                # node dist/index.js → http://localhost:28080
-```
-
-```bash
-curl http://localhost:28080/health
-curl http://localhost:28080/facts | jq
-curl http://localhost:28080/stats | jq
-curl http://localhost:28080/facts/cursor   # current head sequence
-```
-
-## Environment variables
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `PORT` | `28080` | HTTP listen port |
-| `HOST` | `0.0.0.0` | Listen address |
-| `ANTLEGION_DATA_DIR` | `.data` | Directory for the JSONL append log |
-| `ANTLEGION_BUS_SECRET` | random per boot | HMAC secret for fact signatures. Set to a stable value in production. (Legacy alias `FACT_BUS_SECRET` is still accepted.) |
-
 ## Tests
 
 ```bash
-npm test           # vitest run
+npm test           # vitest run (74)
 npm run test:watch # vitest watch
 ```
 
 ## Tech stack
 
-Node.js 22+, TypeScript 5.7+, Hono, `@hono/node-server`, self-built JSONL
-append-only log (`src/persistence/JSONLStore.ts`), Vitest.
+Node.js 20+, TypeScript 5.7+, Hono, `@hono/node-server`, `@modelcontextprotocol/sdk`,
+a self-built JSONL append-only log (`src/log.ts`), Vitest.
 
 ## License
 

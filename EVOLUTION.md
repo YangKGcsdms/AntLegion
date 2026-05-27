@@ -178,6 +178,7 @@ and stress-testing them with ~20-agent swarms (`antlegion-bus/examples/`) is
 exactly what surfaced and fixed the trickiest one (recv-anchored claim expiry
 so crash-recovery re-dispatch can't be blocked by a stale owner).
 
-v1 is preserved (`antlegion-bus/src/`, `antlegion-mcp/`,
-`PROTOCOL-v1-historical.md`) because the MCP adapter is still the only zero-code
-path for MCP clients. A v2 MCP adapter is the planned bridge.
+v1 has since been **removed entirely**: v2 grew its own MCP adapter
+(`antlegion-bus/src/mcp.ts`), so the only reason to keep v1 was gone and the repo
+now holds a single architecture. The old v1 code (the mutable-state engine and
+the separate `antlegion-mcp` package) lives on in git history.

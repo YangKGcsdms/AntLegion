@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BusV2 } from "../../src/v2/bus.js";
-import { computeId } from "../../src/v2/hash.js";
+import { BusV2 } from "../src/bus.js";
+import { computeId } from "../src/hash.js";
 
 function freshBus() {
   const dir = mkdtempSync(join(tmpdir(), "antlegion-v2-"));

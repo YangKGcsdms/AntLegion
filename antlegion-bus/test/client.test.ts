@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BusV2 } from "../../src/v2/bus.js";
-import { ClientV2, localTransport } from "../../src/v2/client.js";
+import { BusV2 } from "../src/bus.js";
+import { ClientV2, localTransport } from "../src/client.js";
 
 function sharedBus() {
   const dir = mkdtempSync(join(tmpdir(), "antlegion-v2-cli-"));

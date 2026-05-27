@@ -8,7 +8,7 @@
  */
 
 import { createHash, createHmac } from "node:crypto";
-import { stableJsonStringify } from "../engine/ContentHasher.js";
+import { stableJsonStringify } from "./canonical.js";
 import { canonicalRecord, type FactInput } from "./types.js";
 
 /** Top-level canonical fields that are floats in the cross-language record. */

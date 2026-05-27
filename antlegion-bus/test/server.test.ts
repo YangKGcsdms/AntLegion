@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServerV2 } from "../../src/v2/server.js";
+import { createServerV2 } from "../src/server.js";
 
 function freshApp() {
   const dir = mkdtempSync(join(tmpdir(), "antlegion-v2-srv-"));

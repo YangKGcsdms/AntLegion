@@ -20,9 +20,9 @@ import { serve } from "@hono/node-server";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServerV2 } from "../src/v2/server.js";
-import { ClientV2, httpTransport } from "../src/v2/client.js";
-import { isSuperseded } from "../src/v2/fold.js";
+import { createServerV2 } from "../src/server.js";
+import { ClientV2, httpTransport } from "../src/client.js";
+import { isSuperseded } from "../src/fold.js";
 
 const RELEASES = 5, POOL = 4, MONITORS = 4, SUBJECT = "prod";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

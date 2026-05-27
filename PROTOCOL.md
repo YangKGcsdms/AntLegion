@@ -5,7 +5,6 @@
 > One primitive. One write. One read. Everything else is derived.
 >
 > Designed by **Carter.Yang**. Re-derived from first principles, 2026.
-> v1.0 is archived at [`PROTOCOL-v1-historical.md`](PROTOCOL-v1-historical.md).
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **MAY** are per
 [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).

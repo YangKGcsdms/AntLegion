@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { loadConfig } from "../../src/v2/config.js";
-import { runBench } from "../../src/v2/bench.js";
+import { loadConfig } from "../src/config.js";
+import { runBench } from "../src/bench.js";
 
 describe("R4 — config (the redis.conf analog)", () => {
   it("sane defaults from empty env", () => {

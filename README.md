@@ -35,36 +35,32 @@ Lineage: CAN bus (content-addressed broadcast + local filtering), event sourcing
 (the log is the only truth), git (content hashing + cursor `fetch`), and the
 scientific method (peer-reviewed, contestable facts).
 
-## Two generations in this repo
+## Architecture (one)
 
-- **v2 — current, recommended.** A first-principles redesign: one primitive
-  (a fact in a total order), two ops (`append` / `read`), and everything else —
-  claim, resolve, trust, supersession, causation — is a **reader fold**. The
-  bus is a stateless trusted core; an SDK and CLI carry the smarts. Code lives
-  in [`antlegion-bus/src/v2/`](antlegion-bus/src/v2). Spec: [`PROTOCOL.md`](PROTOCOL.md).
-  Start here: [`QUICKSTART.md`](QUICKSTART.md).
+One primitive, one bus. A fact is an immutable, content-addressed statement in a
+single total order; the bus only assigns order, verifies the content hash, stamps
+a trusted time, signs, persists, and serves a range. Claim, resolve, trust,
+supersession, and causation are **reader folds** over the fact stream
+([`PROTOCOL.md`](PROTOCOL.md) §3) — the bus holds no per-fact state. The smarts
+live in one place: the client SDK / `alctl` CLI / MCP adapter, all in
+[`antlegion-bus/src/`](antlegion-bus/src). Start here: [`QUICKSTART.md`](QUICKSTART.md).
 
-- **v1 — legacy.** The original bus (`antlegion-bus/src/`) plus an **MCP
-  adapter** ([`antlegion-mcp/`](antlegion-mcp)) that lets MCP clients (Claude
-  Code, Cursor, Cline, …) join a bus with one line of config. Retained because
-  it is currently the only *zero-code* path for MCP clients; a v2 MCP adapter is
-  planned. Spec: [`PROTOCOL-v1-historical.md`](PROTOCOL-v1-historical.md).
-  Walkthrough: [`QUICKSTART-v1-mcp.md`](QUICKSTART-v1-mcp.md).
-
-If you are starting fresh, use **v2**.
+> An earlier **v1** — a mutable-state bus plus a separate MCP package — was
+> removed once this design superseded it; it lives on in git history. See
+> [`EVOLUTION.md`](EVOLUTION.md).
 
 ## Quickstart (v2, 60 seconds)
 
 ```bash
 cd antlegion-bus
 npm install
-npm run dev:v2          # http://localhost:28090   (or: npm run build && npm run start:v2)
+npm run dev          # http://localhost:28090   (or: npm run build && npm run start)
 ```
 
 Drive it from the terminal with `alctl` (the redis-cli analog), or from code:
 
 ```ts
-import { ClientV2, httpTransport } from "antlegion-bus/v2/client";
+import { ClientV2, httpTransport } from "antlegion-bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
@@ -100,31 +96,26 @@ npx tsx examples/swarm-v2.ts          # and scenario-{resilience,consensus,pipel
 
 ```
 .
-├── README.md                  ← you are here
-├── PROTOCOL.md                ← v2 wire protocol (current)
-├── PROTOCOL-v1-historical.md  ← v1 protocol (archived)
-├── QUICKSTART.md              ← v2 quickstart (server + SDK + alctl)
-├── QUICKSTART-v1-mcp.md       ← v1 / MCP quickstart (legacy)
-├── EVOLUTION.md               ← why the project looks like this (v0→v1→v2)
-├── CLAUDE.md                  ← guidance for Claude Code working in this repo
-├── docker-compose.yml         ← runs the v1 bus
-├── antlegion-bus/
-│   ├── src/                   ← v1 bus engine (legacy)
-│   ├── src/v2/                ← v2: core, server, fold SDK, alctl CLI, AOF, bench
-│   ├── examples/              ← multi-agent validation swarms (v2)
-│   ├── test/  test/v2/        ← unit suites (244 tests total)
-│   └── Dockerfile-v2          ← run the v2 bus like you run redis
-└── antlegion-mcp/             ← v1 MCP adapter (legacy)
+├── README.md          ← you are here   (every doc also ships a .zh-CN.md)
+├── PROTOCOL.md        ← the wire protocol (§3 fold rules are normative)
+├── QUICKSTART.md      ← 60-second quickstart (server + SDK + alctl + MCP)
+├── EVOLUTION.md       ← why the project looks like this (v0 → v1 → v2)
+├── CLAUDE.md          ← guidance for Claude Code working in this repo
+└── antlegion-bus/
+    ├── src/           ← core (bus.ts), server, fold SDK (client.ts), alctl CLI, MCP adapter (mcp.ts), AOF (log.ts), bench
+    ├── examples/      ← multi-agent validation swarms
+    ├── test/          ← unit suite (74 tests)
+    └── Dockerfile     ← run the bus like you run redis
 ```
 
 ## Status
 
-**Alpha.** Done in v2: stateless core, HTTP wire, fold SDK, `alctl` CLI,
-append-only persistence with `appendfsync` policy + compaction, `INFO`,
-benchmark (~160k appends/s in-process), Docker image, and 244 passing tests with
-4 multi-agent validation swarms. Not yet: a v2 MCP adapter, multi-language
-client SDKs / cross-language conformance vectors, clustering/replication, and a
-published package or prebuilt binary (build from source for now).
+**Alpha.** Done: stateless core, HTTP wire, fold SDK, `alctl` CLI, **MCP adapter**
+(`npm run mcp`), append-only persistence with `appendfsync` policy + compaction,
+`INFO`, benchmark (~160k appends/s in-process), Docker image, and 74 passing
+tests + 4 multi-agent validation swarms. Not yet: multi-language client SDKs /
+cross-language conformance vectors, clustering/replication, and a published
+package or prebuilt binary (build from source for now).
 
 ## License
 

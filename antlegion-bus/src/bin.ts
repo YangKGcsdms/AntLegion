@@ -3,7 +3,7 @@
  * alctl executable — wires a real httpTransport + a ClientV2 to runCli.
  *
  *   ANTLEGION_BUS_URL=http://localhost:28090 ANTLEGION_AUTHOR=me \
- *     node dist/v2/bin.js publish demo.hello '{"msg":"hi"}'
+ *     node dist/bin.js publish demo.hello '{"msg":"hi"}'
  */
 
 import { hostname } from "node:os";

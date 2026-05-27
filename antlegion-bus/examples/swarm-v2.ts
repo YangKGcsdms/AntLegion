@@ -17,8 +17,8 @@ import { serve } from "@hono/node-server";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServerV2 } from "../src/v2/server.js";
-import { ClientV2, httpTransport } from "../src/v2/client.js";
+import { createServerV2 } from "../src/server.js";
+import { ClientV2, httpTransport } from "../src/client.js";
 
 const TOTAL = 50;
 const WORKERS = 18; // + splitter + aggregator ≈ 20 agents

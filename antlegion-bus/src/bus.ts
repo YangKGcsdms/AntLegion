@@ -13,7 +13,7 @@ import { computeId, computeSig } from "./hash.js";
 import { JsonlLog, type FsyncPolicy } from "./log.js";
 import { RESERVED, type AppendResult, type Fact, type FactInput } from "./types.js";
 import { isSuperseded } from "./fold.js";
-import { globMatch } from "../engine/FilterEngine.js";
+import { globMatch } from "./canonical.js";
 
 export interface ReadQuery {
   since?: number;

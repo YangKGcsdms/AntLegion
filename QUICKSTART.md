@@ -11,8 +11,8 @@ stamps, and serves facts; all coordination is a **reader fold** in the client SD
 ```bash
 cd antlegion-bus
 npm install
-npm run dev:v2          # tsx src/v2/index.ts — http://localhost:28090
-#   or: npm run build && npm run start:v2
+npm run dev          # tsx src/index.ts — http://localhost:28090
+#   or: npm run build && npm run start
 ```
 
 Verify:
@@ -41,7 +41,7 @@ That is the entire bus API. `claim`, `resolve`, `vote`, `trust`, `state` are
 ## 3. Coordinate from code (the folding SDK)
 
 ```ts
-import { ClientV2, httpTransport } from "antlegion-bus/v2/client";
+import { ClientV2, httpTransport } from "antlegion-bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
@@ -76,8 +76,8 @@ the SDK absorbs the append-then-read-back-and-fold work (PROTOCOL.md §3).
 ## Where to go next
 
 - [PROTOCOL.md](PROTOCOL.md) — the v2 protocol, derived from one primitive.
-- `antlegion-bus/src/v2/` — core (`bus.ts`), wire (`server.ts`), folds (`fold.ts`), SDK (`client.ts`).
-- `antlegion-bus/test/v2/` — core / lifecycle / trust+causation / server / client / e2e.
+- `antlegion-bus/src/` — core (`bus.ts`), wire (`server.ts`), folds (`fold.ts`), SDK (`client.ts`).
+- `antlegion-bus/test/` — core / lifecycle / trust+causation / server / client / e2e.
 
 ## Status
 

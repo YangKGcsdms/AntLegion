@@ -4,27 +4,31 @@
   "description": "Node.js/TypeScript implementation of the AntLegion Bus protocol",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "antlegion-bus": "dist/index.js",
+    "antlegion-mcp": "dist/mcp.js",
+    "alctl": "dist/bin.js"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "start:v2": "node dist/v2/index.js",
-    "dev:v2": "tsx src/v2/index.ts",
-    "bench:v2": "tsx src/v2/bench.ts",
+    "mcp": "node dist/mcp.js",
+    "bench": "tsx src/bench.ts",
     "test": "vitest run",
-    "test:v2": "vitest run test/v2",
     "test:watch": "vitest"
   },
   "author": "Carter.Yang",
   "license": "MIT",
   "dependencies": {
-    "hono": "^4.7.0",
-    "@hono/node-server": "^1.14.0"
+    "@hono/node-server": "^1.14.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "hono": "^4.7.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
     "@types/node": "^22.0.0",
-    "vitest": "^3.1.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
   }
 }

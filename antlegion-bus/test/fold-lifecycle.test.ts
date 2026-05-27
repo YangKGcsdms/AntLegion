@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { Fact } from "../../src/v2/types.js";
-import { lifecycle, claimWinner, didIWin } from "../../src/v2/fold.js";
+import type { Fact } from "../src/types.js";
+import { lifecycle, claimWinner, didIWin } from "../src/fold.js";
 
 /** Craft a stored fact with explicit seq/recv for precise fold testing. */
 function f(seq: number, author: string, refs: Fact["refs"], recv = 1000, type = "x"): Fact {

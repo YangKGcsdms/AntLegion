@@ -17,9 +17,9 @@ import { serve } from "@hono/node-server";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServerV2 } from "../src/v2/server.js";
-import { ClientV2, httpTransport } from "../src/v2/client.js";
-import { trust } from "../src/v2/fold.js";
+import { createServerV2 } from "../src/server.js";
+import { ClientV2, httpTransport } from "../src/client.js";
+import { trust } from "../src/fold.js";
 
 const REPORTERS = 6, REVIEWERS = 12, OBS_PER_REPORTER = 2; // 12 obs: 6 true, 6 false
 const TOTAL_OBS = REPORTERS * OBS_PER_REPORTER;

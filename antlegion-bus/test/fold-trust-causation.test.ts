@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Fact } from "../../src/v2/types.js";
-import { trust, isSuperseded, supersededBy, causationChain, lifecycle } from "../../src/v2/fold.js";
-import { BusV2 } from "../../src/v2/bus.js";
+import type { Fact } from "../src/types.js";
+import { trust, isSuperseded, supersededBy, causationChain, lifecycle } from "../src/fold.js";
+import { BusV2 } from "../src/bus.js";
 
 function f(o: {
   seq: number; author?: string; refs?: Fact["refs"]; type?: string;

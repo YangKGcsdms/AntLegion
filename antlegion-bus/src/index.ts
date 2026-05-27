@@ -1,29 +1,29 @@
 /**
- * Entry point: start the antlegion-bus HTTP server.
+ * v2 entry point — boot the append-only fact bus over HTTP.
  *
- * The bus is a passive state store. Clients drive their own polling loop
- * via GET /facts?since_sequence=N. There is no event push.
+ *   PORT=28090 ANTLEGION_BUS_SECRET=... node dist/index.js
+ *
+ * The server is the trusted core (§0.2): assign order, verify, stamp+sign,
+ * persist, serve a range. All coordination semantics live in the client SDK
+ * (client.ts) as reader folds.
  */
 
 import { serve } from "@hono/node-server";
-import { createApp } from "./server/app.js";
-import { DEFAULT_CONFIG } from "./types/protocol.js";
+import { createServerV2 } from "./server.js";
+import { loadConfig } from "./config.js";
 
-const port = parseInt(process.env.PORT ?? String(DEFAULT_CONFIG.server.port), 10);
-const host = process.env.HOST ?? DEFAULT_CONFIG.server.host;
-const dataDir = process.env.ANTLEGION_DATA_DIR ?? DEFAULT_CONFIG.data.dir;
+const cfg = loadConfig();
 
-const { app, engine } = createApp({ data: { dir: dataDir } });
+const { app, bus } = createServerV2({ dataDir: cfg.dataDir, fsync: cfg.fsync, secret: cfg.secret });
 
-const server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
-  console.log(`[antlegion-bus] listening on http://${host}:${info.port}`);
+const server = serve({ fetch: app.fetch, port: cfg.port }, (info) => {
+  console.log(`[antlegion-v2] append-only fact bus on http://localhost:${info.port} (fsync=${cfg.fsync})`);
 });
 
-// Graceful shutdown
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    console.log(`[antlegion-bus] ${signal} received, shutting down...`);
-    engine.shutdown();
+for (const sig of ["SIGINT", "SIGTERM"]) {
+  process.on(sig, () => {
+    console.log(`[antlegion-v2] ${sig} — flushing + shutting down`);
+    bus.close();   // flush the AOF before exit
     server.close();
     process.exit(0);
   });

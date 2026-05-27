@@ -11,8 +11,8 @@
 ```bash
 cd antlegion-bus
 npm install
-npm run dev:v2          # tsx src/v2/index.ts — http://localhost:28090
-#   或:npm run build && npm run start:v2
+npm run dev          # tsx src/index.ts — http://localhost:28090
+#   或:npm run build && npm run start
 ```
 
 验证:
@@ -41,7 +41,7 @@ curl -s "http://localhost:28090/facts?since=0"
 ## 3. 在代码里协作(折叠 SDK)
 
 ```ts
-import { ClientV2, httpTransport } from "antlegion-bus/v2/client";
+import { ClientV2, httpTransport } from "antlegion-bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
@@ -76,8 +76,8 @@ SDK 吸收了「追加→读回确认→折叠」的活(见 PROTOCOL.md §3)。
 ## 下一步去哪
 
 - [PROTOCOL.md](PROTOCOL.md) —— v2 协议,从唯一本原推导而来。
-- `antlegion-bus/src/v2/` —— 内核(`bus.ts`)、线面(`server.ts`)、折叠(`fold.ts`)、SDK(`client.ts`)。
-- `antlegion-bus/test/v2/` —— core / lifecycle / trust+causation / server / client / e2e。
+- `antlegion-bus/src/` —— 内核(`bus.ts`)、线面(`server.ts`)、折叠(`fold.ts`)、SDK(`client.ts`)。
+- `antlegion-bus/test/` —— core / lifecycle / trust+causation / server / client / e2e。
 
 ## 状态
 

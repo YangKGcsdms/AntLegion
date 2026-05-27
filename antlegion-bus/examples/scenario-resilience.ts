@@ -19,9 +19,9 @@ import { serve } from "@hono/node-server";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServerV2 } from "../src/v2/server.js";
-import { ClientV2, httpTransport } from "../src/v2/client.js";
-import { lifecycle } from "../src/v2/fold.js";
+import { createServerV2 } from "../src/server.js";
+import { ClientV2, httpTransport } from "../src/client.js";
+import { lifecycle } from "../src/fold.js";
 
 const TOTAL = 24, HEALTHY = 12, FAULTY = 4, CLAIM_TIMEOUT = 1.0;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

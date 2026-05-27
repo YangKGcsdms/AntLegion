@@ -32,34 +32,29 @@ Agent,它们只对世界做陈述、并对陈述做出反应。(这不是口号,
 血统:CAN 总线(内容寻址广播 + 本地过滤)、事件溯源(日志是唯一真相)、
 git(内容哈希 + 游标 `fetch`)、科学方法(可被同行评议、可被反驳的事实)。
 
-## 仓库内的两代
+## 架构(唯一)
 
-- **v2 —— 当前,推荐。** 一次第一性原理重构:唯一本原(全序中的一条事实)、
-  两个操作(`append` / `read`),其余一切——认领、解决、信任、取代、因果——都是
-  **读者折叠(reader fold)**。总线退化为无状态可信内核,SDK 与 CLI 承载「智能」。
-  代码在 [`antlegion-bus/src/v2/`](antlegion-bus/src/v2)。规范:[`PROTOCOL.md`](PROTOCOL.md)。
-  从这里开始:[`QUICKSTART.md`](QUICKSTART.md)。
+一个本原、一条总线。事实是单一全序中不可变、内容寻址的陈述;总线只负责赋序、校验内容
+哈希、盖可信时间、签名、持久化、按区间返回。认领、解决、信任、取代、因果都是对事实流的
+**读者折叠**([`PROTOCOL.md`](PROTOCOL.md) §3)——总线不持有 per-fact 状态。「智能」集中
+在一处:客户端 SDK / `alctl` CLI / MCP 适配器,均在
+[`antlegion-bus/src/`](antlegion-bus/src)。从这里开始:[`QUICKSTART.md`](QUICKSTART.md)。
 
-- **v1 —— legacy。** 原始总线(`antlegion-bus/src/`)加一个 **MCP 适配器**
-  ([`antlegion-mcp/`](antlegion-mcp)),让 MCP 客户端(Claude Code、Cursor、Cline……)
-  一行配置即可接入。保留它,只因目前它是 MCP 客户端**零代码**接入的唯一路径;v2 的
-  MCP 适配器在计划中。规范:[`PROTOCOL-v1-historical.md`](PROTOCOL-v1-historical.md)。
-  上手:[`QUICKSTART-v1-mcp.md`](QUICKSTART-v1-mcp.md)。
+> 早期的 **v1**(可变状态总线 + 独立 MCP 包)在本设计取代它后已被移除,保留在 git 历史里。
+> 见 [`EVOLUTION.md`](EVOLUTION.md)。
 
-新项目请用 **v2**。
-
-## 快速上手(v2,60 秒)
+## 快速上手(60 秒)
 
 ```bash
 cd antlegion-bus
 npm install
-npm run dev:v2          # http://localhost:28090   (或:npm run build && npm run start:v2)
+npm run dev          # http://localhost:28090   (或:npm run build && npm run start)
 ```
 
 用 `alctl`(redis-cli 对应物)在终端操作,或在代码里:
 
 ```ts
-import { ClientV2, httpTransport } from "antlegion-bus/v2/client";
+import { ClientV2, httpTransport } from "antlegion-bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
@@ -93,29 +88,24 @@ npx tsx examples/swarm-v2.ts          # 以及 scenario-{resilience,consensus,pi
 
 ```
 .
-├── README.md                  ← 你在这里(英文)/ README.zh-CN.md(中文)
-├── PROTOCOL.md                ← v2 线协议(当前)
-├── PROTOCOL-v1-historical.md  ← v1 协议(归档)
-├── QUICKSTART.md              ← v2 快速上手(服务端 + SDK + alctl)
-├── QUICKSTART-v1-mcp.md       ← v1 / MCP 快速上手(legacy)
-├── EVOLUTION.md               ← 项目为何如此(v0→v1→v2)
-├── CLAUDE.md                  ← 给 Claude Code 在本仓工作的指引
-├── docker-compose.yml         ← 运行 v1 总线
-├── antlegion-bus/
-│   ├── src/                   ← v1 总线引擎(legacy)
-│   ├── src/v2/                ← v2:内核、服务端、折叠 SDK、alctl CLI、AOF、benchmark
-│   ├── examples/              ← 多 Agent 验证 swarm(v2)
-│   ├── test/  test/v2/        ← 单元测试(共 244 个)
-│   └── Dockerfile-v2          ← 像跑 redis 一样跑 v2 总线
-└── antlegion-mcp/             ← v1 MCP 适配器(legacy)
+├── README.md          ← 你在这里   (每份文档都有 .zh-CN.md 中文版)
+├── PROTOCOL.md        ← 线协议(§3 折叠规则为规范性)
+├── QUICKSTART.md      ← 60 秒快速上手(服务端 + SDK + alctl + MCP)
+├── EVOLUTION.md       ← 项目为何如此(v0 → v1 → v2)
+├── CLAUDE.md          ← 给 Claude Code 在本仓工作的指引
+└── antlegion-bus/
+    ├── src/           ← 内核(bus.ts)、服务端、折叠 SDK(client.ts)、alctl CLI、MCP 适配器(mcp.ts)、AOF(log.ts)、bench
+    ├── examples/      ← 多 Agent 验证 swarm
+    ├── test/          ← 单元测试(74 个)
+    └── Dockerfile     ← 像跑 redis 一样跑总线
 ```
 
 ## 状态
 
-**Alpha。** v2 已完成:无状态内核、HTTP 线面、折叠 SDK、`alctl` CLI、带
-`appendfsync` 策略 + 压缩的只追加持久化、`INFO`、benchmark(进程内约 16 万 append/s)、
-Docker 镜像,以及 244 个通过的单测 + 4 个多 Agent 验证 swarm。尚未具备:v2 的 MCP
-适配器、多语言客户端 SDK / 跨语言一致性向量、集群/复制,以及已发布的包或预编译二进制
+**Alpha。** 已完成:无状态内核、HTTP 线面、折叠 SDK、`alctl` CLI、**MCP 适配器**
+(`npm run mcp`)、带 `appendfsync` 策略 + 压缩的只追加持久化、`INFO`、benchmark
+(进程内约 16 万 append/s)、Docker 镜像,以及 74 个通过的单测 + 4 个多 Agent 验证 swarm。
+尚未具备:多语言客户端 SDK / 跨语言一致性向量、集群/复制,以及已发布的包或预编译二进制
 (目前需从源码构建)。
 
 ## 许可

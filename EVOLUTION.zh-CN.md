@@ -132,5 +132,6 @@ git checkout archive/legacy-emergent-runtime
 正是逼出并修掉了其中最棘手一处(以 recv 锚定的认领超时,使崩溃恢复重派不会被陈旧的 owner
 阻塞)的方式。
 
-v1 被保留(`antlegion-bus/src/`、`antlegion-mcp/`、`PROTOCOL-v1-historical.md`),因为
-MCP 适配器仍是 MCP 客户端零代码接入的唯一路径。v2 的 MCP 适配器是计划中的桥。
+v1 此后已被**整体移除**:v2 长出了自己的 MCP 适配器(`antlegion-bus/src/mcp.ts`),
+保留 v1 的唯一理由消失,仓库现在只剩一种架构。旧的 v1 代码(可变状态引擎与独立的
+`antlegion-mcp` 包)保留在 git 历史里。
