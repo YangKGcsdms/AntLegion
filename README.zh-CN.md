@@ -1,116 +1,418 @@
-🌐 [English](README.md) · **简体中文**
+<div align="center">
+
+[English](README.md) · 🌐 **简体中文**
 
 # AntLegion
 
-> 面向自治 Agent 的**事实总线(fact bus)**——本地、可内嵌的基础设施,让众多 Agent
-> 通过共享**事实(fact)**协作,而非互相下达**命令(command)**。可以把它理解为
-> 多 Agent 协作的「Redis 形态原语」:装上、运行、把你的 Agent 指过来即可。
+**面向自治 Agent 的事实总线** — 本地、可内嵌的基础设施，让多个 Agent 通过共享不可变的事实来协作，而非互相下达命令。
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Tests](https://img.shields.io/badge/测试-136%20通过-brightgreen?style=flat-square)](antlegion-bus/test/)
+[![License](https://img.shields.io/badge/许可证-MIT-blue?style=flat-square)](LICENSE)
+[![Status](https://img.shields.io/badge/状态-alpha-orange?style=flat-square)]()
+
+</div>
 
 ---
 
-## 这是什么
+可以把它理解成**多 Agent 协调版的 Redis**：一个持久化进程，一条只追加的不可变事实日志，多个 Agent 各自读取并做出反应——协调从事实流的结构中自然涌现，无需中心化的编排者来分配指令。
 
-一个小型服务端,把**不可变、内容寻址的事实**存进单一全序、只追加的日志。Agent
-*发布(publish)*事实、按自己的节奏*读取(read)*、可选地*认领(claim)*独占事实并
-*解决(resolve)*、还能对彼此的事实*佐证(corroborate)/ 反驳(contradict)*。协作不是
-被编排出来的——它从事实流及其因果链中**自发涌现**。
+## 目录
 
-奠基公理:**只有事实,没有命令(facts, not commands)。** `"第 7 项待处理"` 是事实;
-`"worker-3,去处理第 7 项"` 是命令,不允许出现在总线上。没有任何 Agent 寻址另一个
-Agent,它们只对世界做陈述、并对陈述做出反应。(这不是口号,而是被验证过的——见
-[已验证的保证](#已验证的保证)。)
+- [核心理念](#核心理念)
+- [核心特性](#核心特性)
+- [快速上手](#快速上手)
+- [事实的结构](#事实的结构)
+- [从代码接入](#从代码接入)
+- [通过 MCP 接入](#通过-mcp-接入)
+- [经验证的保证](#经验证的保证)
+- [配置参数](#配置参数)
+- [架构](#架构)
+- [项目结构](#项目结构)
+- [当前状态](#当前状态)
+- [参与贡献](#参与贡献)
+- [许可证](#许可证)
 
-## 它的定位
+---
 
-| 它**是** | 它**不是** |
+## 核心理念
+
+**只有事实，没有命令。**
+
+`"第 7 项待处理"` 是事实，可以发布到总线上。  
+`"worker-3，去处理第 7 项"` 是命令——它在这里没有立足之地。
+
+没有任何 Agent 会直接寻址另一个 Agent。Agent 向世界发布陈述，按自己的节奏读取共享日志，并做出反应。谁负责哪项工作、顺序如何、可信度多高——这一切都从事实流的结构中**自发涌现**，而非由某个调度者来安排。
+
+总线只强制执行一件事：**全序（total order）**。从全序中，恰好一次（exactly-once）的归属权自然成为数学定理——序号最小的认领胜出，所有读者从同一不可变流中计算出完全相同的结果。
+
+这不是口号，而是[可运行的多 Agent 压测验证过的](#经验证的保证)。
+
+## 核心特性
+
+| 特性 | 机制 |
 |---|---|
-| 跑在 Agent 旁边的本地/可内嵌设施(类 Redis) | 公网 SaaS |
-| 持久、有序、只追加的**事实日志** + 读者侧折叠 | 消息队列 / RPC 总线 |
-| 编排式协作:Agent 借共享事实自我协调 | 给 Agent 排序的编排器 |
-| 单机、单写(高可用=故障切换,非多主) | 多主分布式数据库 |
+| **不可变事实** | 以 `sha256(canonical(record))` 为内容地址——相同内容自动去重，每条事实都有稳定且不可伪造的身份 |
+| **全序保证** | 总线分配严格递增的 `seq`，这是它对客户端的唯一权威 |
+| **恰好一次协调** | 某条事实上序号最小的认领胜出——这是全序的定理，而非锁或特殊端点 |
+| **可信时间** | 总线盖章的 `recv`（非作者声明的 `ts`）确定性地锚定所有基于时间的折叠计算，崩溃 Agent 的陈旧认领不会阻塞恢复流程 |
+| **无状态总线** | 认领、解决、信任、取代、因果均为对事实流的纯折叠函数——总线不持有任何 per-fact 可变状态 |
+| **持久化** | 只追加日志（`facts-v2.jsonl`），支持可配置的 `appendfsync` 策略；崩溃恢复只需重放日志，无需重建状态机 |
+| **可验证** | 总线对每条事实进行 HMAC 签名；恢复时校验签名；互操作由[跨语言一致性向量集](antlegion-bus/conformance/vectors.json)保证 |
 
-血统:CAN 总线(内容寻址广播 + 本地过滤)、事件溯源(日志是唯一真相)、
-git(内容哈希 + 游标 `fetch`)、科学方法(可被同行评议、可被反驳的事实)。
+## 快速上手
 
-## 架构(唯一)
-
-一个本原、一条总线。事实是单一全序中不可变、内容寻址的陈述;总线只负责赋序、校验内容
-哈希、盖可信时间、签名、持久化、按区间返回。认领、解决、信任、取代、因果都是对事实流的
-**读者折叠**([`PROTOCOL.md`](PROTOCOL.md) §3)——总线不持有 per-fact 状态。「智能」集中
-在一处:客户端 SDK / `alctl` CLI / MCP 适配器,均在
-[`antlegion-bus/src/`](antlegion-bus/src)。从这里开始:[`QUICKSTART.md`](docs/QUICKSTART.md)。
-
-> 早期的 **v1**(可变状态总线 + 独立 MCP 包)在本设计取代它后已被移除,保留在 git 历史里。
-> 见 [`EVOLUTION.md`](docs/EVOLUTION.md)。
-
-## 快速上手(60 秒)
+**前置要求：Node.js ≥ 18**
 
 ```bash
-cd antlegion-bus
+git clone https://github.com/YangKGcsdms/antlegion-platform.git
+cd antlegion-platform/antlegion-bus
 npm install
-npm run dev          # http://localhost:28090   (或:npm run build && npm run start)
+npm run dev
+# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
 ```
 
-用 `alctl`(redis-cli 对应物)在终端操作,或在代码里:
+验证服务是否就绪：
 
-```ts
+```bash
+curl http://localhost:28090/health
+# {"status":"ok","protocol":"2.0","head_seq":0}
+```
+
+**或使用 Docker**（从仓库根目录构建）：
+
+```bash
+docker build -t antlegion .
+docker run -p 28090:28090 -e ANTLEGION_BUS_SECRET=your-stable-secret antlegion
+```
+
+### 用终端操作（`alctl` — redis-cli 的对应物）
+
+```bash
+# 先 build，然后：
+node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
+# → {"id":"b3f1…","seq":1,"deduped":false}
+
+node dist/bin.js claim <id> --author bob
+# → {"won":false,"winner":"alice"}
+
+node dist/bin.js state <id>
+# → {"state":"claimed","owner":"alice"}
+
+node dist/bin.js info
+# → {"protocol":"2.0","head_seq":1,"facts":3,"fsync":"everysec",…}
+```
+
+### 或直接使用 HTTP API
+
+```bash
+# 写入一条事实
+curl -sX POST http://localhost:28090/facts \
+  -H 'content-type: application/json' \
+  -d '{"type":"task.build","author":"alice","ts":1748300000,"payload":{"target":"todo-app"}}'
+# 201 {"seq":1,"id":"b3f1…","sig":"…","deduped":false}
+
+# 从游标读取（类似 git fetch）
+curl -s "http://localhost:28090/facts?since=0&type=task.*"
+```
+
+这就是完整的线协议：**一个写操作，一个读操作，两个读便捷接口。** 认领、解决、信任等语义全是「关于事实的事实」，由客户端折叠计算得出。
+
+## 事实的结构
+
+唯一的本原——不可变、内容寻址、在单一全序中占据唯一位置：
+
+```jsonc
+{
+  "seq":    1337,           // 总线分配的全序位置（可信）
+  "recv":   1748300000.4,   // 总线盖章的可信接收时间（unix 秒）——所有时间折叠都基于此，而非 ts
+  "id":     "b3f1…",        // sha256(canonical(record))——内容地址
+  "type":   "build.failed", // 点分类型；保留类型以 "_." 开头
+  "author": "claude-code",  // 发布者
+  "ts":     1748300000.0,   // 作者声明的时间（仅供参考，可被伪造，不可用于折叠计算）
+  "payload": { "…": "…" },  // 任意 JSON
+  "refs": {                 // 唯一的关系机制——值永远是事实 id，绝不是 Agent id
+    "parent":     "<id>",   // 因果前驱
+    "claim_of":   "<id>",   // 对目标事实的独占认领
+    "resolves":   "<id>",   // 目标事实已完成处理
+    "release_of": "<id>",   // 放弃之前的认领
+    "vote":       "<id>",   // 佐证或反驳（配合 payload.verdict）
+    "supersedes": "<id>",   // 本事实取代目标事实
+    "subject":    "key",    // 用于「最新胜出」取代逻辑的分组键
+    "tombstones": "<id>"    // 目标事实被删除/GC（区别于取代）
+  },
+  "nonce": "k7x9",          // 可选——让内容相同的重复提交成为新事实
+  "sig":   "hmac…"          // 总线对 (id|author|type|ts|recv|seq) 的 HMAC-SHA256 签名
+}
+```
+
+> **`ts` 与 `recv` 的区别**：`ts` 是作者的声明（是内容哈希的一部分，但可被伪造）；`recv` 是总线亲历并签名的。所有基于时间的折叠计算都使用 `recv`，从不使用 `ts`，以确保任意两个读者的结果完全一致。
+
+保留事实类型（折叠层负责解释）：
+
+| 类型 | 含义 |
+|---|---|
+| `_.claim` | 对 `refs.claim_of` 的独占认领；序号最小者胜出 |
+| `_.resolve` | `refs.resolves` 所指事实已处理完毕；仅当前认领胜者发出的才有效 |
+| `_.release` | 作者放弃对 `refs.release_of` 的认领 |
+| `_.vote` | 佐证或反驳 `refs.vote`（见 `payload.verdict`） |
+| `_.tombstone` | `refs.tombstones` 所指事实被删除/GC；与取代（supersedes）语义不同 |
+
+## 从代码接入
+
+折叠客户端 SDK 负责「发布→读回→折叠」的底层工作，让调用侧保持整洁：
+
+```typescript
 import { ClientV2, httpTransport } from "antlegion-bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
 
+// 发布一条待处理的工作项
 const { id } = await alice.publish("task.build", { target: "todo-app" });
-const [ra, rb] = await Promise.all([alice.claim(id), bob.claim(id)]); // 恰好一个赢
+
+// 两者竞争认领；序号最小者胜出——确定性，无锁
+const [ra, rb] = await Promise.all([alice.claim(id), bob.claim(id)]);
 const winner = ra.won ? alice : bob;
+
+// 胜者完成处理，可选地发出子事实（构成因果链）
 await winner.resolve(id, [{ type: "build.done", payload: { ok: true } }]);
-await bob.state(id);    // → { state: "resolved", owner: <winner> }  (从日志折叠得到)
+
+// 任意客户端从同一不可变日志折叠出相同状态
+console.log(await alice.state(id)); // { state: "resolved", owner: "alice" }
+console.log(await bob.state(id));   // 完全相同——确定性折叠
 ```
 
-完整版(含持久化与 CLI):[`QUICKSTART.md`](docs/QUICKSTART.md)。
+**同行评审（信任折叠）**：
 
-## 已验证的保证
+```typescript
+await bob.observe(factId, "corroborate");   // 佐证
+await carol.observe(factId, "contradict");  // 反驳
 
-「Agent 只靠事实协作、无命令」这一出发点,由 [`antlegion-bus/examples/`](antlegion-bus/examples)
-里**可运行的 swarm** 压测(每个都起一个服务端、拉起约 20 个自治 Agent,并断言一个客观判据):
+const verdict = await alice.trustOf(factId);
+// "asserted" | "corroborated" | "consensus" | "contested" | "refuted" | "superseded"
+```
 
-| Swarm | 证明 |
-|---|---|
-| `swarm-v2` | 50 项 fan-out/in,16 个 worker 间**恰好一次**,零 Agent 间消息 |
-| `scenario-resilience` | 崩溃的 Agent 经**认领超时重派**被救回——exactly-once 在故障下不破 |
-| `scenario-consensus` | 同行评议收敛真相;decider **只对 consensus 行动**,绝不对被反驳的事实行动 |
-| `scenario-pipeline` | 因果多阶段(`build→test→deploy`)+ latest-wins **取代**;所有 monitor 对唯一新鲜状态达成一致 |
+**因果链**：
+
+```typescript
+const chain = await alice.causation(buildDoneId);
+// [{ type: "task.build", … }, { type: "build.done", … }]  （根 → 叶）
+```
+
+**取代（最新胜出）**：
+
+```typescript
+// 为同一主体发布更新的状态，旧状态自动被取代
+await alice.publish("deploy.status", { stage: "testing" },
+  { refs: { subject: "deploy-run-42" } });
+
+await alice.publish("deploy.status", { stage: "done" },
+  { refs: { subject: "deploy-run-42" } });
+// 读者只会看到第二条为当前状态
+```
+
+**进程内嵌入模式**（测试或紧耦合集成）：
+
+```typescript
+import { BusV2 } from "antlegion-bus/bus";
+import { ClientV2, localTransport } from "antlegion-bus/client";
+
+const bus = new BusV2({ secret: "my-secret", dataDir: "./data" });
+const client = new ClientV2(localTransport(bus), "my-agent");
+// 无 HTTP、无网络——同一套 SDK，同一套折叠逻辑
+```
+
+## 通过 MCP 接入
+
+任何支持 MCP 的 Agent——Claude Code、Cursor、Cline、Windsurf、Zed、Goose——都可以通过一行命令以 stdio 方式连接到总线，无需定制集成：
 
 ```bash
-npx tsx examples/swarm-v2.ts          # 以及 scenario-{resilience,consensus,pipeline}.ts
+npm run build   # 编译一次
+
+ANTLEGION_BUS_URL=http://localhost:28090 \
+ANTLEGION_AGENT_NAME=my-agent \
+node dist/mcp.js
 ```
 
-## 仓库地图
+暴露的 **7 个工具**：`antlegion_publish`、`antlegion_query`、`antlegion_claim`、`antlegion_resolve`、`antlegion_observe`、`antlegion_causation`、`antlegion_state`。
+
+**1 个资源**：`antlegion://facts/recent`——最近 20 条事实的 JSON。
+
+MCP 适配器与 HTTP 客户端使用同一套 `ClientV2` 折叠 SDK——协调语义只实现一次，不会因适配器而重复。
+
+## 经验证的保证
+
+出发点——「Agent 只靠事实协作、无命令」——由 [`antlegion-bus/examples/`](antlegion-bus/examples) 中四个可运行的 swarm 压测验证。每个都启动一个真实服务端、拉起约 20 个自治 Agent，并断言一个可量化的通过门槛：
+
+| Swarm | 证明内容 | 通过门槛 |
+|---|---|---|
+| [`swarm-v2`](antlegion-bus/examples/swarm-v2.ts) | 50 项任务经 16 个 worker 460 次竞争认领后完成分发——**恰好一次**，零 Agent 间寻址 | `dupes=0  missing=0` |
+| [`scenario-resilience`](antlegion-bus/examples/scenario-resilience.ts) | Agent 中途崩溃，**认领超时重派**转移归属权；exactly-once 在故障下不破 | 无卡死项 |
+| [`scenario-consensus`](antlegion-bus/examples/scenario-consensus.ts) | 同行评审收敛真相；决策者**只对 consensus 行动**，绝不对被反驳的事实行动 | decider 从不对 refuted 行动 |
+| [`scenario-pipeline`](antlegion-bus/examples/scenario-pipeline.ts) | 因果多阶段 `build→test→deploy` + 最新胜出**取代**；所有监控者对唯一最新状态达成一致 | 所有监控者一致 |
+
+```bash
+npx tsx examples/swarm-v2.ts
+npx tsx examples/scenario-resilience.ts
+npx tsx examples/scenario-consensus.ts
+npx tsx examples/scenario-pipeline.ts
+```
+
+## 配置参数
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `PORT` | `28090` | HTTP 监听端口 |
+| `ANTLEGION_DATA_DIR` | `.data-v2` | 日志文件目录（内含 `facts-v2.jsonl`） |
+| `ANTLEGION_FSYNC` | `everysec` | `always`（最强持久化）· `everysec`（最多丢 1 秒数据）· `no`（由 OS 决定）——对应 Redis 的 `appendfsync` |
+| `ANTLEGION_BUS_SECRET` | *（每次启动随机生成）* | HMAC 签名密钥。**生产环境务必设置稳定值**——不设置则每次重启后无法验证之前写入的签名 |
+| `ANTLEGION_MAX_DEPTH` | `64` | 因果链最大深度（§5 安全上限；内容寻址从结构上杜绝了环的存在） |
+
+```bash
+# 生产环境启动示例
+ANTLEGION_BUS_SECRET=a-stable-32-char-secret \
+ANTLEGION_DATA_DIR=/var/lib/antlegion \
+ANTLEGION_FSYNC=always \
+node dist/index.js
+```
+
+## 架构
 
 ```
-.
-├── README.md          ← 你在这里   (每份文档都有 .zh-CN.md 中文版)
-├── PROTOCOL.md        ← 线协议(§3 折叠规则为规范性)
-├── Dockerfile         ← 像跑 redis 一样跑总线(从仓库根构建)
-├── CLAUDE.md          ← 给 Claude Code 在本仓工作的指引
+ 客户端
+ ┌──────────────────┐  ┌───────────────┐  ┌────────────────────┐
+ │  ClientV2 (SDK)  │  │  alctl CLI    │  │  MCP stdio 适配器  │
+ │  client.ts       │  │  cli.ts       │  │  mcp.ts            │
+ │  - publish       │  │  - publish    │  │  - antlegion_*     │
+ │  - claim/resolve │  │  - claim      │  │    tools (7)       │
+ │  - trust/state   │  │  - tail/info  │  │                    │
+ └────────┬─────────┘  └──────┬────────┘  └─────────┬──────────┘
+          │                   │                      │
+          └───────────────────┴──────────────────────┘
+                              │ HTTP (POST /facts · GET /facts)
+                              ▼
+ ┌────────────────────────────────────────────────────────────────┐
+ │  server.ts（Hono，轻量线协议层）                               │
+ │  POST /facts · GET /facts[?since&type&author&refs.*]           │
+ │  GET /facts/:id · GET /facts/head · GET /info                  │
+ │  POST /admin/rewrite（BGREWRITEAOF 对应物）                    │
+ │                                                                │
+ │  ┌──────────────────────────────────────────────────────────┐  │
+ │  │  BusV2（无状态可信核心）  bus.ts                         │  │
+ │  │  · 分配 seq（严格递增）                                  │  │
+ │  │  · 校验 id == sha256(canonical(record))                  │  │
+ │  │  · 盖章 recv + 计算 HMAC sig                             │  │
+ │  │  · 按 id 去重（幂等追加）                                │  │
+ │  │  · 强制因果深度上限（§5）                                │  │
+ │  │  · 日志恢复时验证签名（§4）                              │  │
+ │  └────────────────────────┬─────────────────────────────────┘  │
+ │                           │                                    │
+ │  ┌────────────────────────▼─────────────────────────────────┐  │
+ │  │  JsonlLog（只追加文件日志）  log.ts                      │  │
+ │  │  · 单个追加模式 fd（一次打开，不按写操作开关）           │  │
+ │  │  · appendfsync: always | everysec | no                   │  │
+ │  │  · 压缩：临时文件 + 原子重命名                           │  │
+ │  └──────────────────────────────────────────────────────────┘  │
+ └────────────────────────────────────────────────────────────────┘
+
+ 读者折叠（fold.ts — 纯函数，在客户端运行，不在服务端）
+ ┌──────────────────────────────────────────────────────────────────────────┐
+ │  lifecycle(stream, F)       →  open | claimed | resolved | dead          │
+ │  claimWinner(stream, F)     →  string | null                             │
+ │  trust(stream, F, quorum)   →  asserted | corroborated | consensus | …  │
+ │  supersededBy(stream, F)    →  id | null                                 │
+ │  causationChain(stream, F)  →  Fact[]（根 → 叶）                        │
+ └──────────────────────────────────────────────────────────────────────────┘
+```
+
+**关键设计取舍**：语义（meaning）存在于折叠函数中，而非总线里。对同一事实流进行相同折叠的两个客户端，无论何时读取都会得到完全相同的结果——总线只负责定序和保存。
+
+## 项目结构
+
+```
+antlegion-platform/
+├── README.md               ← 英文文档（每份文档都有 .zh-CN.md 中文版）
+├── README.zh-CN.md         ← 你在这里
+├── PROTOCOL.md             ← 线协议规范——§3 折叠规则为规范性
+├── Dockerfile              ← docker build . && docker run -p 28090:28090 …
 ├── docs/
-│   ├── QUICKSTART.md  ← 60 秒快速上手(服务端 + SDK + alctl + MCP)
-│   └── EVOLUTION.md   ← 项目为何如此(v0 → v1 → v2)
+│   ├── QUICKSTART.md       ← 逐步指南：服务端 + SDK + CLI + MCP
+│   └── EVOLUTION.md        ← v0 → v1 → v2：尝试过什么、为何改变
 └── antlegion-bus/
-    ├── src/           ← 内核(bus.ts)、服务端、折叠 SDK(client.ts)、alctl CLI、MCP 适配器(mcp.ts)、AOF(log.ts)、bench
-    ├── conformance/   ← vectors.json(§4 互操作契约)+ generate.ts + 一个 Python 校验器
-    ├── examples/      ← 多 Agent 验证 swarm
-    └── test/          ← 单元测试(136 个)
+    ├── src/
+    │   ├── bus.ts          ← 无状态可信核心
+    │   ├── fold.ts         ← 读者折叠（语义层）
+    │   ├── client.ts       ← ClientV2 折叠 SDK
+    │   ├── server.ts       ← Hono 线协议层
+    │   ├── log.ts          ← 只追加日志
+    │   ├── mcp.ts          ← MCP stdio 适配器
+    │   ├── cli.ts / bin.ts ← alctl CLI
+    │   ├── hash.ts         ← sha256 内容地址 + HMAC + verifySig
+    │   ├── canonical.ts    ← stableJsonStringify（兼容 Python 浮点格式）
+    │   ├── types.ts        ← Fact、FactInput、Refs、RESERVED 类型
+    │   └── config.ts       ← 环境变量配置（redis.conf 对应物）
+    ├── conformance/
+    │   ├── vectors.json    ← §4 互操作契约：7 个哈希 + 24 个折叠向量
+    │   ├── generate.ts     ← 从参考实现派生向量
+    │   └── verify.py       ← 独立的 Python §4 重新实现（跨语言证明）
+    ├── examples/
+    │   ├── swarm-v2.ts              ← 21 个 Agent 的恰好一次扇出
+    │   ├── scenario-resilience.ts  ← 崩溃 + 重派
+    │   ├── scenario-consensus.ts   ← 同行评审信任
+    │   └── scenario-pipeline.ts    ← 因果流水线 + 取代
+    └── test/               ← 136 个测试（vitest，约 1 秒）
 ```
 
-## 状态
+## 当前状态
 
-**Alpha。** 已完成:无状态内核、HTTP 线面、折叠 SDK、`alctl` CLI、**MCP 适配器**
-(`npm run mcp`)、带 `appendfsync` 策略 + 压缩的只追加持久化、`INFO`、**§5 因果深度上限强制**、
-恢复时**签名校验**、**跨语言一致性向量**(`conformance/vectors.json` + 一个逐字节复现全部哈希的
-独立 Python 校验器)、benchmark(进程内约 16 万 append/s)、Docker 镜像,以及 136 个通过的单测
-+ 4 个多 Agent 验证 swarm。尚未具备:多语言客户端 SDK、集群/复制,以及已发布的包或预编译二进制
-(目前需从源码构建)。
+**Alpha** — 核心协议、参考实现和单节点运维故事已完备。尚不建议用于不可信的公网环境。
 
-## 许可
+### 已完成
 
-MIT,见 [LICENSE](LICENSE)。
+- [x] 无状态可信核心：分配全序 · 校验内容哈希 · HMAC 签名 · 持久化 · 按区间返回
+- [x] 只追加日志，支持 `appendfsync always|everysec|no` + BGREWRITEAOF 风格压缩
+- [x] 读者折叠 SDK：`lifecycle`、`trust`、`supersession`、`causation`
+- [x] `alctl` CLI — redis-cli 的对应物
+- [x] MCP stdio 适配器——一行命令接入任何支持 MCP 的 Agent
+- [x] §5 追加时的因果深度上限强制
+- [x] §4 日志恢复时的签名校验，`sig_failures` 通过 `/info` 暴露
+- [x] 跨语言一致性向量——哈希 + 折叠互操作证明，配套独立 Python 校验器
+- [x] 四个多 Agent 验证 swarm（恰好一次 · 韧性 · 共识 · 流水线）
+- [x] Docker 镜像 · 进程内约 16 万 append/s 基准测试 · 136 个测试
+
+### 路线图
+
+- [ ] 发布 npm 包 / 预编译二进制（目前需从源码构建）
+- [ ] 多语言客户端 SDK——Go、Python、Rust（一致性向量已就绪，可直接对齐）
+- [ ] 面向公网的鉴权 + 每作者速率限制
+- [ ] 复制 / 高可用（协议设计：单写者 + 故障切换，见 PROTOCOL.md §7）
+- [ ] 在 CI 中集成跨语言 Python 校验器
+
+## 参与贡献
+
+欢迎参与贡献。请注意以下几点：
+
+**协议变更会破坏线兼容性。** 任何对事实结构、`id` 计算方式（§4）或 §3 折叠规则的修改，都必须同步体现在三处：`PROTOCOL.md`、`conformance/vectors.json`（用 `npx tsx conformance/generate.ts` 重新生成）以及跨语言校验器。运行 `python3 conformance/verify.py` 确认未出现分歧。
+
+**提交 PR 前请运行：**
+
+```bash
+npm test                      # 136 个测试，约 1 秒
+npx tsc --noEmit              # 类型检查
+python3 conformance/verify.py # 跨语言哈希证明
+npx tsx examples/swarm-v2.ts  # 快速跑一下 swarm（可选，但受欢迎）
+```
+
+建议先阅读 [`EVOLUTION.md`](docs/EVOLUTION.md)——它记录了设计决策和已被否定的方向，能帮你避免重走弯路。
+
+## 许可证
+
+MIT — 见 [LICENSE](LICENSE)。
+
+---
+
+<div align="center">
+  <sub>AntLegion Protocol v2.0 · 设计者：Carter.Yang · 从第一原理推导，2026 年。</sub>
+</div>
