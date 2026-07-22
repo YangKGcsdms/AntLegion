@@ -50,6 +50,15 @@ else
   echo "ingestor   started (pid $(cat "$RUN_DIR/ingestor.pid")) — log: $RUN_DIR/ingestor.log"
 fi
 
+# ── dev-chain ECU fleet (4 stage ECUs + adjudicator, one process) ──
+if alive "$RUN_DIR/chain.pid"; then
+  echo "chain      already running (pid $(cat "$RUN_DIR/chain.pid"))"
+else
+  (cd "$ECU_DIR" && exec npx tsx src/main.ts chain) >"$RUN_DIR/chain.log" 2>&1 &
+  echo $! >"$RUN_DIR/chain.pid"
+  echo "chain      started (pid $(cat "$RUN_DIR/chain.pid")) — log: $RUN_DIR/chain.log"
+fi
+
 # ── board ──
 BOARD_PORT="${BOARD_PORT:-28091}"
 if alive "$RUN_DIR/board.pid"; then
@@ -62,4 +71,5 @@ fi
 
 echo ""
 echo "up. bus http://localhost:$PORT · board http://localhost:$BOARD_PORT/board.html?bus=http://localhost:$PORT"
-echo "logs: $RUN_DIR/{bus,ingestor,board}.log · stop: $ECU_DIR/scripts/down.sh"
+echo "    dev-chain board http://localhost:$BOARD_PORT/devchain.html?bus=http://localhost:$PORT"
+echo "logs: $RUN_DIR/{bus,ingestor,chain,board}.log · stop: $ECU_DIR/scripts/down.sh"

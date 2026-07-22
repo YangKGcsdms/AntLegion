@@ -1,102 +1,217 @@
-# @antlegion/ecu — DCU runtime (Step 0–2)
+# @antlegion/ecu — Domain Control Units on the fact bus
 
-Domain Control Units on top of the AntLegion fact bus (`antlegion-bus`).
-Step 0 brings the bus up with a stable secret and a repo-local data dir;
-Step 1 is the first DCU: `ingestor-req`, which reflects requirement
-workspaces onto the bus, plus a live board to watch the chain.
-Step 2 makes the DCU system self-hosting: our own native requirement
-workspace (`dcu-workspace/`, repo top level) where requirements are created
-by the DCU itself via `req new` — the OA mirror was validation-only and is
-now OFF by default.
-
-## Layout
+**DCU** = *Domain Control Unit*. Named after a car's electronic architecture:
+on a CAN bus, no central computer gives orders — each control unit listens for
+the message IDs it cares about and acts when its local condition holds.
+AntLegion's **facts, not commands** is the same shape. A DCU is a thin,
+deterministic supervisor loop over the [AntLegion bus](../antlegion-bus): it
+polls the totally-ordered stream, re-folds a shared worldview, and acts on its
+one trigger predicate. No orchestrator, no DCU addressing another — the
+pipeline is a shape readers fold out of the stream *afterwards*, never a state
+any component holds.
 
 ```
-dcu-workspace/          native requirement workspace (origin "dcu"; docs/ tracked, logs/ gitignored)
-src/runtime.ts          DCU loop: poll(since cursor) → rebuild fold → evaluate → act → advance
-src/folds/chain.ts      shared "requirement chain" fold (pure, unit-tested; origin-agnostic)
-src/dcus/ingestor-req.ts the ingestor DCU (READ-ONLY on every watched root)
-src/req-new.ts          native requirement creation (dir + dcu.env + req.registered fact)
-src/config.ts           ecu.config.json loader (watchRoots with origins)
-src/board.ts            zero-dep static server for board.html
-src/main.ts             CLI: tsx src/main.ts ingestor|board|req new "<名称>" [-s slug]
-board.html              live dashboard (polls the bus, folds locally, origin badge)
-scripts/up.sh|down.sh   Step 0: bus + ingestor lifecycle (idempotent, no orphans)
+poll(since cursor) → rebuild shared fold → evaluate trigger → act → advance
 ```
 
-## Facts
+This package ships three layers, built up in steps:
 
-| type | payload | nonce | refs |
-|---|---|---|---|
-| `req.registered` | `{slug,name,created,origin,slot,branch,baseBranch,projects,ports{backend,workflow,ui,llm,debug}}` | `req:<origin>:<dirname>` | `subject: <slug>` |
-| `doc.updated` | `{reqSlug,doc,status,mtime,path,origin}` (`status` = parsed `状态：` header or `null`) | `doc:<relpath>:<mtimeMs>` | `subject: <slug>/<doc>` |
+- **Step 0–2** — the bus lifecycle + the `ingestor-req` DCU that mirrors
+  requirement workspaces onto the bus, plus a live requirement board.
+- **Step 3** — the **dev-chain**: six DCUs that run Carter's
+  `requirement-dev-flow` skill pipeline as autonomous, fact-coordinated units,
+  plus a supervision board.
 
-All mirrored facts are authored as `ingestor-req@ecu` — including the one
-published by `req new`, so the command and the ingestor's backfill plan
-byte-identical facts for the same dir and the bus dedups them against each
-other (no double-publish, verified by test). Published `ts` values are
-derived from the filesystem (CREATED / dirname stamp / mtime), never the
-wall clock — the bus content-addresses facts including `ts`, so re-ingesting
-an unchanged workspace yields `deduped:true` and no new facts; editing a doc
-changes its mtime → new id → republish.
+`ingestor-req` is documented inline below; this README leads with the dev-chain
+because that is where the coordination model earns its keep.
 
-## Native requirements (`req new`)
+---
 
-```bash
-cd ecu
-npx tsx src/main.ts req new "adjudicator证据校验上线" -s adjudicator-evidence-fold
-```
+## The dev-chain: six DCUs
 
-Creates `dcu-workspace/<yyyymmddHHMM>-<slug>/` with:
+Carter's 11-step delivery flow (`requirement-dev-flow`) collapses onto the bus
+as **four stage DCUs + one adjudicator + one watchdog**. Each stage DCU knows
+exactly one sentence: *"when the shared fold says my stage is `open` for some
+requirement and nobody holds the claim, I claim it."* It wins the claim
+(exactly-once by lowest `seq`), does the work, and resolves the input fact with
+its artifact as a causal child (`refs.parent`). Losers back off; a crashed
+winner's claim expires and a survivor re-runs. S9–S11 stay human.
 
-- `dcu.env` — minimal manifest: `REQ_NAME` / `CREATED` / `SLUG` / `ORIGIN=dcu`
-  (no port-slot fields; our workspace runs no services)
-- `docs/` — requirement docs, git-tracked; a `状态：<...>` header line in the
-  first 30 lines of any `docs/*.md` is mirrored as the doc status
-- `logs/` — runtime noise, gitignored
+| DCU | listens | gate | produces | evidence shape (missing → rejected) | ≈ skill |
+|---|---|---|---|---|---|
+| `dcu-plan` | `req.registered` | — | `plan.ready` | `scope` / `out_of_scope` / `acceptance` | requirement-breakdown · codebase-research · cross-system-solution |
+| `dcu-dev` | `plan.ready` | **H1** | `dev.done` | `branch` / `changed_files` / `consumers_checked` | parallel-requirement-workspace · dev-flow S3–S4 |
+| `dcu-unittest` | `dev.done` | — | `test.unit.report` | `passed` / `failed` / **`not_covered`** | springboot-jdk8-cli · dev-flow S5 |
+| `dcu-e2e` | `test.unit.report` | — | `e2e.report` | `api_assertions` / **`page_checked`** / `deviations` · `defects` · `gaps` | integration-debugging · dev-flow S6–S8 |
+| `dcu-adjudicator` | *all artifacts* | — | `evidence.accepted` / `evidence.rejected` | — (it judges the others) | — |
+| `dcu-watchdog` | *everything (`*`)* | — | `chain.starved` / `escalate.human` | — (it detects exceptions) | — |
 
-Then publishes `req.registered` (nonce `req:dcu:<dirname>`, origin `dcu`) and
-prints the created path. Re-running with the same slug reuses the existing
-dir and the second publish dedups on the bus. ASCII names get an automatic
-slug; non-ASCII names require `-s <slug>`.
+The stage table is a **predicate**, not a runtime limit. A DCU mirrors the
+whole stream; "listens" is just its filter. The adjudicator and watchdog are
+already multi-listen / multi-produce — nothing stops a stage from doing the
+same. See [Multi-listen, multi-produce](#multi-listen-multi-produce).
 
-## Watch roots (config)
+### Evidence shapes: 做完了 ≠ 验证过了 as structure
 
-`ecu.config.json`:
+The most valuable thing in Carter's flow is the discipline *"done ≠ verified."*
+The dev-chain makes it structural: **resolving is not a declaration, it is
+submitting evidence.** The adjudicator checks each artifact's payload against
+the shape its producer registered; a wrong shape publishes `evidence.rejected`
+and the chain **halts at that stage** until reworked. Concretely:
 
-```json
-{
-  "busUrl": "http://localhost:28090",
-  "watchRoots": [{ "root": "dcu-workspace", "origin": "dcu" }]
-}
-```
+| naïve conclusion | the flow's counter-discipline | machine-checkable shape |
+|---|---|---|
+| compiled = correct | grep every consumer before changing an invariant | `dev.done` must carry `consumers_checked[]` |
+| unit tests pass = behaviour correct | the report must enumerate what it *didn't* cover | `test.unit.report` without `not_covered` = invalid |
+| API green = page correct | 27/27 endpoints green, page still shows `-` | `e2e.report` needs `page_checked: true` + assertions |
+| a pass-rate = a report | the report must have deviations / defects / gaps | all three sections present or it isn't `accepted` |
 
-Each entry is `{root, origin}`; relative `root` resolves against the repo
-root. The default — and the only committed entry — is our native
-`dcu-workspace` (origin `dcu`, manifest file `dcu.env`).
+An artifact that skips its evidence is, on the bus, equivalent to work never
+done — a survivor reclaims and redoes it.
 
-**Re-adding the OA mirror (optional, OFF by default):** the OA requirements
-were a validation mirror only and are not part of this project's production
-area. To mirror them again, add an entry — the ingestor code for it stays,
-and `oa` roots read `oaws.env`:
+### The two cross-cutting DCUs
 
-```json
-{ "root": "/Users/carter/projects/OA系统/需求工作区", "origin": "oa" }
-```
+- **`dcu-adjudicator`** — listens to all four artifact types, validates the
+  evidence shape from the registry, publishes one verdict per artifact
+  (`refs.verdict_of`). It is the single writer of trust in the chain;
+  downstream stages fold on its verdict, never on the raw artifact.
+- **`dcu-watchdog`** — listens to everything, produces *only exceptions*, never
+  claims and never advances the chain. Three conditions, each keyed on a fact
+  id for idempotency:
+  - `chain.starved` — a stage is `open` past a threshold with no claim (dead
+    domain / wrong predicate). Anchored on the *latest prerequisite's* `recv`
+    (input verdict / gate approval), not the requirement's birth.
+  - `escalate.human` on **claim churn** — one input burned ≥ N claims with no
+    resolve (crash-looping worker: a poison pill).
+  - `escalate.human` on **rejected evidence** — an artifact the adjudicator
+    shot down (including stray artifacts not on any chain).
 
-The ingestor watches every configured root **read-only** via `fs.watch` + a
-5s rescan fallback (macOS `fs.watch` misses new dirs); it never crashes on
-unreadable files — errors go to stderr and the scan continues.
+---
+
+## The supervision board
+
+`devchain.html` (served at `:28091`) is the supervisor's whole interface. It
+folds everything client-side from `GET /facts` — same semantics as
+`src/folds/`. Four sections, top to bottom:
+
+1. **例外收件箱 (exception inbox)** — *the only place a human looks.* Gated
+   approvals (with a **批准 H1** button), escalations, and starvation. Items
+   self-clear when their condition no longer holds in the fold. **Empty inbox =
+   autonomous operation.** The H1 button is the only write the board makes: it
+   publishes `gate.approved` as `carter@board`.
+2. **DCU nodes** — one card per DCU, each answering four questions:
+   - **职责 (duty)** — what it reacts to → gate → claims → produces, plus its
+     evidence shape spelled out.
+   - **来历 (origin)** — the `sys.registry` fact that *is* its registration
+     (registration = the act of publishing; no central registrar) + which
+     skills it compresses.
+   - **现在 (now)** — its current claim (`● working: slug · stage`) or idle.
+   - **履历 (footprint)** — cumulative counts + its recent authored facts, in
+     plain language (`#23 produced plan.ready ✓adjudicated`).
+3. **dev chain** — the per-requirement pipeline, one stage chip each, gates and
+   verdicts inline.
+4. **fact stream** — the tail of the total order.
+
+The roster is not hard-coded — it is folded from `sys.registry` facts, so a new
+DCU appears the moment it registers.
+
+---
 
 ## Run
 
 ```bash
-ecu/scripts/up.sh        # build bus if needed → bus on :28090 (secret ecu-dev-stable,
-                         # data ecu/.data) → ingestor-req. Idempotent; prints PIDs.
-cd ecu && npx tsx src/main.ts board   # board on :28091
-# open http://localhost:28091/board.html?bus=http://localhost:28090
+ecu/scripts/up.sh        # bus (:28090, stable secret, repo-local .data)
+                         # + ingestor-req + dev-chain fleet + board (:28091)
+                         # idempotent; prints PIDs
+ecu/scripts/down.sh      # stop everything, no orphans
 
-ecu/scripts/down.sh      # stop both, no orphans
+# open the supervision board:
+#   http://localhost:28091/devchain.html?bus=http://localhost:28090
+# (the requirement board is still at board.html)
+```
+
+Drive a requirement end to end:
+
+```bash
+cd ecu
+npx tsx src/main.ts req new "你的需求名" -s your-slug   # publishes req.registered
+# → dcu-plan claims it within ~2s, produces plan.ready, adjudicator accepts,
+#   the chain parks at H1. Click 批准 H1 on the board (or POST gate.approved);
+#   dev → unittest → e2e then run themselves to ✔ CHAIN DONE.
+```
+
+Run just the fleet in the foreground (each DCU is its own identity + loop in
+one process):
+
+```bash
+npx tsx src/main.ts chain
+```
+
+Workers are **simulated** in Step 3 (deterministic payloads + a short sleep):
+this validates the *mechanics* — claim, gate, adjudicate, chain, escalate —
+before wiring real work. Swapping a simulated worker for a headless-agent spawn
+(`claude -p "<work packet>" --cwd <worktree>`, `codex exec …`) changes only the
+worker body in `src/dcus/devchain-dcus.ts`; **the bus contract is identical.**
+That is the intended Step 4.
+
+---
+
+## Multi-listen, multi-produce
+
+A DCU is not limited to one input or one output — the loop already hands
+`onBatch` the full mirror, so "listens" is only a predicate you write:
+
+- **Multi-listen** is a predicate union — free. `dcu-adjudicator` already
+  listens to four types; `dcu-watchdog` to all.
+- **Multi-produce** is already supported: `client.resolve(F, children[])`
+  takes an array, and every child is stamped with `refs.parent: F` (causation)
+  automatically. One resolve can emit several artifacts.
+- **Discipline:** the claim unit is still *one fact* (exactly-once is a theorem
+  at that grain). Multi-produce is for **cross-cutting domains** (a doc-sync
+  DCU listening to `dev.done` + `e2e.report`; a real headless agent that edits
+  code + writes tests + updates docs in one run) — *not* for collapsing the
+  vertical chain into one omni-DCU, which would delete the orchestrator from
+  the architecture and grow it back inside a node (you'd lose per-stage claim
+  takeover, per-artifact adjudication, and stage-level observability).
+- **Caveat:** meaning lives in the reader. If a DCU emits a new artifact shape,
+  the domain's fold must be re-legislated to understand it — which is exactly
+  what the `sys.registry` + shared-fold design is for.
+
+---
+
+## Facts
+
+| type | payload | refs |
+|---|---|---|
+| `req.registered` | `{slug,name,created,origin,slot,branch,projects,ports}` | `subject:<slug>` |
+| `doc.updated` | `{reqSlug,doc,status,mtime,path,origin}` | `subject:<slug>/<doc>` |
+| `sys.registry` | `{domain,dcu,role?,worker,stage?,listens,produces,evidence_required?,skills?}` | — |
+| `plan.ready` · `dev.done` · `test.unit.report` · `e2e.report` | stage evidence (see table) | `parent:<input>`, `subject:<slug>` |
+| `gate.approved` | `{gate,reqSlug,note}` | `gate_of:<artifact>` |
+| `evidence.accepted` / `evidence.rejected` | `{stage,checked?/missing?}` | `verdict_of:<artifact>` |
+| `chain.starved` | `{reqSlug,stage,openForS}` | `starves:<input>` |
+| `escalate.human` | `{reqSlug,stage,reason,detail}` | `escalates:<input/artifact>` |
+
+`sys.registry` facts are published with `ts:0` and a stable nonce, so a
+restart re-publishes byte-identical content and the bus dedups — registration
+is idempotent and needs no coordination.
+
+---
+
+## Layout
+
+```
+src/runtime.ts            the DCU loop primitive (runDCU / DCUSpec / DCUContext)
+src/folds/chain.ts        requirement-chain fold (ingestor board)
+src/folds/devchain.ts     dev-chain registry + evidence rules + fold
+src/folds/watchdog.ts     starvation / escalation detection (pure)
+src/dcus/ingestor-req.ts  the ingestor DCU (READ-ONLY on watched roots)
+src/dcus/devchain-dcus.ts the four stage DCUs + adjudicator (+ fleet factory)
+src/dcus/watchdog-dcu.ts  the watchdog DCU
+src/main.ts               CLI: ingestor | board | chain | req new "<名称>" [-s slug]
+devchain.html             supervision board (inbox + DCU nodes + chain)
+board.html                requirement-chain board (Step 1)
+scripts/up.sh|down.sh     lifecycle (idempotent, no orphans)
 ```
 
 ## Test
@@ -105,9 +220,39 @@ ecu/scripts/down.sh      # stop both, no orphans
 cd ecu
 npm install
 npx tsc --noEmit
-npx vitest run       # folds, env parser, status-header parser, backfill (fixtures only),
-                     # req-new manifest/nonce/cross-dedup, config watchRoots
+npx vitest run        # 68 tests: folds (chain / devchain / watchdog),
+                      # evidence rules, env + status-header parsers,
+                      # ingestor backfill, req-new manifest/nonce, config
 ```
 
-Unit tests use `test/fixtures/req-workspace/` and tmpdirs — they never touch
-the real OA directory or the live dcu-workspace.
+The dev-chain and watchdog fold tests pin the shared worldview: every DCU and
+the board fold the same stream into the same state, the evidence rules encode
+`做完了 ≠ 验证过了`, and a rejected artifact provably halts the chain. Tests use
+in-memory fact streams and tmpdirs — they never touch the live bus or the real
+workspace.
+
+---
+
+## `ingestor-req` (Step 1–2)
+
+The first DCU: it mirrors requirement workspaces onto the bus, **read-only**.
+It watches every configured root (`ecu.config.json` → `watchRoots`, each tagged
+with an `origin`) via `fs.watch` + a 5s rescan fallback, and publishes
+`req.registered` per requirement dir and `doc.updated` per doc write. Published
+`ts` values derive from the filesystem (never the wall clock), so re-ingesting
+an unchanged workspace yields `deduped:true` and no new facts.
+
+Native requirements are created by the DCU system itself:
+
+```bash
+cd ecu
+npx tsx src/main.ts req new "<名称>" -s <slug>
+# creates dcu-workspace/<yyyymmddHHMM>-<slug>/{dcu.env, docs/, logs/}
+# and publishes req.registered (nonce req:dcu:<dirname>, origin dcu)
+```
+
+`req new` and the ingestor's backfill plan byte-identical facts for the same
+dir (shared nonce), so whoever publishes second dedups — no double-publish.
+The default watch root is the native `dcu-workspace/`; the OA mirror is off by
+default (see `src/config.ts`).
+```

@@ -22,7 +22,7 @@ kill_tree() {
   fi
 }
 
-for unit in board ingestor bus; do
+for unit in board chain ingestor bus; do
   pf="$RUN_DIR/$unit.pid"
   if [ -f "$pf" ]; then
     kill_tree "$(cat "$pf")" "$unit"
@@ -35,6 +35,7 @@ done
 # belt-and-suspenders: sweep anything that survived reparenting
 pkill -f "antlegion-bus/dist/index.js" 2>/dev/null && echo "swept stray bus process" || true
 pkill -f "src/main.ts ingestor" 2>/dev/null && echo "swept stray ingestor process" || true
+pkill -f "src/main.ts chain" 2>/dev/null && echo "swept stray chain process" || true
 pkill -f "src/main.ts board" 2>/dev/null && echo "swept stray board process" || true
 
 echo "down."

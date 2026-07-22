@@ -3,6 +3,8 @@
  *
  *   tsx src/main.ts ingestor                    watch configured roots → bus
  *   tsx src/main.ts board                       serve board.html (:28091)
+ *   tsx src/main.ts chain                       run the dev-chain DCU fleet
+ *                                               (4 stage DCUs + adjudicator)
  *   tsx src/main.ts req new "<名称>" [-s slug]  create a native requirement
  *                                               in dcu-workspace + publish
  *                                               req.registered (origin dcu)
@@ -12,6 +14,7 @@ import { httpTransport } from "antlegion-bus/client";
 import { loadConfig, resolveWatchRoot, dcuWorkspaceRoot, ECU_ROOT } from "./config.js";
 import { runDCU } from "./runtime.js";
 import { AUTHOR, backfill, newKnownState, startWatcher } from "./dcus/ingestor-req.js";
+import { devchainFleet } from "./dcus/devchain-dcus.js";
 import { createBoardServer } from "./board.js";
 import { createRequirement } from "./req-new.js";
 
@@ -47,6 +50,13 @@ async function runIngestor(): Promise<void> {
       log(`watching ${roots.length} root(s) (fs.watch + 5s rescan fallback)`);
     },
   });
+}
+
+/** Run the whole dev-chain fleet in one process (each DCU its own identity/loop). */
+async function runChain(): Promise<void> {
+  const cfg = await loadConfig();
+  const root = dcuWorkspaceRoot(cfg);
+  await Promise.all(devchainFleet(cfg.busUrl, root).map((spec) => runDCU(spec)));
 }
 
 async function runBoard(): Promise<void> {
@@ -110,10 +120,13 @@ switch (cmd) {
   case "board":
     runBoard().catch((err) => { console.error(err); process.exit(1); });
     break;
+  case "chain":
+    runChain().catch((err) => { console.error(err); process.exit(1); });
+    break;
   case "req":
     runReqNew().catch((err) => { console.error(err instanceof Error ? err.message : err); process.exit(1); });
     break;
   default:
-    console.error('usage: tsx src/main.ts ingestor|board|req new "<名称>" [-s slug]');
+    console.error('usage: tsx src/main.ts ingestor|board|chain|req new "<名称>" [-s slug]');
     process.exit(2);
 }
