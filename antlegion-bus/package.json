@@ -4,6 +4,15 @@
   "description": "Node.js/TypeScript implementation of the AntLegion Bus protocol",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./bus": "./dist/bus.js",
+    "./fold": "./dist/fold.js",
+    "./server": "./dist/server.js",
+    "./types": "./dist/types.js",
+    "./package.json": "./package.json"
+  },
   "bin": {
     "antlegion-bus": "dist/index.js",
     "antlegion-mcp": "dist/mcp.js",

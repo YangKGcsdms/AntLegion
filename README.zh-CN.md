@@ -8,7 +8,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/测试-136%20通过-brightgreen?style=flat-square)](antlegion-bus/test/)
+[![Tests](https://img.shields.io/badge/测试-147%20通过-brightgreen?style=flat-square)](antlegion-bus/test/)
 [![License](https://img.shields.io/badge/许可证-MIT-blue?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/状态-alpha-orange?style=flat-square)]()
 
@@ -89,20 +89,39 @@ docker run -p 28090:28090 -e ANTLEGION_BUS_SECRET=your-stable-secret antlegion
 
 ### 用终端操作（`alctl` — redis-cli 的对应物）
 
+每条命令在 stdout 输出机器可读的 JSON；人类可读的错误走 stderr 并以非零码退出。
+
 ```bash
 # 先 build，然后：
 node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
 # → {"id":"b3f1…","seq":1,"deduped":false}
 
 node dist/bin.js claim <id> --author bob
-# → {"won":false,"winner":"alice"}
+# → {"won":false,"winner":"alice"}        （退出码 1——你输掉了认领）
 
 node dist/bin.js state <id>
 # → {"state":"claimed","owner":"alice"}
 
-node dist/bin.js info
-# → {"protocol":"2.0","head_seq":1,"facts":3,"fsync":"everysec",…}
+node dist/bin.js resolve <id> --author alice   # 只有认领胜者可以 resolve
+# → {"state":"resolved","owner":"alice"}
+# 非胜者的 resolve 会明确报错并以非零码退出：
+#   error: resolve ignored — fact <id> is owned by 'alice' (you are 'bob')
+
+node dist/bin.js tail            # 打印一次当前流即退出
+node dist/bin.js tail --follow   # 实时追尾：轮询 ?since= 直到 Ctrl-C
+
+node dist/bin.js info            # 完整 INFO 载荷
+# → {"protocol":"2.0","head_seq":1,"facts":3,"fsync":"everysec","sig_failures":0,"secret_stable":true,…}
 ```
+
+`--author <名字>` 是全局旗标，对所有会写入事实的命令生效。身份解析顺序：
+
+| 设置 | 用途 |
+|---|---|
+| `--author <名字>` | 单条命令的身份（优先级最高） |
+| `ANTLEGION_AUTHOR` | 整个 shell 会话的 CLI 身份 |
+| *（默认）* | `<系统用户名>@<主机名>`——跨 CLI 调用保持稳定，因此 `claim` 之后 `resolve` 开箱即用 |
+| `ANTLEGION_BUS_URL` | CLI/SDK 连接总线的地址（默认 `http://localhost:28090`） |
 
 ### 或直接使用 HTTP API
 
@@ -236,6 +255,35 @@ ANTLEGION_AGENT_NAME=my-agent \
 node dist/mcp.js
 ```
 
+或者直接注册到你的 MCP 客户端——以 Claude Code 为例：
+
+```bash
+claude mcp add antlegion \
+  --env ANTLEGION_BUS_URL=http://localhost:28090 \
+  --env ANTLEGION_AGENT_NAME=my-agent \
+  -- node /path/to/antlegion-bus/dist/mcp.js
+```
+
+或者通过 `.mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "antlegion": {
+      "command": "node",
+      "args": ["/path/to/antlegion-bus/dist/mcp.js"],
+      "env": {
+        "ANTLEGION_BUS_URL": "http://localhost:28090",
+        "ANTLEGION_AGENT_NAME": "my-agent"
+      }
+    }
+  }
+}
+```
+
+`ANTLEGION_AGENT_NAME` 默认是 `<系统用户名>@<主机名>`；启动时会把解析出的身份打印到 stderr。
+`ANTLEGION_DATA_DIR` 与 `ANTLEGION_BUS_SECRET`（见[配置参数](#配置参数)）用于配置总线服务端本身。
+
 暴露的 **7 个工具**：`antlegion_publish`、`antlegion_query`、`antlegion_claim`、`antlegion_resolve`、`antlegion_observe`、`antlegion_causation`、`antlegion_state`。
 
 **1 个资源**：`antlegion://facts/recent`——最近 20 条事实的 JSON。
@@ -259,6 +307,8 @@ npx tsx examples/scenario-resilience.ts
 npx tsx examples/scenario-consensus.ts
 npx tsx examples/scenario-pipeline.ts
 ```
+
+每个示例都会在临时端口上自启自己的总线——无需提前启动任何总线。
 
 ## 配置参数
 
@@ -362,7 +412,7 @@ antlegion-platform/
     │   ├── scenario-resilience.ts  ← 崩溃 + 重派
     │   ├── scenario-consensus.ts   ← 同行评审信任
     │   └── scenario-pipeline.ts    ← 因果流水线 + 取代
-    └── test/               ← 136 个测试（vitest，约 1 秒）
+    └── test/               ← 147 个测试（vitest，约 1 秒）
 ```
 
 ## 当前状态
@@ -380,7 +430,7 @@ antlegion-platform/
 - [x] §4 日志恢复时的签名校验，`sig_failures` 通过 `/info` 暴露
 - [x] 跨语言一致性向量——哈希 + 折叠互操作证明，配套独立 Python 校验器
 - [x] 四个多 Agent 验证 swarm（恰好一次 · 韧性 · 共识 · 流水线）
-- [x] Docker 镜像 · 进程内约 16 万 append/s 基准测试 · 136 个测试
+- [x] Docker 镜像 · 进程内约 16 万 append/s 基准测试 · 147 个测试
 
 ### 路线图
 
@@ -399,7 +449,7 @@ antlegion-platform/
 **提交 PR 前请运行：**
 
 ```bash
-npm test                      # 136 个测试，约 1 秒
+npm test                      # 147 个测试，约 1 秒
 npx tsc --noEmit              # 类型检查
 python3 conformance/verify.py # 跨语言哈希证明
 npx tsx examples/swarm-v2.ts  # 快速跑一下 swarm（可选，但受欢迎）

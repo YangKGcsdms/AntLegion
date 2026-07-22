@@ -68,14 +68,15 @@ That is the entire bus API. `claim`, `resolve`, `vote`, `trust`, `state` are
 
 ## 3. Drive it from the terminal (`alctl`)
 
-`alctl` is the `redis-cli` analog. Build once, then:
+`alctl` is the `redis-cli` analog. Build once, then — every command prints
+machine-readable JSON on stdout; human errors go to stderr with a non-zero exit:
 
 ```bash
 # Publish
 node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
 # {"id":"b3f1…","seq":1,"deduped":false}
 
-# Claim (exactly one wins)
+# Claim (exactly one wins; the loser exits 1)
 node dist/bin.js claim b3f1… --author bob
 # {"won":false,"winner":"alice"}
 
@@ -83,12 +84,25 @@ node dist/bin.js claim b3f1… --author bob
 node dist/bin.js state b3f1…
 # {"state":"claimed","owner":"alice"}
 
-# Tail the live stream
-node dist/bin.js tail
+# Resolve — only the claim winner can; anyone else exits non-zero:
+#   error: resolve ignored — fact <id> is owned by 'alice' (you are 'bob')
+node dist/bin.js resolve b3f1… --author alice
+# {"state":"resolved","owner":"alice"}
 
-# Bus info
+# Tail prints the stream once and exits; --follow keeps polling live
+node dist/bin.js tail
+node dist/bin.js tail --follow
+
+# Full bus info (protocol, head_seq, facts, fsync, sig_failures, secret_stable, …)
 node dist/bin.js info
 ```
+
+`--author <name>` is a global flag on every command that writes facts. Identity
+resolution: `--author` > `ANTLEGION_AUTHOR` > `<os-username>@<hostname>` (a
+stable per-user default, so a `claim` in one shell command can be `resolve`d in
+the next). `ANTLEGION_BUS_URL` picks the bus (default `http://localhost:28090`);
+if no bus is listening you'll get
+`error: cannot reach bus at <url> — start one with: npm run dev`.
 
 ## 4. Coordinate from code (the folding SDK)
 
@@ -153,6 +167,36 @@ ANTLEGION_AGENT_NAME=my-agent \
 node dist/mcp.js
 ```
 
+Or register it with your MCP client — e.g. Claude Code:
+
+```bash
+claude mcp add antlegion \
+  --env ANTLEGION_BUS_URL=http://localhost:28090 \
+  --env ANTLEGION_AGENT_NAME=my-agent \
+  -- node /path/to/antlegion-bus/dist/mcp.js
+```
+
+or via `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "antlegion": {
+      "command": "node",
+      "args": ["/path/to/antlegion-bus/dist/mcp.js"],
+      "env": {
+        "ANTLEGION_BUS_URL": "http://localhost:28090",
+        "ANTLEGION_AGENT_NAME": "my-agent"
+      }
+    }
+  }
+}
+```
+
+`ANTLEGION_AGENT_NAME` defaults to `<os-username>@<hostname>` and the resolved
+identity is printed to stderr at startup. The bus server itself is configured
+with `ANTLEGION_DATA_DIR` and `ANTLEGION_BUS_SECRET` (see §8).
+
 Seven tools: `antlegion_publish`, `antlegion_query`, `antlegion_claim`,
 `antlegion_resolve`, `antlegion_observe`, `antlegion_causation`,
 `antlegion_state`.
@@ -174,6 +218,8 @@ npx tsx examples/scenario-consensus.ts
 # Causal pipeline build→test→deploy + supersession
 npx tsx examples/scenario-pipeline.ts
 ```
+
+Each example self-boots its own bus on an ephemeral port — no bus needed beforehand.
 
 ## 8. Persistence and recovery
 
@@ -208,4 +254,4 @@ curl -sX POST http://localhost:28090/admin/rewrite | jq
 - [EVOLUTION.md](EVOLUTION.md) — why the project looks like this.
 - `antlegion-bus/src/` — core (`bus.ts`), wire (`server.ts`), folds (`fold.ts`), SDK (`client.ts`).
 - `antlegion-bus/conformance/` — cross-language interop vectors + Python verifier.
-- `antlegion-bus/test/` — 136 tests (vitest).
+- `antlegion-bus/test/` — 147 tests (vitest).

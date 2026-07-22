@@ -41,10 +41,24 @@ npm run bench                  # 吞吐 benchmark（进程内约 16 万 append/s
 | `ANTLEGION_BUS_SECRET` | 每次启动随机生成 | HMAC 签名密钥；**设为稳定值**以便重启后签名仍可验证 |
 | `ANTLEGION_MAX_DEPTH` | `64` | 因果链深度上限（§5 安全规则） |
 
+客户端（`alctl` CLI、SDK、MCP 适配器）：
+
+| 变量 | 默认值 | 用途 |
+|---|---|---|
+| `ANTLEGION_BUS_URL` | `http://localhost:28090` | CLI / SDK / MCP 适配器连接的总线地址 |
+| `ANTLEGION_AUTHOR` | `<系统用户名>@<主机名>` | CLI 身份；`--author <名字>` 可按命令覆盖 |
+| `ANTLEGION_AGENT_NAME` | `<系统用户名>@<主机名>` | MCP 适配器身份（启动时打印到 stderr） |
+
+`alctl` 在 stdout 输出机器可读的 JSON（如 `{"id":…,"seq":…,"deduped":…}`、
+`{"won":…,"winner":…}`、`{"state":…,"owner":…}`），人类可读的错误走 stderr 并以
+非零码退出——包括当你不是认领胜者时的 `resolve`。`tail` 打印一次当前流即退出；
+`tail --follow` 持续轮询实时输出。子路径导入（`antlegion-bus/client`、
+`antlegion-bus/bus`、`antlegion-bus/fold` 等）已在 `package.json` 的 `exports` 中映射。
+
 ## 测试
 
 ```bash
-npm test           # vitest run（136）
+npm test           # vitest run（147）
 npm run test:watch # vitest watch
 ```
 
