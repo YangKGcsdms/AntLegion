@@ -70,6 +70,10 @@
     font-size: 10px; color: var(--bg); background: var(--cyan);
     border-radius: 4px; padding: 0 6px; font-weight: 700;
   }
+  .req .origin {
+    font-size: 10px; color: var(--bg); background: var(--green);
+    border-radius: 4px; padding: 0 6px; font-weight: 700;
+  }
   .req .age { margin-left: auto; font-size: 10px; color: var(--dim); }
   .req .meta { color: var(--dim); font-size: 11px; margin-top: 4px; }
   .req .meta b { color: var(--blue); font-weight: 600; }
@@ -157,6 +161,7 @@ function foldChain() {
       reqs.set(p.slug, {
         slug: p.slug, name: p.name || "", created: p.created || "",
         slot: (typeof p.slot === "number") ? p.slot : null,
+        origin: (typeof p.origin === "string") ? p.origin : "",
         branch: p.branch || "", projects: Array.isArray(p.projects) ? p.projects : [],
         ports: (p.ports && typeof p.ports === "object") ? p.ports : {},
         registeredSeq: prev ? prev.registeredSeq : f.seq,
@@ -205,11 +210,13 @@ function render() {
     div.innerHTML =
       `<div class="head">` +
         (r.slot != null ? `<span class="slot">S${r.slot}</span>` : "") +
+        (r.origin ? `<span class="origin">${esc(r.origin)}</span>` : "") +
         `<span class="nm">${esc(r.name)}</span>` +
         `<span class="age" title="registered ${esc(fmtTime(r.registeredRecv))}">age ${fmtAge(now - r.registeredRecv)}</span>` +
       `</div>` +
-      `<div class="meta">${esc(r.slug)} · <b>${esc(r.branch)}</b> · ` +
-        r.projects.map((p) => `<span class="proj">${esc(p)}</span>`).join(" ") +
+      `<div class="meta">${esc(r.slug)}` +
+        (r.branch ? ` · <b>${esc(r.branch)}</b>` : "") +
+        (r.projects.length ? ` · ` + r.projects.map((p) => `<span class="proj">${esc(p)}</span>`).join(" ") : "") +
         ` · created ${esc(r.created)}</div>` +
       (ports ? `<div class="ports">${ports}</div>` : "") +
       `<div class="docs">` +

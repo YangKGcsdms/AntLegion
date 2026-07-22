@@ -63,6 +63,7 @@ describe("reqPayloadFromEnv / reqFactTs", () => {
     });
     expect(p).toEqual({
       slug: "test-req-alpha", name: "测试需求甲", created: "2026-07-01 09:00",
+      origin: "oa",
       slot: 0, branch: "feature/test-req-alpha", baseBranch: "master",
       projects: ["workflow-oa", "workflow"],
       ports: { backend: 21001, workflow: 21002, ui: 21003, llm: 21004, debug: 21005 },
@@ -88,9 +89,9 @@ describe("scanWorkspace (fixtures)", () => {
     const scan = await scanWorkspace(FIXTURES);
     const reqs = scan.facts.filter((f) => f.input.type === "req.registered");
     expect(reqs.map((f) => f.input.nonce).sort()).toEqual([
-      "req:202607010900-测试需求甲",
-      "req:202607021030-测试需求乙",
-      "req:202607031100-测试需求丙",
+      "req:oa:202607010900-测试需求甲",
+      "req:oa:202607021030-测试需求乙",
+      "req:oa:202607031100-测试需求丙",
     ]);
     const alpha = reqs.find((f) => f.label.includes("甲"))!;
     expect(alpha.input.payload).toMatchObject({

@@ -50,6 +50,16 @@ else
   echo "ingestor   started (pid $(cat "$RUN_DIR/ingestor.pid")) — log: $RUN_DIR/ingestor.log"
 fi
 
+# ── board ──
+BOARD_PORT="${BOARD_PORT:-28091}"
+if alive "$RUN_DIR/board.pid"; then
+  echo "board      already running (pid $(cat "$RUN_DIR/board.pid"))"
+else
+  (cd "$ECU_DIR" && exec env BOARD_PORT="$BOARD_PORT" npx tsx src/main.ts board) >"$RUN_DIR/board.log" 2>&1 &
+  echo $! >"$RUN_DIR/board.pid"
+  echo "board      started (pid $(cat "$RUN_DIR/board.pid")) on :$BOARD_PORT — log: $RUN_DIR/board.log"
+fi
+
 echo ""
-echo "up. bus http://localhost:$PORT · board: cd ecu && npx tsx src/main.ts board  (or scripts stay minimal: PORT 28091)"
-echo "logs: $RUN_DIR/{bus,ingestor}.log · stop: $ECU_DIR/scripts/down.sh"
+echo "up. bus http://localhost:$PORT · board http://localhost:$BOARD_PORT/board.html?bus=http://localhost:$PORT"
+echo "logs: $RUN_DIR/{bus,ingestor,board}.log · stop: $ECU_DIR/scripts/down.sh"

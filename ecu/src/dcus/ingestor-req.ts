@@ -1,21 +1,27 @@
 /**
  * dcus/ingestor-req.ts — the ingestor DCU.
  *
- * Watches <oaRoot>/<reqWorkspace> READ-ONLY and reflects the requirement
- * workspace onto the fact bus:
+ * Watches configured workspace roots READ-ONLY and reflects requirement
+ * dirs onto the fact bus. Each root is tagged with an origin (config:
+ * ecu.config.json watchRoots); every mirrored fact carries that origin:
  *
- *   req.registered  one per requirement dir  (<yyyymmddHHMM>-<中文名>/)
- *                   nonce "req:<dirname>" — reruns dedup.
+ *   req.registered  one per requirement dir  (<yyyymmddHHMM>-<名称>/)
+ *                   nonce "req:<origin>:<dirname>" — reruns dedup, and the
+ *                   same nonce lets `req new` and the ingestor dedup each
+ *                   other for origin "dcu".
  *   doc.updated     one per docs/*.md write
  *                   nonce "doc:<relpath>:<mtimeMs>" — unchanged docs dedup,
  *                   edits republish (new mtime → new id).
+ *
+ * Manifest file per origin: "dcu" roots read dcu.env (our native minimal
+ * manifest), other roots read oaws.env (the OA mirror schema).
  *
  * Idempotency note: the bus content-addresses facts INCLUDING `ts`, so all
  * timestamps published here are derived from the filesystem (CREATED /
  * dirname / mtime), never from the wall clock. Same workspace state → same
  * fact ids → deduped:true on re-ingest.
  *
- * Nothing here ever writes to the OA tree. Unreadable/missing files are
+ * Nothing here ever writes to a watched tree. Unreadable/missing files are
  * logged to stderr and skipped; the DCU keeps going.
  */
 
@@ -114,6 +120,7 @@ export interface ReqPayload {
   slug: string;
   name: string;
   created: string;
+  origin: string;
   slot: number | null;
   branch: string;
   baseBranch: string;
@@ -121,8 +128,8 @@ export interface ReqPayload {
   ports: { backend?: number; workflow?: number; ui?: number; llm?: number; debug?: number };
 }
 
-/** Map a parsed oaws.env (+ dir name fallback) to the req.registered payload. */
-export function reqPayloadFromEnv(dirname: string, env: Record<string, string>): ReqPayload {
+/** Map a parsed manifest (dcu.env / oaws.env) + dir name fallback to the req.registered payload. */
+export function reqPayloadFromEnv(dirname: string, env: Record<string, string>, origin = "oa"): ReqPayload {
   const parsed = parseReqDirName(dirname);
   const port = (k: string): number | undefined => {
     const v = env[k];
@@ -143,6 +150,7 @@ export function reqPayloadFromEnv(dirname: string, env: Record<string, string>):
     created: env.CREATED || (parsed ? stampToUnix(parsed.stamp) != null
       ? `${parsed.stamp.slice(0, 4)}-${parsed.stamp.slice(4, 6)}-${parsed.stamp.slice(6, 8)} ${parsed.stamp.slice(8, 10)}:${parsed.stamp.slice(10, 12)}`
       : "" : ""),
+    origin,
     slot: env.SLOT != null && /^\d+$/.test(env.SLOT) ? parseInt(env.SLOT, 10) : null,
     branch: env.BRANCH || "",
     baseBranch: env.BASE_BRANCH || "",
@@ -185,11 +193,15 @@ const emptyStats = (): IngestStats => ({
 });
 
 /**
- * Scan the requirement workspace and plan the facts that represent it.
+ * Scan a requirement workspace root and plan the facts that represent it.
  * Purely observational — no publishing, no writes. Never throws on
  * unreadable entries; problems land in `errors`.
+ *
+ * `origin` tags every planned fact and picks the manifest filename
+ * (dcu → dcu.env, anything else → oaws.env).
  */
-export async function scanWorkspace(root: string): Promise<ScanResult> {
+export async function scanWorkspace(root: string, origin = "oa"): Promise<ScanResult> {
+  const manifestName = origin === "dcu" ? "dcu.env" : "oaws.env";
   const facts: PlannedFact[] = [];
   const errors: string[] = [];
   const docMtimes = new Map<string, number>();
@@ -209,11 +221,11 @@ export async function scanWorkspace(root: string): Promise<ScanResult> {
     // req.registered
     let env: Record<string, string> = {};
     try {
-      env = parseOawsEnv(await fs.readFile(path.join(dir, "oaws.env"), "utf-8"));
+      env = parseOawsEnv(await fs.readFile(path.join(dir, manifestName), "utf-8"));
     } catch (err) {
-      errors.push(`${ent.name}: cannot read oaws.env (${msg(err)}) — registering with dirname fallbacks`);
+      errors.push(`${ent.name}: cannot read ${manifestName} (${msg(err)}) — registering with dirname fallbacks`);
     }
-    const payload = reqPayloadFromEnv(ent.name, env);
+    const payload = reqPayloadFromEnv(ent.name, env, origin);
     facts.push({
       label: ent.name,
       input: {
@@ -222,7 +234,7 @@ export async function scanWorkspace(root: string): Promise<ScanResult> {
         ts: reqFactTs(ent.name, env),
         payload: payload as unknown as Record<string, unknown>,
         refs: { subject: payload.slug },
-        nonce: `req:${ent.name}`,
+        nonce: `req:${origin}:${ent.name}`,
       },
     });
 
@@ -250,7 +262,7 @@ export async function scanWorkspace(root: string): Promise<ScanResult> {
             type: DOC_UPDATED,
             author: AUTHOR,
             ts: mtimeMs / 1000, // deterministic: same file state → same id → dedup
-            payload: { reqSlug: payload.slug, doc: docEnt.name, status, mtime: mtimeMs, path: rel },
+            payload: { reqSlug: payload.slug, doc: docEnt.name, status, mtime: mtimeMs, path: rel, origin },
             refs: { subject: `${payload.slug}/${docEnt.name}` },
             nonce: `doc:${rel}:${mtimeMs}`,
           },
@@ -331,8 +343,9 @@ export async function backfill(
   publisher: Publisher,
   log?: (msg: string) => void,
   known?: KnownState,
+  origin = "oa",
 ): Promise<IngestStats> {
-  const scan = await scanWorkspace(root);
+  const scan = await scanWorkspace(root, origin);
   return publishScan(scan, publisher, log, known);
 }
 
@@ -353,6 +366,7 @@ export function startWatcher(
   log: (msg: string) => void,
   rescanMs = 5000,
   known: KnownState = newKnownState(),
+  origin = "oa",
 ): WatcherHandle {
   let timer: NodeJS.Timeout | null = null;
   let running = false;
@@ -364,7 +378,7 @@ export function startWatcher(
     if (running) { pending = true; return; }
     running = true;
     try {
-      await backfill(root, publisher, log, known);
+      await backfill(root, publisher, log, known, origin);
     } catch {
       // publisher threw (bus down) — surface once; next pass retries
       log("publish pass failed — will retry on next tick");
