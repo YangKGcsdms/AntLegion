@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<!--
+  AntLegion — live dashboard for the killer demo.
+  Zero dependencies, no build step. Open this file in a browser while a bus runs:
+
+    demo/dashboard.html?bus=http://localhost:28090&delta=3
+
+  Polls GET /facts?since=<cursor> every 500ms and /info every 2s, then folds
+  task lifecycles locally with the same semantics as src/fold.ts (§3.1):
+  lowest-seq live claim wins; claims expire deterministically at recv+Δ;
+  resolve counts only from the current owner; release drops; tombstone kills.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AntLegion · fact bus live</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #10161e; --panel2: #0d131a; --line: #1e2a38;
+    --fg: #c9d4e0; --dim: #5d7186; --green: #34d399; --amber: #fbbf24;
+    --red: #f87171; --cyan: #22d3ee; --blue: #60a5fa; --magenta: #e879f9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.45 "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    padding: 14px 18px 40px;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  /* header */
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+    border: 1px solid var(--line); background: var(--panel);
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 12px;
+  }
+  header h1 { font-size: 15px; letter-spacing: 1px; }
+  header h1 .ant { color: var(--green); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 2px 10px; font-size: 11px; letter-spacing: .5px;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .live .dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.4s infinite; }
+  .down .dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .live { color: var(--green); } .down { color: var(--red); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .kv { color: var(--dim); font-size: 11px; }
+  .kv b { color: var(--fg); font-weight: 600; }
+  /* panels */
+  .grid { display: grid; grid-template-columns: 1.65fr 1fr; gap: 12px; }
+  .panel {
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 8px; padding: 12px 14px; min-width: 0;
+  }
+  .panel h2 {
+    font-size: 11px; letter-spacing: 1.5px; color: var(--dim);
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+  .panel h2 .n { color: var(--cyan); }
+  /* stat row */
+  .stats { display: flex; flex-wrap: wrap; gap: 18px; align-items: baseline; margin-bottom: 10px; }
+  .stat .v { font-size: 22px; font-weight: 700; }
+  .stat .l { font-size: 10px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
+  .stat.big .v { font-size: 40px; }
+  .green { color: var(--green); } .amber { color: var(--amber); }
+  .red { color: var(--red); } .cyan { color: var(--cyan); } .dim { color: var(--dim); }
+  /* task grid */
+  #taskgrid { display: flex; flex-wrap: wrap; gap: 3px; margin: 8px 0 10px; }
+  .cell {
+    width: 11px; height: 11px; border-radius: 2px;
+    background: #22303f; transition: background .25s;
+  }
+  .cell.open { background: #22303f; }
+  .cell.claimed { background: var(--amber); box-shadow: 0 0 4px #fbbf2488; }
+  .cell.resolved { background: var(--green); }
+  .cell.dead { background: var(--red); }
+  .legend { display: flex; gap: 14px; font-size: 11px; color: var(--dim); }
+  .legend span::before {
+    content: ""; display: inline-block; width: 9px; height: 9px;
+    border-radius: 2px; margin-right: 5px; vertical-align: -1px;
+  }
+  .legend .l-open::before { background: #22303f; }
+  .legend .l-claimed::before { background: var(--amber); }
+  .legend .l-resolved::before { background: var(--green); }
+  /* agent cards */
+  #agents { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .agent {
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--panel2); padding: 8px 10px;
+  }
+  .agent .nm { font-weight: 700; font-size: 12px; }
+  .agent .st { float: right; font-size: 10px; letter-spacing: 1px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); }
+  .agent.alive .st { color: var(--green); border-color: #14532d; }
+  .agent.dead  .st { color: var(--red); border-color: #7f1d1d; animation: pulse 1s infinite; }
+  .agent.done  .st { color: var(--dim); }
+  .agent.dead .nm { color: var(--red); }
+  .agent .row { color: var(--dim); font-size: 11px; margin-top: 4px; }
+  .agent .row b { color: var(--fg); }
+  /* replay */
+  #replay .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  button {
+    background: #13202c; color: var(--cyan); border: 1px solid #1e3a4a;
+    font: inherit; font-size: 11px; letter-spacing: 1px; padding: 5px 12px;
+    border-radius: 5px; cursor: pointer;
+  }
+  button:hover { background: #17293a; }
+  #verdictbox {
+    margin-top: 10px; padding: 8px 12px; border-radius: 6px;
+    border: 1px dashed var(--line); font-size: 12px; display: none;
+  }
+  #verdictbox.ok { display: block; border-color: #14532d; color: var(--green); background: #052e16; }
+  #verdictbox.bad { display: block; border-color: #7f1d1d; color: var(--red); background: #2a0a0a; }
+  #verdictbox.info { display: block; color: var(--dim); }
+  /* ticker */
+  #ticker {
+    height: 210px; overflow: hidden; position: relative;
+    border-top: 1px solid var(--line); padding-top: 8px;
+  }
+  #ticker .f { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; padding: 1px 0; }
+  .t-claim { color: var(--amber); } .t-resolve, .t-done { color: var(--green); }
+  .t-todo { color: var(--blue); } .t-release { color: var(--magenta); } .t-other { color: var(--dim); }
+  .seq { color: var(--dim); display: inline-block; min-width: 52px; }
+  footer { margin-top: 12px; color: var(--dim); font-size: 11px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="ant">⣿</span> ANTLEGION · FACT BUS</h1>
+  <span id="conn" class="pill down"><span class="dot"></span><span id="conntext">CONNECTING</span></span>
+  <span class="kv">bus <b id="h-bus">…</b></span>
+  <span class="kv">head_seq <b id="h-head">–</b></span>
+  <span class="kv">facts <b id="h-facts">–</b></span>
+  <span class="kv">fsync <b id="h-fsync">–</b></span>
+  <span class="kv">sig_failures <b id="h-sig">–</b></span>
+  <span class="kv">secret_stable <b id="h-secret">–</b></span>
+  <span class="kv">uptime <b id="h-uptime">–</b></span>
+</header>
+
+<div class="grid">
+  <!-- DIFFERENTIATOR 1 -->
+  <section class="panel">
+    <h2><span class="n">1 ·</span> exactly-once across independent agent processes — a theorem of total order</h2>
+    <div class="stats">
+      <div class="stat"><div class="v green" id="s-resolved">0</div><div class="l">resolved</div></div>
+      <div class="stat"><div class="v amber" id="s-claimed">0</div><div class="l">claimed</div></div>
+      <div class="stat"><div class="v" id="s-open">0</div><div class="l">open</div></div>
+      <div class="stat"><div class="v cyan" id="s-races">0</div><div class="l">claim races</div></div>
+      <div class="stat"><div class="v dim" id="s-claimfacts">0</div><div class="l">claim facts</div></div>
+      <div class="stat big"><div class="v green" id="s-dupes">0</div><div class="l">duplicates</div></div>
+    </div>
+    <div id="taskgrid"></div>
+    <div class="legend">
+      <span class="l-open">open</span><span class="l-claimed">claimed</span><span class="l-resolved">resolved</span>
+      <span class="dim">every cell is a task.todo fact; color is a local fold of the same log every agent reads</span>
+    </div>
+  </section>
+
+  <!-- DIFFERENTIATOR 2 -->
+  <section class="panel">
+    <h2><span class="n">2 ·</span> crash → deterministic re-dispatch · no orchestrator</h2>
+    <div id="agents"><span class="dim">waiting for agents…</span></div>
+    <div style="margin-top:10px" class="dim" id="redispatch">stale claims expire at recv + Δ on the trusted bus clock; survivors re-claim what the dead dropped.</div>
+  </section>
+</div>
+
+<div class="grid" style="margin-top:12px; grid-template-columns: 1fr 1.65fr;">
+  <!-- DIFFERENTIATOR 3 -->
+  <section class="panel" id="replay">
+    <h2><span class="n">3 ·</span> replay / audit — the log IS the state</h2>
+    <div class="row">
+      <button id="snap">📸 SNAPSHOT STATE</button>
+      <button id="verify">⟲ VERIFY AFTER RESTART</button>
+      <span class="kv">snapshot: <b id="snapinfo">none</b></span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span class="kv">stream hash <b id="r-hash">–</b></span>
+      <span class="kv">task-fold hash <b id="r-fold">–</b></span>
+    </div>
+    <div id="verdictbox"></div>
+    <div style="margin-top:8px" class="dim">
+      kill the bus (Ctrl+C), restart it on the same data dir + secret — this panel
+      auto-refetches from seq 0 and compares. restart is detected on reconnect.
+    </div>
+  </section>
+
+  <!-- fact stream -->
+  <section class="panel">
+    <h2>fact stream · tail of the total order</h2>
+    <div id="ticker"></div>
+  </section>
+</div>
+
+<footer>
+  <span id="f-cursor">cursor: 0 · folded facts: 0 · Δ (claim timeout): –s · stale-after: 8s (bus time)</span>
+  <span>override: ?bus=http://host:port&amp;delta=3&amp;stale=8</span>
+</footer>
+
+<script>
+"use strict";
+// ── config ──
+const Q = new URLSearchParams(location.search);
+const BUS = (Q.get("bus") || "http://localhost:28090").replace(/\/$/, "");
+const DELTA = parseFloat(Q.get("delta") || "600");   // claim timeout seconds (demo uses 3)
+const STALE = parseFloat(Q.get("stale") || "8");     // agent "alive" window in bus-time seconds
+
+// ── state ──
+let facts = [];          // full mirrored stream, seq-ordered
+let cursor = 0;          // last seq mirrored
+let connected = false;
+let everConnected = false;
+let snapshot = null;     // {head, n, streamHash, foldHash, when}
+try { snapshot = JSON.parse(localStorage.getItem("antlegion-snap:" + BUS) || "null"); } catch (e) {}
+
+const $ = (id) => document.getElementById(id);
+$("h-bus").textContent = BUS;
+
+// cyrb53 — fast string hash, plenty for change detection
+function hash53(str, seed = 0) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, "0") + (h1 >>> 0).toString(16).padStart(8, "0");
+}
+
+// ── fold: mirrors src/fold.ts ownership() §3.1 ──
+function foldAll(now) {
+  const tasks = new Map();  // id -> view
+  const rel = new Map();    // taskId -> lifecycle events (seq order)
+  const dones = new Map();  // taskId -> done child count
+  const push = (m, k, v) => { let a = m.get(k); if (!a) { a = []; m.set(k, a); } a.push(v); };
+
+  for (const f of facts) {
+    if (f.type === "task.todo") {
+      tasks.set(f.id, {
+        id: f.id, i: (f.payload && f.payload.i != null) ? f.payload.i : -1,
+        state: "open", owner: null, claims: 0, claimAuthors: new Set(),
+        firstClaimer: null, effectiveResolves: 0, doneChildren: 0,
+      });
+    }
+    const r = f.refs || {};
+    const target = r.claim_of ?? r.resolves ?? r.release_of ??
+      (f.type === "_.tombstone" ? r.tombstones : undefined);
+    if (target) push(rel, target, f);
+    if (f.type === "task.done" && r.parent) dones.set(r.parent, (dones.get(r.parent) || 0) + 1);
+  }
+  // generic fallback: claimed targets that never had a task.todo fact
+  for (const id of rel.keys()) {
+    if (!tasks.has(id)) {
+      tasks.set(id, { id, i: -1, state: "open", owner: null, claims: 0,
+        claimAuthors: new Set(), firstClaimer: null, effectiveResolves: 0, doneChildren: 0 });
+    }
+  }
+
+  for (const [id, v] of tasks) {
+    v.doneChildren = dones.get(id) || 0;
+    const events = (rel.get(id) || []).sort((a, b) => a.seq - b.seq);
+    let active = [];
+    let terminal = false;
+    for (const f of events) {
+      if (f.type === "_.tombstone") { v.state = "dead"; v.owner = null; terminal = true; break; }
+      active = active.filter((c) => f.recv <= c.recv + DELTA);
+      const r = f.refs || {};
+      if (r.claim_of === id) {
+        active.push({ author: f.author, seq: f.seq, recv: f.recv });
+        v.claims++; v.claimAuthors.add(f.author);
+        if (!v.firstClaimer) v.firstClaimer = f.author;
+      } else if (r.release_of === id) {
+        active = active.filter((c) => c.author !== f.author);
+      } else if (r.resolves === id) {
+        const winner = active.length ? active.slice().sort((a, b) => a.seq - b.seq)[0].author : null;
+        if (winner !== null && f.author === winner) {
+          v.state = "resolved"; v.owner = winner; v.effectiveResolves++;
+          terminal = true; break; // resolved is terminal
+        }
+      }
+    }
+    if (!terminal) {
+      active = active.filter((c) => now <= c.recv + DELTA);
+      if (active.length) {
+        v.state = "claimed";
+        v.owner = active.slice().sort((a, b) => a.seq - b.seq)[0].author;
+      }
+    }
+  }
+  return tasks;
+}
+
+// ── derived stats ──
+function agentStats(view) {
+  const agents = new Map(); // author -> agg
+  const A = (name) => { let a = agents.get(name);
+    if (!a) { a = { name, claims: 0, owned: 0, resolved: 0, dones: 0, lastSeq: 0, lastRecv: 0 }; agents.set(name, a); }
+    return a; };
+  for (const f of facts) {
+    const a = A(f.author);
+    if (f.seq > a.lastSeq) { a.lastSeq = f.seq; a.lastRecv = f.recv; }
+    if (f.type === "_.claim") a.claims++;
+    if (f.type === "task.done") a.dones++;
+  }
+  for (const t of view.values()) {
+    if (!t.owner) continue;
+    const a = A(t.owner);
+    if (t.state === "claimed") a.owned++;
+    if (t.state === "resolved") a.resolved++;
+  }
+  return agents;
+}
+
+// ── rendering ──
+const cells = new Map(); // task id -> div
+let cellOrder = [];
+
+function render(now) {
+  const view = foldAll(now);
+  let resolved = 0, claimed = 0, open = 0, races = 0, claimFacts = 0, dupes = 0;
+  const sorted = [...view.values()].sort((a, b) => (a.i - b.i) || (a.id < b.id ? -1 : 1));
+
+  // build cells once, in stable order
+  if (sorted.length !== cellOrder.length) {
+    const grid = $("taskgrid");
+    for (const t of sorted) {
+      if (!cells.has(t.id)) {
+        const d = document.createElement("div");
+        d.className = "cell open";
+        cells.set(t.id, d);
+      }
+    }
+    cellOrder = sorted.map((t) => t.id);
+    grid.innerHTML = "";
+    for (const id of cellOrder) grid.appendChild(cells.get(id));
+  }
+
+  for (const t of sorted) {
+    if (t.state === "resolved") resolved++;
+    else if (t.state === "claimed") claimed++;
+    else if (t.state === "open") open++;
+    if (t.claimAuthors.size > 1) races++;
+    claimFacts += t.claims;
+    if (t.doneChildren > 1) dupes += t.doneChildren - 1;
+    if (t.effectiveResolves > 1) dupes += t.effectiveResolves - 1;
+    const d = cells.get(t.id);
+    if (d) {
+      d.className = "cell " + t.state;
+      d.title = `task ${t.i} · ${t.state}${t.owner ? " · " + t.owner : ""} · claims ${t.claims}`;
+    }
+  }
+
+  $("s-resolved").textContent = resolved;
+  $("s-claimed").textContent = claimed;
+  $("s-open").textContent = open;
+  $("s-races").textContent = races;
+  $("s-claimfacts").textContent = claimFacts;
+  const du = $("s-dupes");
+  du.textContent = dupes;
+  du.className = "v " + (dupes === 0 ? "green" : "red");
+
+  // agents
+  const headRecv = facts.length ? facts[facts.length - 1].recv : now;
+  const agents = agentStats(view);
+  const box = $("agents");
+  const totalTasks = view.size;
+  const allDone = totalTasks > 0 && resolved === totalTasks;
+  const rows = [...agents.values()].sort((a, b) => b.resolved - a.resolved || b.lastSeq - a.lastSeq);
+  box.innerHTML = rows.length ? "" : '<span class="dim">waiting for agents…</span>';
+  let deadLine = "";
+  for (const a of rows.slice(0, 12)) {
+    const idleFor = headRecv - a.lastRecv;
+    const alive = idleFor <= STALE;
+    const cls = alive ? "alive" : (allDone ? "done" : "dead");
+    const label = alive ? "ALIVE" : (allDone ? "IDLE" : "DEAD");
+    if (cls === "dead") deadLine += (deadLine ? " · " : "") + `${a.name} silent ${idleFor.toFixed(0)}s`;
+    const div = document.createElement("div");
+    div.className = "agent " + cls;
+    div.innerHTML =
+      `<span class="st">${label}</span><div class="nm">${esc(a.name)}</div>` +
+      `<div class="row">resolved <b>${a.resolved}</b> · holding <b>${a.owned}</b> · claims <b>${a.claims}</b></div>` +
+      `<div class="row">last fact #${a.lastSeq} · ${idleFor < 0 ? "0" : idleFor.toFixed(1)}s ago (bus time)</div>`;
+    box.appendChild(div);
+  }
+  $("redispatch").innerHTML = deadLine && !allDone
+    ? `<span class="red">☠ ${esc(deadLine)}</span> — claims expire at recv+Δ=${DELTA}s; survivors re-claim what was dropped.`
+    : `stale claims expire at recv + Δ on the trusted bus clock; survivors re-claim what the dead dropped.`;
+
+  return { view, resolved, totalTasks };
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
+
+// ── ticker ──
+const tickerRows = [];
+function tickClass(t) {
+  if (t === "_.claim") return "t-claim";
+  if (t === "_.resolve" || t === "task.done") return "t-resolve";
+  if (t === "task.todo") return "t-todo";
+  if (t === "_.release") return "t-release";
+  return "t-other";
+}
+function pushTicker(batch) {
+  const box = $("ticker");
+  for (const f of batch) {
+    const r = f.refs || {};
+    const ref = r.claim_of ? " claim_of:" + r.claim_of.slice(0, 8)
+      : r.resolves ? " resolves:" + r.resolves.slice(0, 8)
+      : r.release_of ? " release_of:" + r.release_of.slice(0, 8)
+      : r.parent ? " parent:" + r.parent.slice(0, 8) : "";
+    tickerRows.push(`<div class="f ${tickClass(f.type)}"><span class="seq">#${f.seq}</span>${esc(f.type.padEnd(10))} ${esc(f.author)}${esc(ref)}</div>`);
+  }
+  while (tickerRows.length > 60) tickerRows.shift();
+  box.innerHTML = tickerRows.slice(-38).join("");
+}
+
+// ── snapshot / replay verification ──
+function digestState(view) {
+  const foldMap = [...view.values()]
+    .map((t) => [t.i, t.state, t.owner])
+    .sort((a, b) => (a[0] - b[0]) || (String(a[2]) < String(b[2]) ? -1 : 1));
+  return {
+    head: cursor,
+    n: facts.length,
+    streamHash: hash53(JSON.stringify(facts)),
+    foldHash: hash53(JSON.stringify(foldMap)),
+    when: new Date().toISOString(),
+  };
+}
+function showSnapMeta() {
+  $("snapinfo").textContent = snapshot
+    ? `head_seq ${snapshot.head} · ${snapshot.n} facts · ${snapshot.when.slice(11, 19)}Z`
+    : "none";
+}
+function setVerdict(cls, html) {
+  const b = $("verdictbox");
+  b.className = cls;
+  b.innerHTML = html;
+}
+function takeSnapshot() {
+  const view = foldAll(Date.now() / 1000);
+  snapshot = digestState(view);
+  try { localStorage.setItem("antlegion-snap:" + BUS, JSON.stringify(snapshot)); } catch (e) {}
+  showSnapMeta();
+  setVerdict("info", `snapshot taken — head_seq ${snapshot.head}, stream ${snapshot.streamHash}, fold ${snapshot.foldHash}. now kill &amp; restart the bus.`);
+}
+function verifyAgainstSnapshot() {
+  if (!snapshot) { setVerdict("info", "no snapshot yet — take one before restarting the bus."); return; }
+  const view = foldAll(Date.now() / 1000);
+  const cur = digestState(view);
+  $("r-hash").textContent = cur.streamHash;
+  $("r-fold").textContent = cur.foldHash;
+  const same = cur.streamHash === snapshot.streamHash && cur.foldHash === snapshot.foldHash && cur.head === snapshot.head;
+  if (same) {
+    setVerdict("ok", `✓ REPLAY VERIFIED — state byte-identical after restart.<br>` +
+      `head_seq ${cur.head} (was ${snapshot.head}) · stream hash ${cur.streamHash} · task fold ${cur.foldHash} · ${cur.n} facts replayed from facts-v2.jsonl. The log IS the state.`);
+  } else {
+    setVerdict("bad", `✗ STATE DIVERGED.<br>now: head ${cur.head} · ${cur.n} facts · stream ${cur.streamHash} · fold ${cur.foldHash}<br>` +
+      `snapshot: head ${snapshot.head} · ${snapshot.n} facts · stream ${snapshot.streamHash} · fold ${snapshot.foldHash}`);
+  }
+}
+$("snap").onclick = takeSnapshot;
+$("verify").onclick = verifyAgainstSnapshot;
+showSnapMeta();
+
+// ── connectivity ──
+function setConnected(ok, info) {
+  const pill = $("conn");
+  if (ok) {
+    const wasDown = !connected && everConnected; // genuine reconnect, not first contact
+    connected = true; everConnected = true;
+    pill.className = "pill live";
+    $("conntext").textContent = "LIVE";
+    if (info) {
+      $("h-head").textContent = info.head_seq;
+      $("h-facts").textContent = info.facts;
+      $("h-fsync").textContent = info.fsync;
+      $("h-sig").textContent = info.sig_failures;
+      $("h-secret").textContent = String(info.secret_stable);
+      $("h-uptime").textContent = info.uptime_seconds + "s";
+      // bus restarted from an EMPTY journal → head fell behind our cursor
+      if (info.head_seq < cursor) { resetMirror(); }
+    }
+    if (wasDown) onReconnect();
+  } else {
+    if (connected && !snapshot) takeSnapshot(); // auto-snapshot at the moment of death
+    connected = false;
+    pill.className = "pill down";
+    $("conntext").textContent = "RECONNECTING";
+  }
+}
+function resetMirror() { facts = []; cursor = 0; }
+function onReconnect() {
+  // the bus may have been killed & replayed: refetch from seq 0 and verify
+  resetMirror();
+  refill().then(() => {
+    if (snapshot) verifyAgainstSnapshot();
+  });
+}
+async function refill() {
+  for (;;) {
+    const r = await fetch(`${BUS}/facts?since=${cursor}&limit=1000`);
+    if (!r.ok) throw new Error("read " + r.status);
+    const batch = await r.json();
+    if (batch.length === 0) break;
+    for (const f of batch) { facts.push(f); if (f.seq > cursor) cursor = f.seq; }
+    pushTicker(batch);
+    if (batch.length < 1000) break;
+  }
+}
+
+// ── polling ──
+async function tick() {
+  try {
+    const r = await fetch(`${BUS}/facts?since=${cursor}&limit=1000`);
+    if (!r.ok) throw new Error("read " + r.status);
+    const batch = await r.json();
+    if (batch.length) {
+      for (const f of batch) { facts.push(f); if (f.seq > cursor) cursor = f.seq; }
+      pushTicker(batch);
+    }
+    setConnected(true, null);
+  } catch (e) {
+    setConnected(false);
+  }
+  const now = Date.now() / 1000;
+  render(now);
+  $("f-cursor").textContent = `cursor: ${cursor} · folded facts: ${facts.length} · Δ (claim timeout): ${DELTA}s · stale-after: ${STALE}s (bus time)`;
+}
+async function infoTick() {
+  try {
+    const r = await fetch(`${BUS}/info`);
+    if (!r.ok) throw new Error("info " + r.status);
+    setConnected(true, await r.json());
+  } catch (e) {
+    setConnected(false);
+  }
+}
+setInterval(tick, 500);
+setInterval(infoTick, 2000);
+tick(); infoTick();
+</script>
+</body>
+</html>
