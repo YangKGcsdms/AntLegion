@@ -1,0 +1,22 @@
+{
+  "name": "@antlegion/ecu",
+  "version": "0.1.0",
+  "description": "DCU (Domain Control Unit) runtime on top of the AntLegion fact bus",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "ingestor": "tsx src/main.ts ingestor",
+    "board": "tsx src/main.ts board",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "antlegion-bus": "file:../antlegion-bus"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
+}
