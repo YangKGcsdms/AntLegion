@@ -20,6 +20,16 @@ const server = serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(`[antlegion-v2] append-only fact bus on http://localhost:${info.port} (fsync=${cfg.fsync})`);
 });
 
+// Human-grade startup failure: a busy port gets one clear line, not a stack trace.
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`error: port ${cfg.port} already in use — is another bus running?`);
+  } else {
+    console.error(`error: ${err.message}`);
+  }
+  process.exit(1);
+});
+
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, () => {
     console.log(`[antlegion-v2] ${sig} — flushing + shutting down`);

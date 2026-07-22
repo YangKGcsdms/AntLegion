@@ -8,7 +8,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-136%20passing-brightgreen?style=flat-square)](antlegion-bus/test/)
+[![Tests](https://img.shields.io/badge/tests-147%20passing-brightgreen?style=flat-square)](antlegion-bus/test/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/status-alpha-orange?style=flat-square)]()
 
@@ -89,20 +89,39 @@ docker run -p 28090:28090 -e ANTLEGION_BUS_SECRET=your-stable-secret antlegion
 
 ### Drive it from the terminal (`alctl` — the redis-cli analog)
 
+Every command prints machine-readable JSON on stdout; human errors go to stderr with a non-zero exit code.
+
 ```bash
 # Build first, then:
 node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
 # → {"id":"b3f1…","seq":1,"deduped":false}
 
 node dist/bin.js claim <id> --author bob
-# → {"won":false,"winner":"alice"}
+# → {"won":false,"winner":"alice"}        (exit 1 — you lost the claim)
 
 node dist/bin.js state <id>
 # → {"state":"claimed","owner":"alice"}
 
-node dist/bin.js info
-# → {"protocol":"2.0","head_seq":1,"facts":3,"fsync":"everysec",…}
+node dist/bin.js resolve <id> --author alice   # only the claim winner can resolve
+# → {"state":"resolved","owner":"alice"}
+# a non-winner's resolve fails loudly and exits non-zero:
+#   error: resolve ignored — fact <id> is owned by 'alice' (you are 'bob')
+
+node dist/bin.js tail            # prints the stream once and exits
+node dist/bin.js tail --follow   # live tail: polls ?since= until Ctrl-C
+
+node dist/bin.js info            # full INFO payload
+# → {"protocol":"2.0","head_seq":1,"facts":3,"fsync":"everysec","sig_failures":0,"secret_stable":true,…}
 ```
+
+`--author <name>` is a global flag that works on every command that writes facts. Identity resolution order:
+
+| Setting | Purpose |
+|---|---|
+| `--author <name>` | Per-command identity (wins over everything) |
+| `ANTLEGION_AUTHOR` | CLI identity for the whole shell session |
+| *(default)* | `<os-username>@<hostname>` — stable across CLI invocations, so `claim` then `resolve` just works |
+| `ANTLEGION_BUS_URL` | Where the CLI/SDK finds the bus (default `http://localhost:28090`) |
 
 ### Or use the HTTP API directly
 
@@ -236,6 +255,37 @@ ANTLEGION_AGENT_NAME=my-agent \
 node dist/mcp.js
 ```
 
+Or register it with your MCP client — e.g. Claude Code:
+
+```bash
+claude mcp add antlegion \
+  --env ANTLEGION_BUS_URL=http://localhost:28090 \
+  --env ANTLEGION_AGENT_NAME=my-agent \
+  -- node /path/to/antlegion-bus/dist/mcp.js
+```
+
+or via `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "antlegion": {
+      "command": "node",
+      "args": ["/path/to/antlegion-bus/dist/mcp.js"],
+      "env": {
+        "ANTLEGION_BUS_URL": "http://localhost:28090",
+        "ANTLEGION_AGENT_NAME": "my-agent"
+      }
+    }
+  }
+}
+```
+
+`ANTLEGION_AGENT_NAME` defaults to `<os-username>@<hostname>`; the resolved
+identity is printed to stderr at startup. `ANTLEGION_DATA_DIR` and
+`ANTLEGION_BUS_SECRET` (see [Configuration](#configuration)) configure the bus
+server itself.
+
 **Seven tools** are exposed: `antlegion_publish`, `antlegion_query`, `antlegion_claim`, `antlegion_resolve`, `antlegion_observe`, `antlegion_causation`, `antlegion_state`.
 
 **One resource**: `antlegion://facts/recent` — the 20 most recent facts, as JSON.
@@ -259,6 +309,18 @@ npx tsx examples/scenario-resilience.ts
 npx tsx examples/scenario-consensus.ts
 npx tsx examples/scenario-pipeline.ts
 ```
+
+Each example self-boots its own bus on an ephemeral port — no bus needed beforehand.
+
+### The killer demo
+
+[`demo-killer`](antlegion-bus/examples/demo-killer.ts) compresses the whole pitch into ~13 seconds, in three acts: **(1)** 8 agent processes from 4 "frameworks" race for 400 tasks — duplicates: 0, decided by total order, not a lock; **(2)** a real process is `SIGKILL`ed mid-work and its orphaned claims expire on the trusted bus clock and are re-won by survivors — no orchestrator was notified, none exists; **(3)** the bus itself is killed and restarted from the journal — `head_seq`, stream hash, and every task's owner/state come back byte-identical.
+
+```bash
+npx tsx examples/demo-killer.ts
+```
+
+Pair it with the zero-dependency live dashboard in [`demo/`](antlegion-bus/demo) — a task grid, per-agent cards, and a duplicate counter updating in real time in your browser, with automatic replay-verification when the bus restarts. See [`demo/README.md`](antlegion-bus/demo/README.md).
 
 ## Configuration
 
@@ -361,7 +423,7 @@ antlegion-platform/
     │   ├── scenario-resilience.ts  ← crash + re-dispatch
     │   ├── scenario-consensus.ts   ← peer-review trust
     │   └── scenario-pipeline.ts    ← causal pipeline + supersession
-    └── test/               ← 136 tests (vitest, ~1s)
+    └── test/               ← 147 tests (vitest, ~1s)
 ```
 
 ## Status
@@ -379,7 +441,7 @@ antlegion-platform/
 - [x] §4 signature verification on log recovery, `sig_failures` surfaced via `/info`
 - [x] Cross-language conformance vectors — hash + fold interop proof with independent Python verifier
 - [x] Four multi-agent validation swarms (exactly-once · resilience · consensus · pipeline)
-- [x] Docker image · ~160k appends/s in-process benchmark · 136 tests
+- [x] Docker image · ~160k appends/s in-process benchmark · 147 tests
 
 ### Roadmap
 
@@ -398,7 +460,7 @@ Contributions are welcome. Please keep these in mind:
 **Before submitting a PR:**
 
 ```bash
-npm test                      # 136 tests, ~1s
+npm test                      # 147 tests, ~1s
 npx tsc --noEmit              # type check
 python3 conformance/verify.py # cross-language hash proof
 npx tsx examples/swarm-v2.ts  # sanity-run the swarms (optional but appreciated)

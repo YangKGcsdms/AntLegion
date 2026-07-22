@@ -1,0 +1,6 @@
+{
+  "busUrl": "http://localhost:28090",
+  "watchRoots": [
+    { "root": "dcu-workspace", "origin": "dcu" }
+  ]
+}

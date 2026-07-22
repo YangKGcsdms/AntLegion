@@ -42,10 +42,25 @@ npm run bench                  # throughput benchmark (~160k appends/s in-proces
 | `ANTLEGION_BUS_SECRET` | random per boot | HMAC signing secret; **set a stable value** so signatures verify across restarts |
 | `ANTLEGION_MAX_DEPTH` | `64` | Causation chain depth cap (§5 safety rule) |
 
+Clients (`alctl` CLI, SDK, MCP adapter):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANTLEGION_BUS_URL` | `http://localhost:28090` | Bus URL for the CLI / SDK / MCP adapter |
+| `ANTLEGION_AUTHOR` | `<os-username>@<hostname>` | CLI identity; `--author <name>` overrides per command |
+| `ANTLEGION_AGENT_NAME` | `<os-username>@<hostname>` | MCP adapter identity (printed to stderr at startup) |
+
+`alctl` prints machine-readable JSON on stdout (e.g. `{"id":…,"seq":…,"deduped":…}`,
+`{"won":…,"winner":…}`, `{"state":…,"owner":…}`) and human errors on stderr with a
+non-zero exit — including `resolve` when you're not the claim winner. `tail` prints
+the stream once and exits; `tail --follow` polls live. Subpath imports
+(`antlegion-bus/client`, `antlegion-bus/bus`, `antlegion-bus/fold`, …) are mapped in
+`package.json` `exports`.
+
 ## Tests
 
 ```bash
-npm test           # vitest run (136)
+npm test           # vitest run (147)
 npm run test:watch # vitest watch
 ```
 

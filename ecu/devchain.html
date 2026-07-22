@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<!--
+  AntLegion DCU — dev-chain supervision board.
+  Zero dependencies, no build step. Served by `tsx src/main.ts board`:
+
+    devchain.html?bus=http://localhost:28090
+
+  Supervision model (top to bottom):
+    例外收件箱   the ONLY place a human needs to look — gated approvals,
+                escalations, starvation. Empty inbox = autonomous operation.
+    DCU nodes   one card per DCU, four sections: 职责 (duty, from its
+                sys.registry fact) / 来历 (origin: which registry fact, which
+                skills it compresses) / 现在 (current claim or idle) /
+                履历 (footprint: counts + recent authored facts).
+    dev chain   per-requirement pipeline folded from claims/verdicts/gates.
+    fact stream tail of the total order.
+
+  Everything is folded client-side from GET /facts — same semantics as
+  src/folds/devchain.ts. The only write is the H1 button (gate.approved as
+  carter@board).
+-->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AntLegion DCU · dev chain</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #10161e; --panel2: #0d131a; --line: #1e2a38;
+    --fg: #c9d4e0; --dim: #5d7186; --green: #34d399; --amber: #fbbf24;
+    --red: #f87171; --cyan: #22d3ee; --blue: #60a5fa; --magenta: #e879f9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.5 "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    padding: 14px 18px 40px;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+    border: 1px solid var(--line); background: var(--panel);
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 12px;
+  }
+  header h1 { font-size: 15px; letter-spacing: 1px; }
+  header h1 .ant { color: var(--green); }
+  header a { color: var(--dim); font-size: 11px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 2px 10px; font-size: 11px; letter-spacing: .5px;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .live .dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.4s infinite; }
+  .down .dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .live { color: var(--green); } .down { color: var(--red); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .kv { color: var(--dim); font-size: 11px; }
+  .kv b { color: var(--fg); font-weight: 600; }
+
+  .panel {
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 8px; padding: 12px 14px; min-width: 0; margin-bottom: 12px;
+  }
+  .panel h2 {
+    font-size: 11px; letter-spacing: 1.5px; color: var(--dim);
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+  .panel h2 .n { color: var(--cyan); }
+
+  /* ── inbox ── */
+  #inbox-panel.calm { border-color: rgba(52,211,153,.35); }
+  #inbox-panel.busy { border-color: rgba(251,191,36,.55); }
+  .inbox-empty { color: var(--green); font-size: 12px; padding: 4px 0; }
+  .ib {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--panel2);
+    padding: 7px 10px; margin-bottom: 6px; font-size: 12px;
+  }
+  .ib .tag { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 6px; color: var(--bg); }
+  .ib.gate .tag { background: var(--amber); }
+  .ib.esc  .tag { background: var(--red); }
+  .ib.starv .tag { background: var(--red); }
+  .ib .what b { color: var(--fg); }
+  .ib .when { margin-left: auto; color: var(--dim); font-size: 10px; }
+  button.approve {
+    background: var(--amber); color: var(--bg); border: 0; border-radius: 5px;
+    font: 700 11px/1 inherit; padding: 5px 10px; cursor: pointer;
+  }
+  button.approve:hover { filter: brightness(1.15); }
+
+  /* ── DCU nodes ── */
+  #dcus { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; }
+  .dcu { border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); padding: 0 0 8px; overflow: hidden; }
+  .dcu .head {
+    display: flex; align-items: center; gap: 8px; padding: 8px 11px;
+    border-bottom: 1px solid var(--line); background: rgba(30,42,56,.35);
+  }
+  .dcu .nm { font-weight: 700; color: var(--cyan); }
+  .dcu .role { font-size: 10px; color: var(--bg); background: var(--magenta); border-radius: 4px; padding: 0 6px; font-weight: 700; }
+  .dcu.working { border-color: rgba(96,165,250,.6); }
+  .dcu .busy { margin-left: auto; font-size: 10px; color: var(--blue); animation: pulse 1.2s infinite; }
+  .dcu .idle { margin-left: auto; font-size: 10px; color: var(--dim); }
+  .sec { padding: 6px 11px 0; font-size: 11px; }
+  .sec .lbl {
+    display: inline-block; font-size: 9px; letter-spacing: 1.5px; color: var(--bg);
+    background: var(--dim); border-radius: 3px; padding: 0 5px; font-weight: 700;
+    margin-bottom: 2px; vertical-align: 1px;
+  }
+  .sec.duty .lbl { background: var(--cyan); }
+  .sec.origin .lbl { background: var(--magenta); }
+  .sec.now .lbl { background: var(--blue); }
+  .sec.hist .lbl { background: var(--green); }
+  .sec .body { color: var(--dim); }
+  .sec .body b { color: var(--fg); font-weight: 600; }
+  .sec .body .gate { color: var(--amber); }
+  .sec ul { margin: 1px 0 0 14px; }
+  .sec li b { color: var(--fg); }
+  .sec .sk { color: var(--magenta); }
+  .now .doing { color: var(--blue); font-weight: 700; }
+  .now .quiet { color: var(--dim); }
+  .hist .counts { color: var(--fg); margin-bottom: 2px; }
+  .hist .counts .ok { color: var(--green); } .hist .counts .bad { color: var(--red); }
+  .hist .ev { padding: 0; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hist .ev .t { color: var(--dim); }
+  .hist .ev .ok { color: var(--green); } .hist .ev .bad { color: var(--red); } .hist .ev .warn { color: var(--amber); }
+
+  /* ── dev chain ── */
+  .chain { border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); padding: 10px 12px; margin-bottom: 10px; }
+  .chain .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .chain .nm { font-weight: 700; font-size: 13px; }
+  .chain .slug { color: var(--dim); font-size: 11px; }
+  .chain .doneflag { margin-left: auto; color: var(--green); font-weight: 700; font-size: 11px; }
+  .pipe { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+  .stage {
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px;
+    font-size: 11px; color: var(--dim); background: var(--panel);
+    display: inline-flex; flex-direction: column; align-items: center; min-width: 86px;
+  }
+  .stage .sn { font-weight: 700; letter-spacing: .5px; }
+  .stage .ss { font-size: 10px; margin-top: 1px; }
+  .st-waiting { opacity: .45; }
+  .st-open   { border-color: var(--cyan);  color: var(--cyan); }
+  .st-working{ border-color: var(--blue);  color: var(--blue); animation: pulse 1.2s infinite; }
+  .st-adjudicating { border-color: var(--magenta); color: var(--magenta); }
+  .st-done   { border-color: var(--green); color: var(--green); }
+  .st-gated  { border-color: var(--amber); color: var(--amber); }
+  .st-rejected { border-color: var(--red); color: var(--red); }
+  .arrow { color: var(--dim); font-size: 11px; }
+  .gatebox { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+  .gatebox .gl { font-size: 9px; color: var(--amber); letter-spacing: .5px; }
+  .gate-ok { font-size: 10px; color: var(--green); }
+  .evidence { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; font-size: 11px; }
+  .evidence .row { padding: 1px 0; color: var(--dim); }
+  .evidence .row b { color: var(--fg); font-weight: 600; }
+  .evidence .rej { color: var(--red); }
+  .evidence .warn { color: var(--amber); }
+  .empty { color: var(--dim); padding: 18px; text-align: center; font-size: 12px; }
+
+  /* ── ticker ── */
+  #ticker { max-height: 240px; overflow: hidden; border-top: 1px solid var(--line); padding-top: 8px; }
+  #ticker .f { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; padding: 1px 0; }
+  .t-req { color: var(--cyan); } .t-art { color: var(--green); } .t-claim { color: var(--blue); }
+  .t-verdict { color: var(--magenta); } .t-gate { color: var(--amber); } .t-alarm { color: var(--red); } .t-other { color: var(--dim); }
+  .seq { color: var(--dim); display: inline-block; min-width: 52px; }
+  .ts { color: var(--dim); }
+
+  footer { margin-top: 4px; color: var(--dim); font-size: 11px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="ant">⣿</span> ANTLEGION DCU · DEV CHAIN</h1>
+  <span id="conn" class="pill down"><span class="dot"></span><span id="conntext">CONNECTING</span></span>
+  <span class="kv">bus <b id="h-bus">…</b></span>
+  <span class="kv">head_seq <b id="h-head">–</b></span>
+  <span class="kv">facts <b id="h-facts">–</b></span>
+  <span class="kv">uptime <b id="h-uptime">–</b></span>
+  <a href="board.html">→ requirement board</a>
+</header>
+
+<section class="panel" id="inbox-panel">
+  <h2><span class="n">◆</span> 例外收件箱 · 只有这里需要人 <span id="inbox-count" class="n"></span></h2>
+  <div id="inbox"><div class="inbox-empty">…</div></div>
+</section>
+
+<section class="panel">
+  <h2><span class="n">◆</span> dcu nodes · 职责 / 来历 / 现在 / 履历 <span id="dcu-count" class="n"></span></h2>
+  <div id="dcus"><div class="empty">waiting for sys.registry facts — start the fleet (tsx src/main.ts chain)</div></div>
+</section>
+
+<section class="panel">
+  <h2><span class="n">◆</span> dev chain · 需求交付链 <span id="chain-count" class="n"></span></h2>
+  <div id="chains"><div class="empty">waiting for req.registered facts — req new "<名称>" -s slug</div></div>
+</section>
+
+<section class="panel">
+  <h2>fact stream · tail of the total order</h2>
+  <div id="ticker"><div class="empty">no facts yet</div></div>
+</section>
+
+<footer>
+  <span id="f-cursor">cursor: 0 · mirrored facts: 0</span>
+  <span>override: ?bus=http://host:port · H1 按钮以 carter@board 发布 gate.approved 事实</span>
+</footer>
+
+<script>
+"use strict";
+const Q = new URLSearchParams(location.search);
+const BUS = (Q.get("bus") || "http://localhost:28090").replace(/\/$/, "");
+const GATE_AUTHOR = "carter@board";
+
+/* Stage config — mirrors src/folds/devchain.ts (names only; evidence rules
+   live in the adjudicator; the board just displays its verdicts). */
+const STAGES = [
+  { stage: "plan",     cn: "方案", produces: "plan.ready",       gate: null },
+  { stage: "dev",      cn: "开发", produces: "dev.done",         gate: "H1" },
+  { stage: "unittest", cn: "单测", produces: "test.unit.report", gate: null },
+  { stage: "e2e",      cn: "E2E",  produces: "e2e.report",       gate: null },
+];
+const ARTIFACTS = new Set(STAGES.map((s) => s.produces));
+const STAGE_CN = Object.fromEntries(STAGES.map((s) => [s.stage, s.cn]));
+const STATE_CN = {
+  waiting: "等待", gated: "待批准", open: "可认领", working: "干活中",
+  adjudicating: "裁决中", done: "完成", rejected: "证据被拒",
+};
+
+let facts = [];
+let cursor = 0;
+let connected = false, everConnected = false;
+
+const $ = (id) => document.getElementById(id);
+$("h-bus").textContent = BUS;
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
+function fmtTime(unix) {
+  if (!unix) return "–";
+  const d = new Date(unix * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function fmtDur(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  if (sec < 90) return `${sec}s`;
+  if (sec < 5400) return `${Math.floor(sec / 60)}m`;
+  return `${Math.floor(sec / 3600)}h${Math.floor((sec % 3600) / 60)}m`;
+}
+
+/* ── §3.1 lifecycle fold (mirrors antlegion-bus/src/fold.ts) ── */
+function lifecycle(F, nowSec) {
+  const delta = 600;
+  let active = [];
+  const rel = facts
+    .filter((f) => f.refs && (f.refs.claim_of === F || f.refs.resolves === F ||
+      f.refs.release_of === F || (f.type === "_.tombstone" && f.refs.tombstones === F)))
+    .sort((a, b) => a.seq - b.seq);
+  for (const fact of rel) {
+    if (fact.type === "_.tombstone") return { state: "dead", owner: null };
+    active = active.filter((c) => fact.recv <= c.recv + delta);
+    if (fact.refs.claim_of === F) active.push({ author: fact.author, seq: fact.seq, recv: fact.recv });
+    else if (fact.refs.release_of === F) active = active.filter((c) => c.author !== fact.author);
+    else if (fact.refs.resolves === F) {
+      const owner = active.length ? [...active].sort((a, b) => a.seq - b.seq)[0].author : null;
+      if (owner === null || fact.author === owner) return { state: "resolved", owner };
+    }
+  }
+  active = active.filter((c) => nowSec <= c.recv + delta);
+  if (active.length) {
+    const w = [...active].sort((a, b) => a.seq - b.seq)[0];
+    return { state: "claimed", owner: w.author, since: w.recv };
+  }
+  return { state: "open", owner: null };
+}
+
+/* ── devchain fold (mirrors src/folds/devchain.ts) ── */
+function verdictOf(artifactId) {
+  let latest = null;
+  for (const f of facts) {
+    if (!f.refs || f.refs.verdict_of !== artifactId) continue;
+    if (f.type !== "evidence.accepted" && f.type !== "evidence.rejected") continue;
+    if (!latest || f.seq > latest.seq) latest = f;
+  }
+  if (!latest) return null;
+  return {
+    verdict: latest.type === "evidence.accepted" ? "accepted" : "rejected",
+    missing: Array.isArray(latest.payload.missing) ? latest.payload.missing : [],
+  };
+}
+function gateApproverOf(artifactId) {
+  for (const f of facts) {
+    if (f.type === "gate.approved" && f.refs && f.refs.gate_of === artifactId) return f.author;
+  }
+  return null;
+}
+function outputOf(inputId, type) {
+  let first = null;
+  for (const f of facts) {
+    if (f.type === type && f.refs && f.refs.parent === inputId && (!first || f.seq < first.seq)) first = f;
+  }
+  return first;
+}
+function foldDevchain(nowSec) {
+  const reqBySlug = new Map();
+  for (const f of [...facts].sort((a, b) => a.seq - b.seq)) {
+    if (f.type !== "req.registered") continue;
+    const slug = f.payload && f.payload.slug;
+    if (slug && !reqBySlug.has(slug)) reqBySlug.set(slug, f);
+  }
+  const views = [];
+  for (const [slug, reqFact] of reqBySlug) {
+    const stages = [];
+    let input = reqFact;
+    let upstreamDone = true;
+    for (const spec of STAGES) {
+      const view = { stage: spec.stage, cn: spec.cn, state: "waiting", inputId: input ? input.id : null,
+                     owner: null, since: null, output: null, verdict: null, gate: null };
+      if (!upstreamDone || !input) { view.inputId = null; stages.push(view); input = null; continue; }
+      if (spec.gate) view.gate = { name: spec.gate, approvedBy: gateApproverOf(input.id) };
+      const life = lifecycle(input.id, nowSec);
+      view.owner = life.owner;
+      view.since = life.since || null;
+      view.output = outputOf(input.id, spec.produces);
+      if (view.output) view.verdict = verdictOf(view.output.id);
+      if (view.output) {
+        view.state = !view.verdict ? "adjudicating" : (view.verdict.verdict === "accepted" ? "done" : "rejected");
+      } else if (life.state === "claimed") {
+        view.state = "working";
+      } else if (spec.gate && !(view.gate && view.gate.approvedBy)) {
+        view.state = "gated";
+      } else {
+        view.state = life.state === "resolved" ? "adjudicating" : "open";
+      }
+      upstreamDone = view.state === "done";
+      input = view.output;
+      stages.push(view);
+    }
+    views.push({ slug, name: (reqFact.payload && reqFact.payload.name) || slug,
+                 origin: (reqFact.payload && reqFact.payload.origin) || "", reqFact, stages,
+                 done: stages.every((s) => s.state === "done") });
+  }
+  return views.sort((a, b) => a.reqFact.seq - b.reqFact.seq);
+}
+
+/* ── inbox fold: gated stages + live watchdog facts ── */
+function foldInbox(views, nowSec) {
+  const items = [];
+  // 1) gated stages — human approval queue by definition.
+  for (const v of views) {
+    for (const s of v.stages) {
+      if (s.state !== "gated" || !s.gate) continue;
+      items.push({ kind: "gate", when: null, v, s });
+    }
+  }
+  // Current relevance: watchdog facts stay on the log forever; only show the
+  // ones whose condition still holds in the fold.
+  const stageByInput = new Map(), stageByArtifact = new Map();
+  for (const v of views) for (const s of v.stages) {
+    if (s.inputId) stageByInput.set(s.inputId, s);
+    if (s.output) stageByArtifact.set(s.output.id, s);
+  }
+  for (const f of facts) {
+    if (f.type === "chain.starved" && f.refs && f.refs.starves) {
+      const s = stageByInput.get(f.refs.starves);
+      if (s && s.state === "open") items.push({ kind: "starv", when: f.recv, f });
+    } else if (f.type === "escalate.human" && f.refs && f.refs.escalates) {
+      const p = f.payload || {};
+      const sIn = stageByInput.get(f.refs.escalates);
+      const sArt = stageByArtifact.get(f.refs.escalates);
+      const still =
+        (p.reason === "claim_churn" && sIn && sIn.state === "open") ||
+        (p.reason === "evidence_rejected" && (!sArt || sArt.state === "rejected"));
+      if (still) items.push({ kind: "esc", when: f.recv, f });
+    }
+  }
+  return items;
+}
+
+/* ── per-DCU worldview: registry + current claim + footprint ── */
+function humanizeFact(f, idx) {
+  const target = (ref) => {
+    const t = idx.get(ref);
+    if (!t) return ref ? ref.slice(0, 8) : "?";
+    const slug = (t.payload && (t.payload.reqSlug || t.payload.slug)) || "";
+    return `${t.type}${slug ? ` (${slug})` : ""}`;
+  };
+  const p = f.payload || {};
+  if (f.type === "sys.registry") return { cls: "", text: "注册上线（sys.registry v1）" };
+  if (f.type === "_.claim") return { cls: "", text: `认领 ${target(f.refs.claim_of)}` };
+  if (f.type === "_.resolve") return { cls: "", text: `完成交付 ${target(f.refs.resolves)}` };
+  if (f.type === "_.release") return { cls: "warn", text: `释放 ${target(f.refs.release_of)}` };
+  if (ARTIFACTS.has(f.type)) {
+    const v = verdictOf(f.id);
+    const mark = v ? (v.verdict === "accepted" ? ` <span class="ok">✓已裁决</span>` : ` <span class="bad">✗被拒</span>`) : " <span class='warn'>裁决中</span>";
+    return { cls: "", text: `产出 ${f.type}（${esc(p.reqSlug || "?")}）${mark}` };
+  }
+  if (f.type === "evidence.accepted") return { cls: "ok", text: `裁决 ✓ ${target(f.refs.verdict_of)}` };
+  if (f.type === "evidence.rejected") return { cls: "bad", text: `裁决 ✗ ${target(f.refs.verdict_of)} 缺 ${Array.isArray(p.missing) ? p.missing.join(",") : "?"}` };
+  if (f.type === "chain.starved") return { cls: "bad", text: `⚠ 饿死告警 ${esc(p.reqSlug || "?")}/${STAGE_CN[p.stage] || p.stage}` };
+  if (f.type === "escalate.human") return { cls: "bad", text: `🔺 升级 ${esc(p.reqSlug || "?")}/${STAGE_CN[p.stage] || p.stage} · ${esc(p.detail || p.reason || "")}` };
+  return { cls: "", text: f.type };
+}
+
+function foldDcus(views) {
+  const byDcu = new Map();
+  for (const f of facts) {
+    if (f.type !== "sys.registry" || !f.payload || f.payload.domain !== "devchain") continue;
+    const prev = byDcu.get(f.payload.dcu);
+    if (!prev || f.seq > prev.seq) byDcu.set(f.payload.dcu, f);
+  }
+  const idx = new Map(facts.map((f) => [f.id, f]));
+  const workingOn = new Map();
+  for (const v of views) for (const s of v.stages) {
+    if (s.state === "working" && s.owner) workingOn.set(s.owner, { label: `${v.slug} · ${s.cn}`, since: s.since });
+  }
+  return [...byDcu.values()]
+    .sort((a, b) => ((a.payload.order ?? 99) - (b.payload.order ?? 99)))
+    .map((regFact) => {
+      const dcu = regFact.payload.dcu;
+      const authored = facts.filter((f) => f.author === dcu && f.type !== "sys.registry");
+      const counts = { claims: 0, artifacts: 0, ok: 0, bad: 0, alarms: 0 };
+      for (const f of authored) {
+        if (f.type === "_.claim") counts.claims++;
+        else if (ARTIFACTS.has(f.type)) counts.artifacts++;
+        else if (f.type === "evidence.accepted") counts.ok++;
+        else if (f.type === "evidence.rejected") counts.bad++;
+        else if (f.type === "chain.starved" || f.type === "escalate.human") counts.alarms++;
+      }
+      const recent = authored.filter((f) => f.type !== "_.resolve").slice(-4).reverse();
+      const last = authored.length ? authored[authored.length - 1] : null;
+      return { reg: regFact.payload, regFact, busy: workingOn.get(dcu) || null, counts, recent, last, idx };
+    });
+}
+
+/* ── H1 approve ── */
+async function approveGate(planArtifactId, slug, btn) {
+  btn.disabled = true; btn.textContent = "…";
+  try {
+    const res = await fetch(`${BUS}/facts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "gate.approved", author: GATE_AUTHOR, ts: Date.now() / 1000,
+        payload: { gate: "H1", reqSlug: slug, note: "方案评审通过（board）" },
+        refs: { gate_of: planArtifactId },
+        nonce: `gate:H1:${planArtifactId}`,
+      }),
+    });
+    if (!res.ok) throw new Error(`append → ${res.status}`);
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "批准 H1";
+    alert(`gate.approved 发布失败: ${e.message}`);
+  }
+}
+
+/* ── render: inbox ── */
+function renderInbox(views, nowSec) {
+  const items = foldInbox(views, nowSec);
+  const panel = $("inbox-panel"), box = $("inbox");
+  $("inbox-count").textContent = items.length ? `(${items.length})` : "";
+  panel.className = "panel " + (items.length ? "busy" : "calm");
+  if (!items.length) {
+    box.innerHTML = '<div class="inbox-empty">✓ 收件箱为空 — 全部 DCU 自治运行中，无需人工介入</div>';
+    return;
+  }
+  box.innerHTML = "";
+  for (const it of items) {
+    const div = document.createElement("div");
+    if (it.kind === "gate") {
+      div.className = "ib gate";
+      div.innerHTML =
+        `<span class="tag">⛩ ${esc(it.s.gate.name)}</span>` +
+        `<span class="what">「<b>${esc(it.v.name)}</b>」方案已裁决通过，等待方案评审放行 → ${esc(it.s.cn)}</span>` +
+        `<button class="approve" data-plan="${esc(it.s.inputId)}" data-slug="${esc(it.v.slug)}">批准 H1</button>`;
+    } else if (it.kind === "starv") {
+      const p = it.f.payload || {};
+      div.className = "ib starv";
+      div.innerHTML =
+        `<span class="tag">🕳 饿死</span>` +
+        `<span class="what"><b>${esc(p.reqSlug || "?")}</b> / ${esc(STAGE_CN[p.stage] || p.stage)} 可认领却 ${esc(fmtDur(p.openForS || 0))} 无人认领 — 该域没有活着的 worker？</span>` +
+        `<span class="when">${esc(fmtTime(it.f.recv))} by ${esc(it.f.author)}</span>`;
+    } else {
+      const p = it.f.payload || {};
+      div.className = "ib esc";
+      div.innerHTML =
+        `<span class="tag">🔺 升级</span>` +
+        `<span class="what"><b>${esc(p.reqSlug || "?")}</b> / ${esc(STAGE_CN[p.stage] || p.stage)} — ${esc(p.detail || p.reason || "")}</span>` +
+        `<span class="when">${esc(fmtTime(it.f.recv))} by ${esc(it.f.author)}</span>`;
+    }
+    box.appendChild(div);
+  }
+  for (const btn of box.querySelectorAll("button.approve")) {
+    btn.addEventListener("click", () => approveGate(btn.dataset.plan, btn.dataset.slug, btn));
+  }
+}
+
+/* ── render: DCU nodes ── */
+function renderDcus(views, nowSec) {
+  const roster = foldDcus(views);
+  const ebox = $("dcus");
+  $("dcu-count").textContent = roster.length ? `(${roster.length})` : "";
+  if (!roster.length) {
+    ebox.innerHTML = '<div class="empty">waiting for sys.registry facts — start the fleet (tsx src/main.ts chain)</div>';
+    return;
+  }
+  ebox.innerHTML = "";
+  for (const e of roster) {
+    const r = e.reg;
+    const role = r.role === "adjudicator" ? "裁决器" : r.role === "watchdog" ? "看门狗" : `S${r.order}`;
+
+    // 职责 — what I react to, what I emit, what counts as valid.
+    let duty;
+    if (r.role === "adjudicator") {
+      duty = `听 <b>${(r.listens || []).join(", ")}</b> → 校验证据形状 → 裁决 <b>accepted / rejected</b>`;
+    } else if (r.role === "watchdog") {
+      duty = `听 <b>全流（*）</b> → 检测例外 → 产出 <b>${(r.produces || []).join(" / ")}</b>` +
+        `<ul>` + Object.entries(r.rules || {}).map(([k, d]) => `<li><b>${esc(k)}</b> — ${esc(d)}</li>`).join("") + `</ul>`;
+    } else {
+      duty = `听 <b>${esc(r.listens)}</b>${r.gate ? ` → <span class="gate">⛩ ${esc(r.gate)} 人工闸门</span>` : ""} → claim（全序竞争）→ 产出 <b>${esc(r.produces)}</b>` +
+        `<ul>` + Object.entries(r.evidence_required || {}).map(([k, d]) => `<li><b>${esc(k)}</b> — ${esc(d)}</li>`).join("") + `</ul>`;
+    }
+
+    // 来历 — the registry fact that IS my registration + the skills I compress.
+    const origin =
+      `注册即发布：sys.registry <b>#${e.regFact.seq}</b> · ${esc(fmtTime(e.regFact.recv))} · v1 · worker: <b>${esc(r.worker || "?")}</b>` +
+      (r.skills ? `<br><span class="sk">≈ 压缩自技能: ${r.skills.map(esc).join(" + ")}</span>` : "");
+
+    // 现在 — current claim or idle.
+    const now = e.busy
+      ? `<span class="doing">● 正在干：${esc(e.busy.label)}</span>${e.busy.since ? ` <span class="quiet">（已 ${esc(fmtDur(nowSec - e.busy.since))}）</span>` : ""}`
+      : `<span class="quiet">idle${e.last ? ` · 距上次动作 ${esc(fmtDur(nowSec - e.last.recv))}` : " · 尚未行动"}</span>`;
+
+    // 履历 — cumulative counts + recent humanized actions.
+    let counts = "";
+    if (r.role === "adjudicator") counts = `累计裁决 <span class="ok">✓${e.counts.ok}</span> / <span class="bad">✗${e.counts.bad}</span>`;
+    else if (r.role === "watchdog") counts = `累计告警 <span class="bad">${e.counts.alarms}</span>`;
+    else counts = `累计认领 ${e.counts.claims} · 产出 ${e.counts.artifacts}`;
+    const hist = e.recent.length
+      ? e.recent.map((f) => {
+          const h = humanizeFact(f, e.idx);
+          return `<div class="ev ${h.cls}"><span class="t">#${f.seq} ${esc(fmtTime(f.recv))}</span> ${h.text}</div>`;
+        }).join("")
+      : `<div class="ev">（还没有动作）</div>`;
+
+    const div = document.createElement("div");
+    div.className = "dcu" + (e.busy ? " working" : "");
+    div.innerHTML =
+      `<div class="head"><span class="nm">${esc(r.dcu)}</span><span class="role">${esc(role)}</span>` +
+      (e.busy ? `<span class="busy">● busy</span>` : `<span class="idle">idle</span>`) + `</div>` +
+      `<div class="sec duty"><span class="lbl">职责</span><div class="body">${duty}</div></div>` +
+      `<div class="sec origin"><span class="lbl">来历</span><div class="body">${origin}</div></div>` +
+      `<div class="sec now"><span class="lbl">现在</span><div class="body">${now}</div></div>` +
+      `<div class="sec hist"><span class="lbl">履历</span><div class="body"><div class="counts">${counts}</div>${hist}</div></div>`;
+    ebox.appendChild(div);
+  }
+}
+
+/* ── render: chains ── */
+function evidenceRows(v) {
+  const rows = [];
+  for (const s of v.stages) {
+    if (!s.output) continue;
+    const p = s.output.payload || {};
+    let line = "";
+    if (s.stage === "plan") line = `范围 <b>${esc(p.scope || "?")}</b> · 不做 ${Array.isArray(p.out_of_scope) ? p.out_of_scope.length : 0} 项 · 验收口径 ${Array.isArray(p.acceptance) ? p.acceptance.length : 0} 条`;
+    if (s.stage === "dev") line = `分支 <b>${esc(p.branch || "?")}</b> · 改动 ${Array.isArray(p.changed_files) ? p.changed_files.length : 0} 文件 · ${esc(Array.isArray(p.consumers_checked) ? (p.consumers_checked[0] || "") : "")}`;
+    if (s.stage === "unittest") line = `通过 <b>${p.passed}</b> / 失败 <b>${p.failed}</b> · <span class="warn">未覆盖：${esc(Array.isArray(p.not_covered) ? p.not_covered.join("；") : "—")}</span>`;
+    if (s.stage === "e2e") line = `API 断言 <b>${p.api_assertions}</b> · 页面验证 <b>${p.page_checked === true ? "✓" : "✗"}</b> · 偏差 ${Array.isArray(p.deviations) ? p.deviations.length : "?"} / 缺陷 ${Array.isArray(p.defects) ? p.defects.length : "?"} / 缺口 ${Array.isArray(p.gaps) ? p.gaps.length : "?"}`;
+    const verdict = s.verdict
+      ? (s.verdict.verdict === "accepted" ? ` <span style="color:var(--green)">✓已裁决</span>`
+         : ` <span class="rej">✗被拒：缺 ${esc(s.verdict.missing.join(", "))}</span>`)
+      : ` <span style="color:var(--magenta)">裁决中…</span>`;
+    rows.push(`<div class="row">[${s.cn}] ${line}${verdict}</div>`);
+  }
+  return rows.join("");
+}
+
+function renderChains(views) {
+  const cbox = $("chains");
+  $("chain-count").textContent = views.length ? `(${views.length})` : "";
+  if (!views.length) {
+    cbox.innerHTML = '<div class="empty">waiting for req.registered facts — cd ecu && npx tsx src/main.ts req new "<名称>" -s slug</div>';
+    return;
+  }
+  cbox.innerHTML = "";
+  for (const v of views) {
+    const div = document.createElement("div");
+    div.className = "chain";
+    let pipe = `<span class="stage st-done" style="min-width:auto"><span class="sn">需求</span><span class="ss">#${v.reqFact.seq}</span></span>`;
+    for (const s of v.stages) {
+      pipe += `<span class="arrow">→</span>`;
+      if (s.gate) {
+        if (s.state === "gated") {
+          pipe += `<span class="gatebox"><span class="gl">⛩ ${esc(s.gate.name)} 方案评审</span>` +
+                  `<button class="approve" data-plan="${esc(s.inputId)}" data-slug="${esc(v.slug)}">批准 H1</button></span>` +
+                  `<span class="arrow">→</span>`;
+        } else if (s.gate.approvedBy) {
+          pipe += `<span class="gatebox"><span class="gl">⛩ ${esc(s.gate.name)}</span><span class="gate-ok">✓ ${esc(s.gate.approvedBy)}</span></span><span class="arrow">→</span>`;
+        }
+      }
+      pipe += `<span class="stage st-${s.state}"><span class="sn">${esc(s.cn)}</span>` +
+              `<span class="ss">${esc(STATE_CN[s.state])}${s.state === "working" && s.owner ? " · " + esc(s.owner.split("@")[0]) : ""}</span></span>`;
+    }
+    div.innerHTML =
+      `<div class="head"><span class="nm">${esc(v.name)}</span><span class="slug">${esc(v.slug)}</span>` +
+      (v.done ? `<span class="doneflag">✔ CHAIN DONE</span>` : "") + `</div>` +
+      `<div class="pipe">${pipe}</div>` +
+      (evidenceRows(v) ? `<div class="evidence">${evidenceRows(v)}</div>` : "");
+    cbox.appendChild(div);
+  }
+  for (const btn of cbox.querySelectorAll("button.approve")) {
+    btn.addEventListener("click", () => approveGate(btn.dataset.plan, btn.dataset.slug, btn));
+  }
+}
+
+function render() {
+  const nowSec = Date.now() / 1000;
+  const views = foldDevchain(nowSec);
+  renderInbox(views, nowSec);
+  renderDcus(views, nowSec);
+  renderChains(views);
+}
+
+/* ── ticker ── */
+const tickerRows = [];
+function tickClass(f) {
+  if (f.type === "req.registered") return "t-req";
+  if (ARTIFACTS.has(f.type)) return "t-art";
+  if (f.type === "_.claim" || f.type === "_.resolve" || f.type === "_.release") return "t-claim";
+  if (f.type === "evidence.accepted" || f.type === "evidence.rejected") return "t-verdict";
+  if (f.type === "gate.approved") return "t-gate";
+  if (f.type === "chain.starved" || f.type === "escalate.human") return "t-alarm";
+  return "t-other";
+}
+function pushTicker(batch) {
+  const box = $("ticker");
+  for (const f of batch) {
+    tickerRows.push(
+      `<div class="f ${tickClass(f)}"><span class="seq">#${f.seq}</span>` +
+      `${esc(f.type.padEnd(18))} ${esc(f.author)} <span class="ts">${esc(fmtTime(f.recv))}</span></div>`
+    );
+  }
+  while (tickerRows.length > 40) tickerRows.shift();
+  box.innerHTML = tickerRows.length ? tickerRows.join("") : '<div class="empty">no facts yet</div>';
+}
+
+/* ── connectivity ── */
+function setConnected(ok, info) {
+  const pill = $("conn");
+  if (ok) {
+    connected = true; everConnected = true;
+    pill.className = "pill live";
+    $("conntext").textContent = "LIVE";
+    if (info) {
+      $("h-head").textContent = info.head_seq;
+      $("h-facts").textContent = info.facts;
+      $("h-uptime").textContent = info.uptime_seconds + "s";
+      if (info.head_seq < cursor) { facts = []; cursor = 0; } // bus restarted empty
+    }
+  } else {
+    connected = false;
+    pill.className = "pill down";
+    $("conntext").textContent = everConnected ? "RECONNECTING" : "CONNECTING";
+  }
+}
+
+async function tick() {
+  try {
+    const r = await fetch(`${BUS}/facts?since=${cursor}&limit=1000`);
+    if (!r.ok) throw new Error("read " + r.status);
+    const batch = await r.json();
+    if (batch.length) {
+      for (const f of batch) { facts.push(f); if (f.seq > cursor) cursor = f.seq; }
+      pushTicker(batch);
+    }
+    setConnected(true, null);
+  } catch (e) {
+    setConnected(false);
+  }
+  render();
+  $("f-cursor").textContent = `cursor: ${cursor} · mirrored facts: ${facts.length}`;
+}
+async function infoTick() {
+  try {
+    const r = await fetch(`${BUS}/info`);
+    if (!r.ok) throw new Error("info " + r.status);
+    setConnected(true, await r.json());
+  } catch (e) {
+    setConnected(false);
+  }
+}
+setInterval(tick, 1000);
+setInterval(infoTick, 2000);
+tick(); infoTick();
+</script>
+</body>
+</html>

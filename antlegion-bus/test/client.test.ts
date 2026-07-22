@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { BusV2 } from "../src/bus.js";
-import { ClientV2, localTransport } from "../src/client.js";
+import { ClientV2, defaultAuthor, httpTransport, localTransport } from "../src/client.js";
 
 function sharedBus() {
   const dir = mkdtempSync(join(tmpdir(), "antlegion-v2-cli-"));
@@ -11,6 +11,18 @@ function sharedBus() {
 }
 
 describe("v2 client SDK — the elegant surface over the fold", () => {
+  it("defaultAuthor is a stable <user>@<hostname> identity (no pid)", () => {
+    expect(defaultAuthor()).toBe(`${userInfo().username}@${hostname()}`);
+    expect(defaultAuthor()).not.toContain(String(process.pid));
+  });
+
+  it("an unreachable bus produces a human-grade connection error", async () => {
+    const c = new ClientV2(httpTransport("http://localhost:1"), "alice");
+    await expect(c.publish("x", {})).rejects.toThrow(
+      "cannot reach bus at http://localhost:1 — start one with: npm run dev",
+    );
+  });
+
   it("publish then query round-trips a fact", async () => {
     const c = new ClientV2(localTransport(sharedBus()), "alice");
     const { id } = await c.publish("note", { msg: "hi" });
@@ -52,14 +64,53 @@ describe("v2 client SDK — the elegant surface over the fold", () => {
     expect(chain.map((f) => f.id)).toEqual([id, childIds[0]]); // task → result
   });
 
-  it("a non-winner's resolve is ignored (still claimed by the winner)", async () => {
+  it("a non-winner's resolve throws and the fact stays claimed by the winner", async () => {
     const bus = sharedBus();
     const a = new ClientV2(localTransport(bus), "alice");
     const b = new ClientV2(localTransport(bus), "bob");
     const { id } = await a.publish("task", {});
     await a.claim(id);            // alice wins (lower seq)
-    await b.resolve(id);          // bob never claimed → not the owner
+    await expect(b.resolve(id)).rejects.toThrow(
+      `resolve ignored — fact ${id} is owned by 'alice' (you are 'bob')`,
+    );
     expect(await a.state(id)).toEqual({ state: "claimed", owner: "alice" });
+  });
+
+  it("resolve without any active claim throws", async () => {
+    const c = new ClientV2(localTransport(sharedBus()), "alice");
+    const { id } = await c.publish("task", {});
+    await expect(c.resolve(id)).rejects.toThrow(
+      `resolve ignored — fact ${id} has no active claim (you are 'alice')`,
+    );
+  });
+
+  it("resolving an already-resolved fact throws instead of a silent no-op", async () => {
+    const c = new ClientV2(localTransport(sharedBus()), "alice");
+    const { id } = await c.publish("task", {});
+    await c.claim(id);
+    await c.resolve(id);
+    await expect(c.resolve(id)).rejects.toThrow(`resolve ignored — fact ${id} is already resolved`);
+  });
+
+  it("claim/resolve/release on a nonexistent fact throw 'not found'", async () => {
+    const c = new ClientV2(localTransport(sharedBus()), "alice");
+    const missing = "0".repeat(64);
+    await expect(c.claim(missing)).rejects.toThrow(`fact ${missing} not found`);
+    await expect(c.resolve(missing)).rejects.toThrow(`fact ${missing} not found`);
+    await expect(c.release(missing)).rejects.toThrow(`fact ${missing} not found`);
+  });
+
+  it("release by a non-owner throws; the owner's release reopens the fact", async () => {
+    const bus = sharedBus();
+    const a = new ClientV2(localTransport(bus), "alice");
+    const b = new ClientV2(localTransport(bus), "bob");
+    const { id } = await a.publish("task", {});
+    await a.claim(id);
+    await expect(b.release(id)).rejects.toThrow(
+      `release ignored — fact ${id} is owned by 'alice' (you are 'bob')`,
+    );
+    await a.release(id);
+    expect(await a.state(id)).toEqual({ state: "open", owner: null });
   });
 
   it("two distinct corroborations reach consensus", async () => {

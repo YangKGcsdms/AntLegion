@@ -21,12 +21,11 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { hostname } from "node:os";
 import { fileURLToPath } from "node:url";
-import { ClientV2, httpTransport } from "./client.js";
+import { ClientV2, httpTransport, defaultAuthor } from "./client.js";
 
 const BUS_URL = (process.env.ANTLEGION_BUS_URL ?? "http://localhost:28090").replace(/\/$/, "");
-const AGENT_NAME = process.env.ANTLEGION_AGENT_NAME ?? `${hostname()}-${process.pid}`;
+const AGENT_NAME = process.env.ANTLEGION_AGENT_NAME ?? defaultAuthor();
 
 const client = new ClientV2(httpTransport(BUS_URL), AGENT_NAME);
 
@@ -179,6 +178,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
 });
 
 async function main() {
+  process.stderr.write(`[antlegion-mcp] agent identity: ${AGENT_NAME} (override with ANTLEGION_AGENT_NAME)\n`);
   await server.connect(new StdioServerTransport());
   process.stderr.write(`[antlegion-mcp v2] ready · bus=${BUS_URL} · agent=${AGENT_NAME}\n`);
 }
