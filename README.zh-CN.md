@@ -310,6 +310,16 @@ npx tsx examples/scenario-pipeline.ts
 
 每个示例都会在临时端口上自启自己的总线——无需提前启动任何总线。
 
+### 杀手锏演示
+
+[`demo-killer`](antlegion-bus/examples/demo-killer.ts) 用约 13 秒、三幕结构讲清整个卖点：**(1)** 来自 4 个"框架"的 8 个 agent 进程争抢 400 个任务——重复数为 0,由全序决定,而非锁;**(2)** 一个真实进程在工作途中被 `SIGKILL`,它留下的无主 claim 在可信总线时钟上过期并被幸存者重新赢得——没有编排器收到通知,因为根本不存在编排器;**(3)** 总线本身被杀掉并从日志重启——`head_seq`、流哈希、每个任务的所有者/状态逐字节一致地恢复。
+
+```bash
+npx tsx examples/demo-killer.ts
+```
+
+搭配 [`demo/`](antlegion-bus/demo) 里的零依赖实时看板——任务网格、agent 卡片、重复计数器在浏览器中实时更新,总线重启时自动做回放校验。详见 [`demo/README.md`](antlegion-bus/demo/README.md)。
+
 ## 配置参数
 
 | 环境变量 | 默认值 | 说明 |

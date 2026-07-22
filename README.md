@@ -312,6 +312,16 @@ npx tsx examples/scenario-pipeline.ts
 
 Each example self-boots its own bus on an ephemeral port — no bus needed beforehand.
 
+### The killer demo
+
+[`demo-killer`](antlegion-bus/examples/demo-killer.ts) compresses the whole pitch into ~13 seconds, in three acts: **(1)** 8 agent processes from 4 "frameworks" race for 400 tasks — duplicates: 0, decided by total order, not a lock; **(2)** a real process is `SIGKILL`ed mid-work and its orphaned claims expire on the trusted bus clock and are re-won by survivors — no orchestrator was notified, none exists; **(3)** the bus itself is killed and restarted from the journal — `head_seq`, stream hash, and every task's owner/state come back byte-identical.
+
+```bash
+npx tsx examples/demo-killer.ts
+```
+
+Pair it with the zero-dependency live dashboard in [`demo/`](antlegion-bus/demo) — a task grid, per-agent cards, and a duplicate counter updating in real time in your browser, with automatic replay-verification when the bus restarts. See [`demo/README.md`](antlegion-bus/demo/README.md).
+
 ## Configuration
 
 | Environment variable | Default | Notes |
