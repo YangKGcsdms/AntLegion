@@ -70,6 +70,18 @@ describe("§7 orphan report", () => {
     expect(rep.orphanTypes).toEqual([]); // task.x is covered; _.claim & sys.registry excluded
   });
 
+  it("excludes context.* from orphans (contextGaps tracks those with a better signal)", () => {
+    const b = bus();
+    pub(b, SYS_REGISTRY, "w", { interests: ["task.*"], publishes: [] });
+    const thin = pub(b, "task.x", "carter");
+    pub(b, CONTEXT_REQUESTED, "w", { question: "?" }, { about: thin.id });
+    pub(b, CONTEXT_PROVIDED, "carter", { answer: "here" }, { parent: thin.id });
+    const rep = orphanReport(b.read());
+    // nobody declares interest in context.* — but they are protocol convention,
+    // not un-consumed domain work, so they must not show up as orphans.
+    expect(rep.orphanTypes.map((o) => o.type)).toEqual([]);
+  });
+
   it("reports unmatched interests and silent publishes", () => {
     const b = bus();
     pub(b, SYS_REGISTRY, "dev", { interests: ["plan.ready"], publishes: ["dev.done"] });

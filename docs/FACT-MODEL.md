@@ -59,8 +59,10 @@ three coordination gaps:
 | **unmatched interest** | an agent declares interest in a type that **never appears** — it's waiting on silence |
 | **silent publish** | an agent declares it `publishes` a type it **never actually emitted** |
 
-Mechanical types (`_.claim`, `_.resolve`, …, and `sys.*`) are excluded — nobody
-"declares interest" in a claim.
+Mechanical/convention types are excluded — nobody "declares interest" in a
+claim: `_.*` (claim/resolve/release/vote/tombstone), `sys.*` (registry), and
+`context.*` (§3 below — `contextGaps` already tracks whether a request was
+answered, which is a strictly better signal than "no declared interest").
 
 ```bash
 alctl orphans       # → { orphanTypes, unmatchedInterests, silentPublishes, registeredAgents }

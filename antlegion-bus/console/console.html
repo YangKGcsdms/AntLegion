@@ -934,7 +934,9 @@ function globMatchInline(pattern, text) {
   return re.test(text);
 }
 const asArr = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string") : typeof v === "string" ? [v] : [];
-const isMechType = (t) => t.startsWith("_.") || t === "sys.registry" || t.startsWith("sys.");
+// 与 fold.ts isMechanicalType 同语义：机制/约定类型不参与孤儿分析
+// （context.* 由"待补充上下文"面板用更好的信号跟踪）
+const isMechType = (t) => t.startsWith("_.") || t.startsWith("sys.") || t.startsWith("context.");
 
 function colonyInline() {
   const latest = new Map();

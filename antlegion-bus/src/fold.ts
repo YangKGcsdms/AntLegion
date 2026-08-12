@@ -180,9 +180,12 @@ export function causationChain(stream: readonly Fact[], F: string): Fact[] {
 export const SYS_REGISTRY = "sys.registry";
 
 /** Types that are protocol mechanics or infrastructure, never "domain work" —
- *  excluded from orphan analysis (nobody declares interest in a `_.claim`). */
+ *  excluded from orphan analysis (nobody declares interest in a `_.claim`).
+ *  `context.*` is excluded for the same reason: it is the §8 clarification
+ *  convention, and `contextGaps` already tracks whether a request was answered
+ *  — a strictly better signal than "no agent declared interest in it". */
 function isMechanicalType(t: string): boolean {
-  return t.startsWith("_.") || t === SYS_REGISTRY || t.startsWith("sys.");
+  return t.startsWith("_.") || t.startsWith("sys.") || t.startsWith("context.");
 }
 
 const asStringArray = (v: unknown): string[] =>

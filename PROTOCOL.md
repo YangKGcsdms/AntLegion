@@ -295,7 +295,9 @@ readers fold those declarations against the stream.
   surfaces two reverse gaps: an `interest` matching no fact in the stream (an
   agent waiting on silence), and a declared `publishes` type its author never
   actually emitted (a silent producer).
-- Mechanical types (`_.*`, `sys.*`) are excluded from orphan analysis.
+- Mechanical/convention types (`_.*`, `sys.*`, `context.*`) are excluded from
+  orphan analysis — they are protocol machinery, not un-consumed domain work
+  (`context.*` has its own, better signal in §3.6).
 
 This is **purely additive**: it introduces no reserved fact type (`sys.registry`
 is an ordinary dotted type), changes no fold in §3.1–§3.4, and does not affect

@@ -51,7 +51,9 @@ alctl colony        # → 当前名册，每个 Agent 取最新一条注册
 | **未匹配的兴趣** | Agent 声明关心某类型，但它**从未出现**——它在等一个没人产出的事实 |
 | **沉默的发布** | Agent 声明会 `publishes` 某类型，却**从未真正发出** |
 
-机制类型（`_.claim`、`_.resolve` … 以及 `sys.*`）被排除——没人"关心"一条 claim。
+机制/约定类型被排除——没人"关心"一条 claim：`_.*`（claim/resolve/release/vote/tombstone）、
+`sys.*`（注册）、以及 `context.*`（见下节——`contextGaps` 已经跟踪请求是否被回应，这比"无人
+声明关心"是严格更好的信号）。
 
 ```bash
 alctl orphans       # → { orphanTypes, unmatchedInterests, silentPublishes, registeredAgents }
