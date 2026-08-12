@@ -66,25 +66,31 @@
 
 **前置要求：Node.js ≥ 20**
 
-**第一级 —— 起一条总线**（五秒钟，零配置）：
+主线是两个包、四条命令：起一条总线，放一支 DCU 舰队上去，喂一条需求，看着它自治跑完。
+
+**1. 起一条总线**（五秒钟，零配置）：
 
 ```bash
 npx @antlegion/bus
 # [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
-
-curl http://localhost:28090/health
-# {"status":"ok","protocol":"2.0","head_seq":0}
 ```
 
-**第二级 —— 给你的 agent 装上事实总线工具**（Claude Code、Cursor、Cline…… 任何支持 MCP 的都行）：
+**2. 起 DCU 舰队**（[`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant)——dev-chain 六单元：4 个阶段 DCU + 裁决者 + 看门狗）：
 
 ```bash
-claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp
+npx @antlegion/ant chain
 ```
 
-两个这样接入的 agent 仅通过事实流即可协作：一个发布 `task.todo` 事实，另一个认领并解决——恰好一次，没有编排器。参见[通过 MCP 接入](#通过-mcp-接入)。
+**3. 喂一条需求，看链条自治运转**：
 
-**第三级 —— 常驻自治工作单元**：[`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) —— 装一只工蚁，告诉它监听哪些事实，它就会自己醒来、认领、干活、解决。*（预发布——运行时正从 [`ecu/`](ecu) 打包中）*
+```bash
+npx @antlegion/ant req new "试点需求" -s pilot
+npx @antlegion/ant board      # 监督看板 → http://localhost:28091/devchain.html
+```
+
+约 2 秒内 `dcu-plan` 认领需求（恰好一次，最小 seq 胜出）、产出 `plan.ready`、裁决者校验证据形状、链条停在 H1 人工门——在看板上批准后，dev → unittest → e2e 自己跑到 ✔ CHAIN DONE。没有编排器，没有单元互相寻址，全部协调都是对事实流的读者折叠。
+
+详见 [`ant/`](ant)（DCU 运行时、dev-chain、证据裁决、看板）。此外，任何支持 MCP 的 agent（Claude Code、Cursor……）也可以接入总线获得 publish/claim/resolve 工具——参见[通过 MCP 接入](#通过-mcp-接入)。
 
 **从源码运行**（开发用）：
 
@@ -402,6 +408,7 @@ antlegion-platform/
 ├── README.zh-CN.md         ← 你在这里
 ├── PROTOCOL.md             ← 线协议规范——§3 折叠规则为规范性
 ├── Dockerfile              ← docker build . && docker run -p 28090:28090 …
+├── ant/                    ← @antlegion/ant——DCU 运行时 + dev-chain 舰队 + 看板
 ├── docs/
 │   ├── QUICKSTART.md       ← 逐步指南：服务端 + SDK + CLI + MCP
 │   └── EVOLUTION.md        ← v0 → v1 → v2：尝试过什么、为何改变
@@ -450,7 +457,9 @@ antlegion-platform/
 ### 路线图
 
 - [x] 发布 npm 包——[`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus)（`npx @antlegion/bus` 一行起总线）
-- [ ] [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant)——常驻自治工作单元（`ant init` / `ant start`）；包名已占位，运行时正从 [`ecu/`](ecu) 打包
+- [x] [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant)——DCU 运行时 + dev-chain 六单元舰队 + 监督看板（`npx @antlegion/ant chain`）
+- [ ] `ant init` / `ant start`——问答式引导 + 常驻守护（0.2）
+- [ ] 真实 worker：act 步骤挂接 LLM 会话（协调留在确定性代码，LLM 只干活）
 - [ ] 多语言客户端 SDK——Go、Python、Rust（一致性向量已就绪，可直接对齐）
 - [ ] 面向公网的鉴权 + 每作者速率限制
 - [ ] 复制 / 高可用（协议设计：单写者 + 故障切换，见 PROTOCOL.md §7）

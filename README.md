@@ -66,25 +66,31 @@ This is not aspirational. It is [validated by runnable multi-agent swarms](#vali
 
 **Requires Node.js ≥ 20**
 
-**Stage 1 — boot a bus** (five seconds, zero config):
+The main path is two packages and four commands: boot a bus, put a DCU fleet on it, feed it a requirement, and watch it run autonomously.
+
+**1. Boot a bus** (five seconds, zero config):
 
 ```bash
 npx @antlegion/bus
 # [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
-
-curl http://localhost:28090/health
-# {"status":"ok","protocol":"2.0","head_seq":0}
 ```
 
-**Stage 2 — give your agents fact-bus tools** (Claude Code, Cursor, Cline, … — anything MCP-capable):
+**2. Start the DCU fleet** ([`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — the dev-chain: 4 stage DCUs + adjudicator + watchdog):
 
 ```bash
-claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp
+npx @antlegion/ant chain
 ```
 
-Two agents connected this way coordinate through the fact stream alone: one publishes `task.todo` facts, the other claims and resolves them — exactly-once, no orchestrator. See [Connect via MCP](#connect-via-mcp).
+**3. Feed it a requirement and watch the chain run**:
 
-**Stage 3 — resident autonomous workers**: [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — install a worker ant, tell it what facts to watch, and it wakes up, claims, works, resolves. *(pre-release — the runtime is being packaged from [`ecu/`](ecu))*
+```bash
+npx @antlegion/ant req new "pilot requirement" -s pilot
+npx @antlegion/ant board      # supervision board → http://localhost:28091/devchain.html
+```
+
+Within ~2s `dcu-plan` claims the requirement (exactly-once, lowest seq wins), produces `plan.ready`, the adjudicator checks its evidence shape, and the chain parks at the H1 human gate — approve it on the board and dev → unittest → e2e run themselves to ✔ CHAIN DONE. No orchestrator, no unit addressing another; all coordination is reader folds over the fact stream.
+
+See [`ant/`](ant) for the DCU runtime, dev-chain, evidence adjudication, and boards. Additionally, any MCP-capable agent (Claude Code, Cursor, …) can connect to the bus for publish/claim/resolve tools — see [Connect via MCP](#connect-via-mcp).
 
 **From source** (development):
 
@@ -403,6 +409,7 @@ antlegion-platform/
 ├── README.md               ← you are here (每份文档都有 .zh-CN.md 中文版)
 ├── PROTOCOL.md             ← wire protocol spec — §3 fold rules are normative
 ├── Dockerfile              ← docker build . && docker run -p 28090:28090 …
+├── ant/                    ← @antlegion/ant — DCU runtime + dev-chain fleet + boards
 ├── docs/
 │   ├── QUICKSTART.md       ← step-by-step: server + SDK + CLI + MCP
 │   └── EVOLUTION.md        ← v0 → v1 → v2: what was tried and why it changed
@@ -451,7 +458,9 @@ antlegion-platform/
 ### Roadmap
 
 - [x] Published npm package — [`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus) (`npx @antlegion/bus` boots a bus)
-- [ ] [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — resident autonomous worker units (`ant init` / `ant start`); name reserved, runtime being packaged from [`ecu/`](ecu)
+- [x] [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — DCU runtime + dev-chain fleet + supervision board (`npx @antlegion/ant chain`)
+- [ ] `ant init` / `ant start` — guided setup + resident daemon (0.2)
+- [ ] Real workers: the act step spawns an LLM session (coordination stays in deterministic code; the LLM only does the work)
 - [ ] Multi-language client SDKs — Go, Python, Rust (conformance vectors are ready to test against)
 - [ ] Auth + per-author rate limiting for public-facing deployments
 - [ ] Replication / HA (protocol design: single-writer + failover; see PROTOCOL.md §7)

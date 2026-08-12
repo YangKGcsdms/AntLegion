@@ -11,8 +11,8 @@
  * from an empty journal (head < cursor) the mirror resets and `init` re-runs.
  */
 
-import { ClientV2, httpTransport } from "antlegion-bus/client";
-import type { Fact } from "antlegion-bus/types";
+import { ClientV2, httpTransport } from "@antlegion/bus/client";
+import type { Fact } from "@antlegion/bus/types";
 
 export interface DCUContext {
   client: ClientV2;

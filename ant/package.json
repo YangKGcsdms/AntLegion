@@ -1,15 +1,28 @@
 {
   "name": "@antlegion/ant",
-  "version": "0.0.1",
-  "description": "Autonomous worker ants (DCUs) for the AntLegion fact bus — install one, tell it what facts to watch, and it wakes up and works. Pre-release name reservation; the runtime lands here next.",
+  "version": "0.1.0",
+  "description": "Autonomous DCUs (Domain Control Units) on the AntLegion fact bus — a fleet of resident work units that poll the totally-ordered fact stream, claim work exactly-once, act, and resolve with evidence. Ships the dev-chain demo fleet + supervision board.",
   "type": "module",
+  "main": "dist/main.js",
   "bin": {
-    "ant": "cli.js"
+    "ant": "dist/main.js"
   },
   "files": [
-    "cli.js",
+    "dist",
+    "board.html",
+    "devchain.html",
     "README.md"
   ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "chain": "tsx src/main.ts chain",
+    "ingestor": "tsx src/main.ts ingestor",
+    "board": "tsx src/main.ts board",
+    "req": "tsx src/main.ts req",
+    "prepublishOnly": "npm run build && npm test"
+  },
   "keywords": [
     "agents",
     "multi-agent",
@@ -19,6 +32,7 @@
     "fact-bus",
     "blackboard",
     "stigmergy",
+    "dcu",
     "worker",
     "daemon",
     "antlegion"
@@ -39,5 +53,14 @@
     "access": "public"
   },
   "author": "Carter.Yang",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@antlegion/bus": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
 }

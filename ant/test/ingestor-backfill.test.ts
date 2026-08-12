@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AppendResult, FactInput } from "antlegion-bus/types";
+import type { AppendResult, FactInput } from "@antlegion/bus/types";
 import {
   scanWorkspace, backfill, reqPayloadFromEnv, reqFactTs, newKnownState,
   parseReqDirName, stampToUnix, createdToUnix,
@@ -99,7 +99,7 @@ describe("scanWorkspace (fixtures)", () => {
       branch: "feature/test-req-alpha", projects: ["workflow-oa", "workflow"],
       ports: { backend: 21001, workflow: 21002, ui: 21003, llm: 21004, debug: 21005 },
     });
-    expect(alpha.input.author).toBe("ingestor-req@ecu");
+    expect(alpha.input.author).toBe("ingestor-req@ant");
     expect(alpha.input.refs).toEqual({ subject: "test-req-alpha" });
     // deterministic ts: CREATED, not wall clock
     expect(alpha.input.ts).toBe(createdToUnix("2026-07-01 09:00"));

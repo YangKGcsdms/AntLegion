@@ -17,7 +17,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { httpTransport } from "antlegion-bus/client";
+import { httpTransport } from "@antlegion/bus/client";
 import type { DCUContext, DCUSpec } from "../runtime.js";
 import { findExistingBySlug } from "../req-new.js";
 import { watchdogDCU } from "./watchdog-dcu.js";

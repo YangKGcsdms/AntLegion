@@ -21,7 +21,7 @@
  * exactly one fact.
  */
 
-import type { Fact } from "antlegion-bus/types";
+import type { Fact } from "@antlegion/bus/types";
 import type { ReqChainView } from "./devchain.js";
 import { EVIDENCE_REJECTED } from "./devchain.js";
 

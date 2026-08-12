@@ -28,11 +28,11 @@
 import { promises as fs, type Dirent } from "node:fs";
 import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
-import type { AppendResult, FactInput } from "antlegion-bus/types";
+import type { AppendResult, FactInput } from "@antlegion/bus/types";
 
 export const REQ_REGISTERED = "req.registered";
 export const DOC_UPDATED = "doc.updated";
-export const AUTHOR = "ingestor-req@ecu";
+export const AUTHOR = "ingestor-req@ant";
 
 /** Minimal publish surface — satisfied by the bus HTTP transport. */
 export interface Publisher {

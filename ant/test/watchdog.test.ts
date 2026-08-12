@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Fact } from "antlegion-bus/types";
+import type { Fact } from "@antlegion/bus/types";
 import { foldDevchain } from "../src/folds/devchain.js";
 import {
   alreadyReported, detectEscalations, detectOrphanRejections, detectStarved,
@@ -24,7 +24,7 @@ function fact(partial: Partial<Fact> & { type: string; author: string }): Fact {
 const FOLD_NOW = { now: 1000, claimTimeout: 600 };
 
 const reqFact = () => fact({
-  type: "req.registered", author: "ingestor-req@ecu", id: "REQ",
+  type: "req.registered", author: "ingestor-req@ant", id: "REQ",
   payload: { slug: "demo", name: "演示需求", origin: "dcu" },
   refs: { subject: "demo" },
 });

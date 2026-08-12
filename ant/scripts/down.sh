@@ -3,8 +3,8 @@
 # children (tsx spawns a node child), leaves no orphans.
 set -uo pipefail
 
-ECU_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUN_DIR="$ECU_DIR/.run"
+ANT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUN_DIR="$ANT_DIR/.run"
 
 kill_tree() {
   local pid="$1" name="$2"

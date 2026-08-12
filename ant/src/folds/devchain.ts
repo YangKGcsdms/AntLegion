@@ -20,8 +20,8 @@
  * chain state from the same stream.
  */
 
-import type { Fact } from "antlegion-bus/types";
-import { lifecycle, type FoldOpts } from "antlegion-bus/fold";
+import type { Fact } from "@antlegion/bus/types";
+import { lifecycle, type FoldOpts } from "@antlegion/bus/fold";
 
 // ── fact types ──
 export const PLAN_READY = "plan.ready";

@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppendResult, FactInput } from "antlegion-bus/types";
+import type { AppendResult, FactInput } from "@antlegion/bus/types";
 import {
   buildDcuManifest, deriveSlug, stampOf, createdOf, findExistingBySlug,
   reqNewFact, createRequirement, REQ_NEW_AUTHOR,

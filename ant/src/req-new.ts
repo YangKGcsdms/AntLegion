@@ -15,7 +15,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { FactInput } from "antlegion-bus/types";
+import type { FactInput } from "@antlegion/bus/types";
 import { REQ_REGISTERED, AUTHOR, parseOawsEnv, parseReqDirName, createdToUnix } from "./dcus/ingestor-req.js";
 
 /**

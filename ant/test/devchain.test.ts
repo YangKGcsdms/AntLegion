@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Fact } from "antlegion-bus/types";
+import type { Fact } from "@antlegion/bus/types";
 import {
   DEVCHAIN, EVIDENCE_ACCEPTED, EVIDENCE_REJECTED, GATE_APPROVED,
   foldDevchain, pendingAdjudications,
@@ -23,7 +23,7 @@ function fact(partial: Partial<Fact> & { type: string; author: string }): Fact {
 const NOW = { now: 1000, claimTimeout: 600 }; // recv ≈ 1000+seq → nothing expires
 
 const reqFact = () => fact({
-  type: "req.registered", author: "ingestor-req@ecu", id: "REQ",
+  type: "req.registered", author: "ingestor-req@ant", id: "REQ",
   payload: { slug: "demo", name: "演示需求", origin: "dcu" },
   refs: { subject: "demo" },
 });

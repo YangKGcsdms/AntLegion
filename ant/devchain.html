@@ -578,7 +578,7 @@ function renderChains(views) {
   const cbox = $("chains");
   $("chain-count").textContent = views.length ? `(${views.length})` : "";
   if (!views.length) {
-    cbox.innerHTML = '<div class="empty">waiting for req.registered facts — cd ecu && npx tsx src/main.ts req new "<名称>" -s slug</div>';
+    cbox.innerHTML = '<div class="empty">waiting for req.registered facts — ant req new "<名称>" -s slug</div>';
     return;
   }
   cbox.innerHTML = "";

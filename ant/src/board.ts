@@ -1,11 +1,11 @@
 /**
- * board.ts — tiny static file server for ecu/board.html. Zero deps (node:http).
+ * board.ts — tiny static file server for the package's board.html. Zero deps (node:http).
  */
 
 import { createServer } from "node:http";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { ECU_ROOT } from "./config.js";
+import { PKG_ROOT } from "./config.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -23,8 +23,8 @@ export function createBoardServer(busUrl: string, port: number) {
         const url = new URL(req.url ?? "/", "http://localhost");
         let rel = decodeURIComponent(url.pathname);
         if (rel === "/" || rel === "") rel = "/board.html";
-        const file = path.normalize(path.join(ECU_ROOT, rel));
-        if (!file.startsWith(ECU_ROOT)) {
+        const file = path.normalize(path.join(PKG_ROOT, rel));
+        if (!file.startsWith(PKG_ROOT)) {
           res.writeHead(403).end("forbidden");
           return;
         }
