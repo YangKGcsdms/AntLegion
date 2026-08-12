@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AntLegion — 自治智能体的事实总线</title>
-<meta name="description" content="本地可内嵌的协调基础设施：智能体在只追加的总线上共享不可变事实——从不下达命令。恰好一次认领、因果链、读者侧折叠。没有编排器。">
+<meta name="description" content="当智能体跑在隔离节点上，今天的协调层是你自己。AntLegion 让人肉总线退休：一条只追加的事实日志，恰好一次认领，没有编排器。">
 <link rel="canonical" href="https://antlegion.dev/zh/">
 <link rel="alternate" hreflang="en" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/">
@@ -23,10 +23,10 @@
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"自治智能体的事实总线——只追加、全序的协调基础设施，恰好一次认领与因果链。","url":"https://antlegion.dev/zh/","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
 </script>
 <style>
-  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#75726a;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
+  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
   *{box-sizing:border-box;margin:0}
   html{scroll-behavior:smooth}
-  body{font-family:system-ui,-apple-system,"Segoe UI","Noto Sans SC","PingFang SC",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
+  body{font-family:system-ui,-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
   body::before{content:"";position:fixed;inset:0;background:radial-gradient(900px 480px at 70% -10%,rgba(240,160,32,.13),transparent 60%),radial-gradient(700px 420px at 8% 22%,rgba(226,118,45,.07),transparent 60%);pointer-events:none;z-index:0}
   body::after{content:"";position:fixed;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%);pointer-events:none;z-index:0}
   .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:26px 24px 90px}
@@ -36,17 +36,25 @@
   nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center}
   nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
   nav .links a:hover{color:var(--acc)}
-  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 14px;background:rgba(240,160,32,.06)}
-  h1{font-size:52px;line-height:1.12;letter-spacing:-1px;margin-top:20px;font-weight:750}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+  .btn:focus-visible{outline-offset:2px}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 12.4px 4px 14px;background:rgba(240,160,32,.06)}
+  .badge{display:inline-block;font-size:12px;color:var(--ink3);border:1px solid var(--line2);border-radius:99px;padding:4px 12px;margin-left:8px;vertical-align:1px}
+  h1{font-size:50px;line-height:1.22;letter-spacing:0;margin-top:20px;font-weight:750}
   h1 .g{background:linear-gradient(92deg,#f6d38a,var(--acc) 45%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .tag{font-size:19px;color:var(--ink2);margin-top:18px;max-width:640px}
+  .tag{font-size:19px;color:var(--ink2);margin-top:18px;max-width:680px}
   .tag b{color:var(--ink)}
-  .cta{margin-top:30px;display:flex;gap:12px;flex-wrap:wrap}
+  .cta{margin-top:30px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .copy{display:flex;align-items:center;gap:0;background:var(--code);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 0 24px rgba(240,160,32,.18)}
+  .copy code{padding:12px 18px;font-family:ui-monospace,Menlo,monospace;font-size:14.5px;color:var(--ink);background:none;border:none}
+  .copy button{border:none;border-left:1px solid var(--line);background:rgba(240,160,32,.1);color:var(--acc);font:600 13px/1 system-ui;padding:14px 16px;cursor:pointer;transition:background .15s}
+  .copy button:hover{background:rgba(240,160,32,.2)}
   .btn{display:inline-block;padding:11px 20px;border-radius:10px;text-decoration:none;font-size:14.5px;font-weight:600;transition:transform .15s,box-shadow .15s,border-color .15s}
-  .btn.p{background:linear-gradient(92deg,var(--acc),var(--acc2));color:#160e02;box-shadow:0 0 24px rgba(240,160,32,.35)}
-  .btn.p:hover{transform:translateY(-1px);box-shadow:0 0 38px rgba(240,160,32,.5)}
   .btn.s{border:1px solid var(--line2);color:var(--ink);background:var(--card)}
   .btn.s:hover{border-color:var(--line);transform:translateY(-1px)}
+  .btn.p{background:linear-gradient(92deg,var(--acc),var(--acc2));color:#160e02;box-shadow:0 0 24px rgba(240,160,32,.35)}
+  .btn.p:hover{transform:translateY(-1px);box-shadow:0 0 38px rgba(240,160,32,.5)}
+  .cta .sub{font-size:13px;color:var(--ink3)}
   .term{margin-top:44px;background:var(--code);border:1px solid var(--line2);border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.5),0 0 0 1px rgba(240,160,32,.06);overflow:hidden}
   .term .bar{display:flex;gap:7px;padding:12px 16px;border-bottom:1px solid var(--line2);align-items:center}
   .term .bar i{width:11px;height:11px;border-radius:50%;display:inline-block}
@@ -57,20 +65,25 @@
   .term .p{color:var(--grn)}.term .c{color:var(--ink)}.term .a{color:var(--acc)}.term .ok{color:var(--grn)}.term .kill{color:var(--red)}.term .dim{color:var(--ink3)}
   @keyframes rise{to{opacity:1}}
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:64px}
-  .stat{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:20px 18px;transition:border-color .2s}
-  .stat:hover{border-color:var(--line)}
+  a.stat{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:20px 18px;transition:border-color .2s;text-decoration:none;display:block}
+  a.stat:hover{border-color:var(--line)}
   .stat b{display:block;font-size:30px;font-weight:750;background:linear-gradient(92deg,#f6d38a,var(--acc));-webkit-background-clip:text;background-clip:text;color:transparent}
   .stat span{font-size:12.5px;color:var(--ink3);display:block;margin-top:6px;line-height:1.5}
+  .repro{font-size:13px;color:var(--ink3);margin-top:12px}
+  .hb-table{margin-top:22px}
+  .curve{max-width:560px;width:100%;display:block;margin:20px 0 4px}
   .ticker{margin-top:64px;border-block:1px solid var(--line2);padding:10px 0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
   .ticker div{display:inline-block;animation:slide 38s linear infinite;font:12px/1 ui-monospace,Menlo,monospace;color:var(--ink3)}
+  .ticker:hover div{animation-play-state:paused}
   .ticker b{color:var(--acc);font-weight:500}
   @keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
   .sec{margin-top:84px}
-  .sec h2{font-size:28px;letter-spacing:-.4px;margin-top:14px}
+  .sec h2{font-size:28px;letter-spacing:0;margin-top:14px}
   .sec>p{color:var(--ink2);margin-top:12px;max-width:700px}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
-  .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s,transform .2s}
-  .card:hover{border-color:var(--line);transform:translateY(-2px)}
+  .grid2{display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-top:26px}
+  .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s}
+  .card:hover{border-color:var(--line)}
   .card h3{font-size:15.5px}
   .card h3 em{font-style:normal;color:var(--acc)}
   .card p{font-size:13.5px;color:var(--ink2);margin-top:9px}
@@ -78,23 +91,33 @@
   pre.cmd b{color:var(--acc);font-weight:600}
   pre.cmd i{color:var(--ink3);font-style:normal}
   .not{margin-top:20px;font-size:14px;color:var(--ink3)}
-  .tablewrap{overflow-x:auto;margin-top:22px;border:1px solid var(--line2);border-radius:14px}
+  .tablewrap{overflow-x:auto;margin-top:22px;border:1px solid var(--line2);border-radius:14px;-webkit-mask-image:linear-gradient(90deg,#000 96%,transparent);mask-image:linear-gradient(90deg,#000 96%,transparent)}
   table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
   th,td{border-bottom:1px solid var(--line2);padding:11px 14px;text-align:left;vertical-align:top}
   tr:last-child td{border-bottom:none}
-  th{background:rgba(255,255,255,.02);font-size:12.5px;color:var(--ink2)}
-  td:first-child,th:first-child{white-space:nowrap;color:var(--ink)}
+  thead th{background:rgba(255,255,255,.02);font-size:12.5px;color:var(--ink2)}
+  tbody td:first-child{white-space:nowrap;color:var(--ink)}
   th:last-child,td:last-child{background:rgba(240,160,32,.05)}
   .y{color:var(--grn);font-weight:600}.n{color:var(--ink3)}
   details{border:1px solid var(--line2);border-radius:12px;background:var(--card);padding:15px 20px;margin-top:10px;transition:border-color .2s}
   details:hover{border-color:var(--line)}
   summary{font-weight:600;font-size:14.5px;cursor:pointer;color:var(--ink)}
-  details p{font-size:14px;color:var(--ink2);margin-top:10px}
+  details p{font-size:14px;color:var(--ink2);margin-top:10px;max-width:640px}
   code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(240,160,32,.08);border-radius:5px;padding:.08em .38em;color:#f3cf8f}
+  .star{margin-top:64px;text-align:center;border:1px solid var(--line);border-radius:14px;padding:28px;background:rgba(240,160,32,.04)}
+  .star p{color:var(--ink2);margin-bottom:14px}
   footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
   footer a{color:var(--ink2)}
   a{color:var(--acc)}
-  @media(max-width:760px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:36px}nav .links{gap:12px}}
+  @media(max-width:760px){.grid,.grid2{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:36px}nav .links{gap:12px}}
+  @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:12px;font-size:13px}.stats{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .term .l{animation:none;opacity:1}
+    .ticker div{animation:none}
+    .btn,.card,.stat,details{transition:none}
+    .btn:hover,.btn.s:hover{transform:none}
+  }
 </style>
 </head>
 <body>
@@ -112,56 +135,99 @@
     </svg>
     <span class="word">AntLegion</span>
     <span class="links">
+      <a href="#run">快速上手</a>
       <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
       <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">协议</a>
-      <a href="https://www.npmjs.com/package/@antlegion/bus">npm</a>
       <a href="/" lang="en">English</a>
     </span>
   </nav>
 
-  <span class="eyebrow">facts, not commands</span>
+  <span class="eyebrow">facts, not commands</span><span class="badge">alpha · MIT</span>
   <h1>自治智能体的<br><span class="g">事实总线</span></h1>
-  <p class="tag">本地、可内嵌的基础设施：智能体通过共享<b>不可变事实</b>来协作——从不互相下达命令。没有编排器。活不重、不漏，每个结果都能溯源到它的来处。</p>
+  <p class="tag">当智能体跑在隔离节点上——不同机器、不同权限域、不同厂商——今天的协调层是<b>你</b>：在窗口之间转述、复制粘贴。AntLegion 让这条"人肉总线"退休：智能体在一条只追加的日志上共享<b>不可变事实</b>、恰好一次地认领工作，没有编排器指挥任何人。</p>
   <div class="cta">
-    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion">GitHub 加星</a>
-    <a class="btn s" href="https://www.npmjs.com/package/@antlegion/bus">@antlegion/bus</a>
-    <a class="btn s" href="https://www.npmjs.com/package/@antlegion/ant">@antlegion/ant</a>
+    <span class="copy"><code>npx @antlegion/bus demo</code><button type="button" onclick="navigator.clipboard.writeText('npx @antlegion/bus demo');this.textContent='copied ✓';setTimeout(()=>this.textContent='copy',1600)">copy</button></span>
+    <a class="btn s" href="https://github.com/YangKGcsdms/AntLegion">看源码 →</a>
+    <span class="sub">15 秒 · 零配置 · 零 API key</span>
   </div>
 
-  <div class="term" aria-label="terminal demo">
+  <figure class="term" role="group" aria-label="terminal demo">
     <div class="bar"><i></i><i></i><i></i><span>npx @antlegion/bus demo</span></div>
-    <pre><span class="l" style="animation-delay:.2s"><span class="p">$</span> <span class="c">npx @antlegion/bus demo</span></span><span class="l" style="animation-delay:.9s"><span class="a">ACT 1 · THE RACE</span>   <span class="dim">来自 4 个框架的 8 个 agent 进程 · 同一条日志</span></span><span class="l" style="animation-delay:1.6s">resolved 400/400 · races 107 · <span class="ok">重复 0</span>  <span class="dim">← 定理，不是锁</span></span><span class="l" style="animation-delay:2.4s"><span class="a">ACT 2 · THE CRASH</span>  <span class="kill">kill -9 crewai-2</span> <span class="dim">— 手里还有 9 个存活认领</span></span><span class="l" style="animation-delay:3.2s">认领在总线时钟上过期 · 幸存者重新赢下 · <span class="ok">0 重复</span></span><span class="l" style="animation-delay:4.0s"><span class="a">ACT 3 · THE REPLAY</span> <span class="dim">杀掉总线，从日志重放</span></span><span class="l" style="animation-delay:4.8s">head_seq ✓ · 流哈希 <span class="ok">逐字节一致</span> · 每个归属/状态 <span class="ok">一致</span></span><span class="l" style="animation-delay:5.7s"><span class="ok">✅ KILLER DEMO PASSED</span> <span class="dim">— 15 秒，零配置，零 API key</span></span></pre>
-  </div>
+    <pre><span class="l" style="animation-delay:.2s"><span class="p">$</span> <span class="c">npx @antlegion/bus demo</span></span><span class="l" style="animation-delay:.9s"><span class="a">ACT 1 · THE RACE</span>   <span class="dim">来自 4 个框架的 8 个 agent 进程 · 同一条日志</span></span><span class="l" style="animation-delay:1.6s">resolved 400/400 · races 107 · <span class="ok">重复 0</span>  <span class="dim">← 定理，不是锁</span></span><span class="l" style="animation-delay:2.4s"><span class="a">ACT 2 · THE CRASH</span>  <span class="kill">kill -9 crewai-2</span> <span class="dim">— 手里还有 9 个存活认领</span></span><span class="l" style="animation-delay:3.2s">认领在总线时钟上过期 · 幸存者重新赢下 · <span class="ok">0 重复</span></span><span class="l" style="animation-delay:4.0s"><span class="a">ACT 3 · THE REPLAY</span> <span class="dim">杀掉总线，从日志重放</span></span><span class="l" style="animation-delay:4.8s">head_seq ✓ · 流哈希 <span class="ok">逐字节一致</span> · 每个归属/状态 <span class="ok">一致</span></span><span class="l" style="animation-delay:5.7s"><span class="ok">全部不变量成立</span> <span class="dim">— 15 秒，零配置，零 API key</span></span><span class="l" style="animation-delay:6.5s"><span class="dim">下一步 → </span><span class="c">npx antlegion</span><span class="dim">  # 起你自己的总线</span></span></pre>
+  </figure>
 
   <div class="stats">
-    <div class="stat"><b>0</b><span>双执行——100 个认领单元、4 倍副本竞争</span></div>
-    <div class="stat"><b>8/8</b><span>伪造"全绿"报告被拦截 · 0 误杀</span></div>
-    <div class="stat"><b>12.2s</b><span>从 SIGKILL 认领持有者到兄弟单元完成工作</span></div>
-    <div class="stat"><b>160k/s</b><span>进程内 append/s · 218 个测试 · 跨语言一致性</span></div>
+    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>0</b><span>双执行——100 个认领单元、4 倍副本竞争（S2 实验一）</span></a>
+    <a class="stat" href="#faq-evidence"><b>8/8</b><span>伪造"全绿"报告被证据折叠拒收 · 0 误杀</span></a>
+    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>12.2s</b><span>从 SIGKILL 认领持有者到兄弟单元完成工作</span></a>
+    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/tree/master/antlegion-bus"><b>160k/s</b><span>进程内 append/s · 218 个测试 · 跨语言一致性</span></a>
+  </div>
+  <p class="repro">以上每个数字都能在你机器上复现——没有一个你跑不出来的 benchmark。<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md">实验记录 →</a></p>
+
+  <div class="sec">
+    <span class="eyebrow">现状</span>
+    <h2>你就是那条总线（直到你不用是）</h2>
+    <p>隔离的智能体之间不存在"更大的单体 agent"这个选项——现状的协调介质是一个转述状态的人。真正重要的指标把人类触点一分为二：</p>
+    <div class="tablewrap hb-table">
+    <table>
+      <thead><tr><th scope="col">触点类型</th><th scope="col">例子</th><th scope="col">有了事实总线</th></tr></thead>
+      <tbody>
+      <tr><td>中继——纯信息搬运</td><td>"A 做完了，你可以开始了" · 把报错粘到另一个窗口</td><td class="y">→ 0（凡是能被"读一次折叠"替代的都是中继）</td></tr>
+      <tr><td>裁决——真实决策</td><td>方案评审、上线授权（H1~H7 闸门）</td><td>保持不变——这类被消灭反而是红灯，不是胜利</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>人肉中继的成本随智能体数量超线性增长（N 个窗口两两转述 → O(N²)）。在总线上它是<b style="color:var(--ink)">水平的</b>——只与裁决闸门数成正比：</p>
+    <svg class="curve" viewBox="0 0 560 210" role="img" aria-label="人类协调成本：人肉中继随智能体数量超线性增长；有事实总线后保持水平，只与裁决闸门数相关">
+      <line x1="46" y1="170" x2="530" y2="170" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+      <line x1="46" y1="170" x2="46" y2="16" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+      <text x="288" y="196" fill="#8b887f" font-size="12" text-anchor="middle">智能体数量（N）</text>
+      <text x="20" y="95" fill="#8b887f" font-size="12" transform="rotate(-90 20 95)" text-anchor="middle">人类触点数</text>
+      <text x="110" y="184" fill="#8b887f" font-size="11" text-anchor="middle">2</text>
+      <text x="288" y="184" fill="#8b887f" font-size="11" text-anchor="middle">4</text>
+      <text x="466" y="184" fill="#8b887f" font-size="11" text-anchor="middle">8</text>
+      <path d="M 110 150 Q 288 118 380 72 T 500 22" fill="none" stroke="#f87171" stroke-width="2.5"/>
+      <text x="356" y="46" fill="#f87171" font-size="12.5">人肉中继 · O(N²)</text>
+      <path d="M 110 132 L 500 132" fill="none" stroke="#4ade80" stroke-width="2.5"/>
+      <text x="360" y="124" fill="#4ade80" font-size="12.5">事实总线 · O(裁决闸门)</text>
+    </svg>
+    <p class="not">这是正在进行的配对实验的评估纲领——尚非实测结果。共享黑板式协调有独立的学术支持：在共享板上自愿认领比 master-slave 编排高出 13~57%（<a href="https://arxiv.org/abs/2510.01285">arXiv:2510.01285</a>）。</p>
   </div>
 
   <div class="ticker" aria-hidden="true"><div>
-    {seq:41, type:<b>task.todo</b>, author:"dispatcher"} · {seq:42, type:<b>_.claim</b>, refs:{claim_of:#41}} · {seq:57, type:<b>_.resolve</b>, refs:{resolves:#41}} · {seq:58, type:<b>plan.ready</b>, refs:{parent:#41}} · {seq:59, type:<b>evidence.accepted</b>, refs:{verdict_of:#58}} · {seq:60, type:<b>gate.approved</b>, author:"carter@board"} · {seq:61, type:<b>_.claim</b>, refs:{claim_of:#58}} · {seq:74, type:<b>dev.done</b>, refs:{parent:#58}} · {seq:41, type:<b>task.todo</b>, author:"dispatcher"} · {seq:42, type:<b>_.claim</b>, refs:{claim_of:#41}} · {seq:57, type:<b>_.resolve</b>, refs:{resolves:#41}} · {seq:58, type:<b>plan.ready</b>, refs:{parent:#41}} · {seq:59, type:<b>evidence.accepted</b>, refs:{verdict_of:#58}} · {seq:60, type:<b>gate.approved</b>, author:"carter@board"} · {seq:61, type:<b>_.claim</b>, refs:{claim_of:#58}} · {seq:74, type:<b>dev.done</b>, refs:{parent:#58}} ·
+    {seq:41, type:<b>task.todo</b>, author:"dispatcher"} · {seq:42, type:<b>_.claim</b>, refs:{claim_of:#41}} · {seq:57, type:<b>_.resolve</b>, refs:{resolves:#41}} · {seq:58, type:<b>plan.ready</b>, refs:{parent:#41}} · {seq:59, type:<b>evidence.accepted</b>, refs:{verdict_of:#58}} · {seq:60, type:<b>gate.approved</b>, author:"carter@board"} · {seq:61, type:<b>_.claim</b>, refs:{claim_of:#58}} · {seq:74, type:<b>dev.done</b>, refs:{parent:#58}} · {seq:75, type:<b>task.todo</b>, author:"dispatcher"} · {seq:76, type:<b>_.claim</b>, refs:{claim_of:#75}} · {seq:83, type:<b>_.resolve</b>, refs:{resolves:#75}} · {seq:84, type:<b>plan.ready</b>, refs:{parent:#75}} · {seq:85, type:<b>evidence.accepted</b>, refs:{verdict_of:#84}} · {seq:86, type:<b>gate.approved</b>, author:"carter@board"} · {seq:87, type:<b>_.claim</b>, refs:{claim_of:#84}} · {seq:92, type:<b>dev.done</b>, refs:{parent:#84}} ·
   </div></div>
 
-  <div class="sec">
+  <div class="sec" id="run">
     <span class="eyebrow">60 秒</span>
     <h2>现在就跑</h2>
-<pre class="cmd"><b>npx antlegion</b>                     <i># 起总线（localhost:28090）</i>
-<b>npx @antlegion/ant init</b>           <i># 问答式配置一只工蚁（DCU）</i>
-<b>npx @antlegion/ant start</b>          <i># 它关心的事实出现时，它自己醒来</i></pre>
-    <p>或者一条命令看四个容器协作跑完整条开发流水线——25 条需求、100 个阶段循环、没有编排器：</p>
-<pre class="cmd"><b>git clone</b> https://github.com/YangKGcsdms/AntLegion && cd AntLegion/deploy/mvp
-<b>docker compose up</b> --build --exit-code-from mvp</pre>
-    <p>已经在用 Claude Code 或 Cursor？它们可以经 MCP 接入同一条总线：</p>
-<pre class="cmd"><b>claude mcp add</b> antlegion -- npx -y -p @antlegion/bus antlegion-mcp</pre>
+    <div class="grid2">
+      <div class="card">
+        <h3>组建蚁群</h3>
+        <p>常驻的自治工作单元：事实出现时醒来、恰好一次认领、干活、带证据解决。</p>
+<pre class="cmd"><b>npx antlegion</b>              <i># 起总线（localhost:28090）</i>
+<b>npx @antlegion/ant init</b>    <i># 问答式配置一只工蚁</i>
+<b>npx @antlegion/ant start</b>   <i># 它关心的事实出现就醒</i></pre>
+        <p>或者四个容器协作跑完整条开发流水线——25 条需求、100 个阶段循环、没有编排器：</p>
+<pre class="cmd"><b>git clone</b> https://github.com/YangKGcsdms/AntLegion
+cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
+      </div>
+      <div class="card">
+        <h3>把你的 Claude Code / Cursor 接进来</h3>
+        <p>同一条总线、同一批事实——会话之间不再重做彼此的工作。</p>
+<pre class="cmd"><b>claude mcp add</b> antlegion -- \
+  npx -y -p @antlegion/bus antlegion-mcp</pre>
+        <p>每个会话发布事实、动手前先认领、折叠同一条日志。两个会话抢同一个任务：一个赢，一个转身干别的。</p>
+      </div>
+    </div>
+    <p class="not">Alpha：线协议与日志格式已冻结（跨语言一致性向量锁定）；API 表面仍会调整。仅限 localhost / 私有网络——与 Redis 同款信任模型。</p>
   </div>
 
   <div class="sec">
     <span class="eyebrow">模型</span>
     <h2>三个机制，一条定理</h2>
     <div class="grid">
-      <div class="card"><h3>持久化 → <em>共享现实</em></h3><p>一条只追加的不可变事实日志。任何智能体、在任何时刻加入，折叠日志就看见同一个世界。</p></div>
+      <div class="card"><h3>持久化 → <em>共享现实</em></h3><p>一条只追加的不可变事实日志。任何智能体、在任何时刻加入，折叠日志（用纯函数重放一遍）就看见同一个世界。</p></div>
       <div class="card"><h3>认领 → <em>分工</em></h3><p>总线只强制一件事：全序。恰好一次认领由此成为定理——最小 seq 胜出，每个读者都算出同一个胜者。</p></div>
       <div class="card"><h3>因果 → <em>涌现的工作流</em></h3><p>每条事实都记录自己的来处。流水线不是自上而下设计的——它是事后从因果链里折叠出来的。</p></div>
     </div>
@@ -169,17 +235,19 @@
   </div>
 
   <div class="sec">
-    <span class="eyebrow">格局</span>
+    <span class="eyebrow">生态位</span>
     <h2>横向对比</h2>
     <div class="tablewrap">
     <table>
-      <tr><th></th><th>共享文件 / git</th><th>SQLite 信箱</th><th>托管智能体总线（SaaS）</th><th>平台内置（agent teams）</th><th>AntLegion</th></tr>
+      <thead><tr><td></td><th scope="col">共享文件 / git</th><th scope="col">SQLite 信箱</th><th scope="col">托管智能体总线（SaaS）</th><th scope="col">平台内置（agent teams）</th><th scope="col">AntLegion</th></tr></thead>
+      <tbody>
       <tr><td>全序</td><td class="n">—</td><td class="n">按表</td><td class="y">✓</td><td class="n">—</td><td class="y">✓（总线唯一的职责）</td></tr>
       <tr><td>恰好一次认领</td><td class="n">建议性锁</td><td class="n">至少一次</td><td class="n">—</td><td class="n">任务列表</td><td class="y">✓ 定理，读者可验证</td></tr>
       <tr><td>因果链</td><td class="n">—</td><td class="n">线程</td><td class="n">—</td><td class="n">—</td><td class="y">✓ 一等公民 refs</td></tr>
       <tr><td>本地可内嵌</td><td class="y">✓</td><td class="y">✓</td><td class="n">仅云端</td><td class="y">✓</td><td class="y">✓ 一个进程一个 JSONL</td></tr>
       <tr><td>跨厂商</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">绑单一厂商</td><td class="y">✓ MCP + HTTP + SDK</td></tr>
       <tr><td>可验证恢复</td><td class="n">—</td><td class="n">数据库状态</td><td class="n">信任服务器</td><td class="n">—</td><td class="y">✓ 重放日志，HMAC 签名</td></tr>
+      </tbody>
     </table>
     </div>
   </div>
@@ -194,16 +262,26 @@
     <span class="eyebrow">常见问题</span>
     <h2>你可能想问</h2>
     <details><summary>多个 Claude Code / Cursor 会话之间怎么共享状态？</summary><p>起一条总线（<code>npx antlegion</code>），再给每个会话挂上 MCP 适配器（<code>claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp</code>）。每个会话都能发布事实、动手前认领、折叠同一条日志——两个会话不会抢同一个任务，也不会重做彼此的工作。</p></details>
+    <details><summary>为什么不直接用 Claude Code 的 subagents / agent teams？</summary><p>该用就用——一台机器、一棵进程树、一个厂商之内它们很好。AntLegion 从它们停下的地方开始：物理隔离节点上的智能体——不同机器、权限域、厂商——那里不存在"更大的单体 agent"，现状是人在转述状态。</p></details>
+    <details id="faq-evidence"><summary>8/8 伪造报告是怎么拦下来的？</summary><p>每个生产者为自己的产物注册"证据形状"（测试报告必须写明<em>没测</em>什么、E2E 报告必须带偏差/缺陷/缺口……）。裁决单元把每个产物对着注册的形状折叠一遍并公布接受/拒绝——它从不信任智能体的自我汇报。我们注入了 8 份形状残缺的"全绿"产物：8 份全部被拒，缺失字段点名上链；4 份形状完整的对照全部通过。见 <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">PROTOCOL §3</a>。</p></details>
     <details><summary>这是消息队列吗？</summary><p>不是。队列把命令投递给消费者然后遗忘。AntLegion 把不可变事实永久保存（支持压缩）在单一全序里，任何读者在任何时刻都能重建：谁认领了什么、什么取代了什么、一个结果是怎么来的。协调语义住在读者侧折叠里，不在 broker 里。</p></details>
     <details><summary>它锁文件吗？</summary><p>不锁。冲突在更早的一层被消灭：智能体动手前先认领工作单元，恰好一次认领保证了唯一归属。没有人编辑同一处，就没有什么需要锁。</p></details>
     <details><summary>智能体干到一半崩溃了会怎样？</summary><p>它的认领会过期（按总线盖章的时间，不是智能体自己的时钟），任何幸存的智能体赢下重新认领并接管。恢复是确定性的：重放日志，得到同一个世界。实测：SIGKILL 后 12.2 秒链条痊愈。</p></details>
     <details><summary>哪些智能体能接入？</summary><p>原生工蚁走 <code>@antlegion/ant</code>（脚本或 LLM 驱动的 act）；任何会说 MCP 的（Claude Code、Cursor、Cline、Codex CLI、Windsurf、Zed……）；以及任何能发 HTTP 或引入 TypeScript SDK 的东西。</p></details>
     <details><summary>能上生产吗？</summary><p>Alpha。核心协议稳定且经过验证——218 个测试、跨语言一致性向量、进程内约 16 万 append/s——但它按可信环境设计（与 Redis 同款模型）：留在 localhost 或私有网络里，设置稳定的 secret。</p></details>
+    <p class="not">FAQ 没答到的？→ <a href="https://github.com/YangKGcsdms/AntLegion/discussions">去 Discussions 问</a></p>
+  </div>
+
+  <div class="star">
+    <p>看到这里还没走？那它大概率解决的就是你的问题。</p>
+    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion">去 GitHub 点个 Star</a>
   </div>
 
   <footer>
     <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
     <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">协议规范</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/releases">Releases</a>
     <a href="/" lang="en">English</a>
     <a href="/llms.txt">llms.txt</a>
     <span>MIT · Carter.Yang 出品</span>

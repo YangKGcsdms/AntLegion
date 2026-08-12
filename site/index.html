@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AntLegion — a fact bus for autonomous agents</title>
-<meta name="description" content="Local, embeddable coordination infrastructure: agents share immutable facts on an append-only bus — never commands. Exactly-once claiming, causal chains, reader-side folds. No orchestrator.">
+<meta name="description" content="When agents run on isolated nodes, the coordination layer today is you. AntLegion retires the human bus: agents share immutable facts on an append-only log, claim work exactly-once — no orchestrator.">
 <link rel="canonical" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="en" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/">
@@ -23,7 +23,7 @@
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"A fact bus for autonomous agents — append-only, totally-ordered coordination infrastructure with exactly-once claiming and causal chains.","url":"https://antlegion.dev","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
 </script>
 <style>
-  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#75726a;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
+  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
   *{box-sizing:border-box;margin:0}
   html{scroll-behavior:smooth}
   body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
@@ -36,17 +36,25 @@
   nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center}
   nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
   nav .links a:hover{color:var(--acc)}
-  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 14px;background:rgba(240,160,32,.06)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+  .btn:focus-visible{outline-offset:2px}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 12.4px 4px 14px;background:rgba(240,160,32,.06)}
+  .badge{display:inline-block;font-size:12px;color:var(--ink3);border:1px solid var(--line2);border-radius:99px;padding:4px 12px;margin-left:8px;vertical-align:1px}
   h1{font-size:52px;line-height:1.12;letter-spacing:-1px;margin-top:20px;font-weight:750}
   h1 .g{background:linear-gradient(92deg,#f6d38a,var(--acc) 45%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .tag{font-size:19px;color:var(--ink2);margin-top:18px;max-width:640px}
+  .tag{font-size:19px;color:var(--ink2);margin-top:18px;max-width:680px}
   .tag b{color:var(--ink)}
-  .cta{margin-top:30px;display:flex;gap:12px;flex-wrap:wrap}
+  .cta{margin-top:30px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .copy{display:flex;align-items:center;gap:0;background:var(--code);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 0 24px rgba(240,160,32,.18)}
+  .copy code{padding:12px 18px;font-family:ui-monospace,Menlo,monospace;font-size:14.5px;color:var(--ink);background:none;border:none}
+  .copy button{border:none;border-left:1px solid var(--line);background:rgba(240,160,32,.1);color:var(--acc);font:600 13px/1 system-ui;padding:14px 16px;cursor:pointer;transition:background .15s}
+  .copy button:hover{background:rgba(240,160,32,.2)}
   .btn{display:inline-block;padding:11px 20px;border-radius:10px;text-decoration:none;font-size:14.5px;font-weight:600;transition:transform .15s,box-shadow .15s,border-color .15s}
-  .btn.p{background:linear-gradient(92deg,var(--acc),var(--acc2));color:#160e02;box-shadow:0 0 24px rgba(240,160,32,.35)}
-  .btn.p:hover{transform:translateY(-1px);box-shadow:0 0 38px rgba(240,160,32,.5)}
   .btn.s{border:1px solid var(--line2);color:var(--ink);background:var(--card)}
   .btn.s:hover{border-color:var(--line);transform:translateY(-1px)}
+  .btn.p{background:linear-gradient(92deg,var(--acc),var(--acc2));color:#160e02;box-shadow:0 0 24px rgba(240,160,32,.35)}
+  .btn.p:hover{transform:translateY(-1px);box-shadow:0 0 38px rgba(240,160,32,.5)}
+  .cta .sub{font-size:13px;color:var(--ink3)}
   .term{margin-top:44px;background:var(--code);border:1px solid var(--line2);border-radius:14px;box-shadow:0 20px 70px rgba(0,0,0,.5),0 0 0 1px rgba(240,160,32,.06);overflow:hidden}
   .term .bar{display:flex;gap:7px;padding:12px 16px;border-bottom:1px solid var(--line2);align-items:center}
   .term .bar i{width:11px;height:11px;border-radius:50%;display:inline-block}
@@ -57,20 +65,25 @@
   .term .p{color:var(--grn)}.term .c{color:var(--ink)}.term .a{color:var(--acc)}.term .ok{color:var(--grn)}.term .kill{color:var(--red)}.term .dim{color:var(--ink3)}
   @keyframes rise{to{opacity:1}}
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:64px}
-  .stat{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:20px 18px;transition:border-color .2s}
-  .stat:hover{border-color:var(--line)}
+  a.stat{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:20px 18px;transition:border-color .2s;text-decoration:none;display:block}
+  a.stat:hover{border-color:var(--line)}
   .stat b{display:block;font-size:30px;font-weight:750;background:linear-gradient(92deg,#f6d38a,var(--acc));-webkit-background-clip:text;background-clip:text;color:transparent}
   .stat span{font-size:12.5px;color:var(--ink3);display:block;margin-top:6px;line-height:1.5}
+  .repro{font-size:13px;color:var(--ink3);margin-top:12px}
+  .hb-table{margin-top:22px}
+  .curve{max-width:560px;width:100%;display:block;margin:20px 0 4px}
   .ticker{margin-top:64px;border-block:1px solid var(--line2);padding:10px 0;overflow:hidden;white-space:nowrap;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
   .ticker div{display:inline-block;animation:slide 38s linear infinite;font:12px/1 ui-monospace,Menlo,monospace;color:var(--ink3)}
+  .ticker:hover div{animation-play-state:paused}
   .ticker b{color:var(--acc);font-weight:500}
   @keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
   .sec{margin-top:84px}
   .sec h2{font-size:28px;letter-spacing:-.4px;margin-top:14px}
   .sec>p{color:var(--ink2);margin-top:12px;max-width:700px}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
-  .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s,transform .2s}
-  .card:hover{border-color:var(--line);transform:translateY(-2px)}
+  .grid2{display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-top:26px}
+  .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s}
+  .card:hover{border-color:var(--line)}
   .card h3{font-size:15.5px}
   .card h3 em{font-style:normal;color:var(--acc)}
   .card p{font-size:13.5px;color:var(--ink2);margin-top:9px}
@@ -78,23 +91,33 @@
   pre.cmd b{color:var(--acc);font-weight:600}
   pre.cmd i{color:var(--ink3);font-style:normal}
   .not{margin-top:20px;font-size:14px;color:var(--ink3)}
-  .tablewrap{overflow-x:auto;margin-top:22px;border:1px solid var(--line2);border-radius:14px}
+  .tablewrap{overflow-x:auto;margin-top:22px;border:1px solid var(--line2);border-radius:14px;-webkit-mask-image:linear-gradient(90deg,#000 96%,transparent);mask-image:linear-gradient(90deg,#000 96%,transparent)}
   table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:640px}
   th,td{border-bottom:1px solid var(--line2);padding:11px 14px;text-align:left;vertical-align:top}
   tr:last-child td{border-bottom:none}
-  th{background:rgba(255,255,255,.02);font-size:12.5px;color:var(--ink2)}
-  td:first-child,th:first-child{white-space:nowrap;color:var(--ink)}
+  thead th{background:rgba(255,255,255,.02);font-size:12.5px;color:var(--ink2)}
+  tbody td:first-child{white-space:nowrap;color:var(--ink)}
   th:last-child,td:last-child{background:rgba(240,160,32,.05)}
   .y{color:var(--grn);font-weight:600}.n{color:var(--ink3)}
   details{border:1px solid var(--line2);border-radius:12px;background:var(--card);padding:15px 20px;margin-top:10px;transition:border-color .2s}
   details:hover{border-color:var(--line)}
   summary{font-weight:600;font-size:14.5px;cursor:pointer;color:var(--ink)}
-  details p{font-size:14px;color:var(--ink2);margin-top:10px}
+  details p{font-size:14px;color:var(--ink2);margin-top:10px;max-width:66ch}
   code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(240,160,32,.08);border-radius:5px;padding:.08em .38em;color:#f3cf8f}
+  .star{margin-top:64px;text-align:center;border:1px solid var(--line);border-radius:14px;padding:28px;background:rgba(240,160,32,.04)}
+  .star p{color:var(--ink2);margin-bottom:14px}
   footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
   footer a{color:var(--ink2)}
   a{color:var(--acc)}
-  @media(max-width:760px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:36px}nav .links{gap:12px}}
+  @media(max-width:760px){.grid,.grid2{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:36px}nav .links{gap:12px}}
+  @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:12px;font-size:13px}.stats{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    .term .l{animation:none;opacity:1}
+    .ticker div{animation:none}
+    .btn,.card,.stat,details{transition:none}
+    .btn:hover,.btn.s:hover{transform:none}
+  }
 </style>
 </head>
 <body>
@@ -112,56 +135,99 @@
     </svg>
     <span class="word">AntLegion</span>
     <span class="links">
+      <a href="#run">Quickstart</a>
       <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
       <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Protocol</a>
-      <a href="https://www.npmjs.com/package/@antlegion/bus">npm</a>
       <a href="/zh/" lang="zh-CN">中文</a>
     </span>
   </nav>
 
-  <span class="eyebrow">facts, not commands</span>
+  <span class="eyebrow">facts, not commands</span><span class="badge">alpha · MIT</span>
   <h1>A fact bus for<br><span class="g">autonomous agents</span></h1>
-  <p class="tag">Local, embeddable infrastructure where agents coordinate by sharing <b>immutable facts</b> — never by sending each other commands. No orchestrator. Work doesn't duplicate, doesn't drop, and every outcome traces back to its origin.</p>
+  <p class="tag">When your agents run on isolated nodes — different machines, permission domains, vendors — the coordination layer today is <b>you</b>, copy-pasting state between windows. AntLegion retires the human bus: agents share <b>immutable facts</b> on one append-only log, claim work exactly-once, and no orchestrator commands anybody.</p>
   <div class="cta">
-    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion">Star on GitHub</a>
-    <a class="btn s" href="https://www.npmjs.com/package/@antlegion/bus">@antlegion/bus</a>
-    <a class="btn s" href="https://www.npmjs.com/package/@antlegion/ant">@antlegion/ant</a>
+    <span class="copy"><code>npx @antlegion/bus demo</code><button type="button" onclick="navigator.clipboard.writeText('npx @antlegion/bus demo');this.textContent='copied ✓';setTimeout(()=>this.textContent='copy',1600)">copy</button></span>
+    <a class="btn s" href="https://github.com/YangKGcsdms/AntLegion">View source →</a>
+    <span class="sub">15 seconds · zero config · zero API key</span>
   </div>
 
-  <div class="term" aria-label="terminal demo">
+  <figure class="term" role="group" aria-label="terminal demo">
     <div class="bar"><i></i><i></i><i></i><span>npx @antlegion/bus demo</span></div>
-    <pre><span class="l" style="animation-delay:.2s"><span class="p">$</span> <span class="c">npx @antlegion/bus demo</span></span><span class="l" style="animation-delay:.9s"><span class="a">ACT 1 · THE RACE</span>   <span class="dim">8 agent processes from 4 frameworks · one log</span></span><span class="l" style="animation-delay:1.6s">resolved 400/400 · races 107 · <span class="ok">dupes 0</span>  <span class="dim">← a theorem, not a lock</span></span><span class="l" style="animation-delay:2.4s"><span class="a">ACT 2 · THE CRASH</span>  <span class="kill">kill -9 crewai-2</span> <span class="dim">— holding 9 live claims</span></span><span class="l" style="animation-delay:3.2s">claims expired on bus time · re-won by survivors · <span class="ok">0 duplicates</span></span><span class="l" style="animation-delay:4.0s"><span class="a">ACT 3 · THE REPLAY</span> <span class="dim">kill the bus, replay the journal</span></span><span class="l" style="animation-delay:4.8s">head_seq ✓ · stream sha256 <span class="ok">identical</span> · every owner/state <span class="ok">identical</span></span><span class="l" style="animation-delay:5.7s"><span class="ok">✅ KILLER DEMO PASSED</span> <span class="dim">— 15s, zero config, zero API key</span></span></pre>
-  </div>
+    <pre><span class="l" style="animation-delay:.2s"><span class="p">$</span> <span class="c">npx @antlegion/bus demo</span></span><span class="l" style="animation-delay:.9s"><span class="a">ACT 1 · THE RACE</span>   <span class="dim">8 agent processes from 4 frameworks · one log</span></span><span class="l" style="animation-delay:1.6s">resolved 400/400 · races 107 · <span class="ok">dupes 0</span>  <span class="dim">← a theorem, not a lock</span></span><span class="l" style="animation-delay:2.4s"><span class="a">ACT 2 · THE CRASH</span>  <span class="kill">kill -9 crewai-2</span> <span class="dim">— holding 9 live claims</span></span><span class="l" style="animation-delay:3.2s">claims expired on bus time · re-won by survivors · <span class="ok">0 duplicates</span></span><span class="l" style="animation-delay:4.0s"><span class="a">ACT 3 · THE REPLAY</span> <span class="dim">kill the bus, replay the journal</span></span><span class="l" style="animation-delay:4.8s">head_seq ✓ · stream sha256 <span class="ok">identical</span> · every owner/state <span class="ok">identical</span></span><span class="l" style="animation-delay:5.7s"><span class="ok">ALL INVARIANTS HELD</span> <span class="dim">— 15s, zero config, zero API key</span></span><span class="l" style="animation-delay:6.5s"><span class="dim">next → </span><span class="c">npx antlegion</span><span class="dim">  # start your own bus</span></span></pre>
+  </figure>
 
   <div class="stats">
-    <div class="stat"><b>0</b><span>double executions — 100 claim units, 4× replicated workers racing</span></div>
-    <div class="stat"><b>8/8</b><span>forged "all-green" reports intercepted · 0 false kills</span></div>
-    <div class="stat"><b>12.2s</b><span>from SIGKILL of a claim holder to a sibling finishing the work</span></div>
-    <div class="stat"><b>160k/s</b><span>appends in-process · 218 tests · cross-language conformance</span></div>
+    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>0</b><span>double executions — 100 claim units, 4× replicated workers racing (S2 exp 1)</span></a>
+    <a class="stat" href="#faq-evidence"><b>8/8</b><span>forged "all-green" reports rejected by evidence folds · 0 false kills</span></a>
+    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>12.2s</b><span>from SIGKILL of a claim holder to a sibling finishing the work</span></a>
+    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/tree/master/antlegion-bus"><b>160k/s</b><span>appends in-process · 218 tests · cross-language conformance</span></a>
+  </div>
+  <p class="repro">Every number above is reproducible on your machine — no benchmark you can't rerun. <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md">Experiment log →</a></p>
+
+  <div class="sec">
+    <span class="eyebrow">the incumbent</span>
+    <h2>You are the bus (until you aren't)</h2>
+    <p>Between isolated agents there is no "bigger single agent" alternative — the incumbent coordination medium is a human relaying state. The metric that matters splits human touchpoints in two:</p>
+    <div class="tablewrap hb-table">
+    <table>
+      <thead><tr><th scope="col">touchpoint kind</th><th scope="col">example</th><th scope="col">with a fact bus</th></tr></thead>
+      <tbody>
+      <tr><td>relay — pure information carriage</td><td>"A finished, you can start" · pasting an error into another window</td><td class="y">→ 0 (anything replaceable by "read one fold" is relay)</td></tr>
+      <tr><td>judgment — real decisions</td><td>plan review, release authorization (the H1–H7 gates)</td><td>unchanged — eliminating these would be a red flag, not a win</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>Human relay effort grows superlinearly with agent count (N windows, pairwise retelling → O(N²)). On the bus it stays <b style="color:var(--ink)">flat</b> — proportional to judgment gates only:</p>
+    <svg class="curve" viewBox="0 0 560 210" role="img" aria-label="Human coordination cost: human relay grows superlinearly with agent count; with the fact bus it stays flat at the number of judgment gates">
+      <line x1="46" y1="170" x2="530" y2="170" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+      <line x1="46" y1="170" x2="46" y2="16" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
+      <text x="288" y="196" fill="#8b887f" font-size="12" text-anchor="middle">agents (N)</text>
+      <text x="20" y="95" fill="#8b887f" font-size="12" transform="rotate(-90 20 95)" text-anchor="middle">human touchpoints</text>
+      <text x="110" y="184" fill="#8b887f" font-size="11" text-anchor="middle">2</text>
+      <text x="288" y="184" fill="#8b887f" font-size="11" text-anchor="middle">4</text>
+      <text x="466" y="184" fill="#8b887f" font-size="11" text-anchor="middle">8</text>
+      <path d="M 110 150 Q 288 118 380 72 T 500 22" fill="none" stroke="#f87171" stroke-width="2.5"/>
+      <text x="356" y="46" fill="#f87171" font-size="12.5">human relay · O(N²)</text>
+      <path d="M 110 132 L 500 132" fill="none" stroke="#4ade80" stroke-width="2.5"/>
+      <text x="360" y="124" fill="#4ade80" font-size="12.5">fact bus · O(judgment gates)</text>
+    </svg>
+    <p class="not">This is the evaluation charter for the paired experiment now in progress — not measured results yet. Shared-blackboard coordination has independent academic support: voluntary claiming over a shared board beat master-slave orchestration by 13–57% (<a href="https://arxiv.org/abs/2510.01285">arXiv:2510.01285</a>).</p>
   </div>
 
   <div class="ticker" aria-hidden="true"><div>
-    {seq:41, type:<b>task.todo</b>, author:"dispatcher"} · {seq:42, type:<b>_.claim</b>, refs:{claim_of:#41}} · {seq:57, type:<b>_.resolve</b>, refs:{resolves:#41}} · {seq:58, type:<b>plan.ready</b>, refs:{parent:#41}} · {seq:59, type:<b>evidence.accepted</b>, refs:{verdict_of:#58}} · {seq:60, type:<b>gate.approved</b>, author:"carter@board"} · {seq:61, type:<b>_.claim</b>, refs:{claim_of:#58}} · {seq:74, type:<b>dev.done</b>, refs:{parent:#58}} · {seq:41, type:<b>task.todo</b>, author:"dispatcher"} · {seq:42, type:<b>_.claim</b>, refs:{claim_of:#41}} · {seq:57, type:<b>_.resolve</b>, refs:{resolves:#41}} · {seq:58, type:<b>plan.ready</b>, refs:{parent:#41}} · {seq:59, type:<b>evidence.accepted</b>, refs:{verdict_of:#58}} · {seq:60, type:<b>gate.approved</b>, author:"carter@board"} · {seq:61, type:<b>_.claim</b>, refs:{claim_of:#58}} · {seq:74, type:<b>dev.done</b>, refs:{parent:#58}} ·
+    {seq:41, type:<b>task.todo</b>, author:"dispatcher"} · {seq:42, type:<b>_.claim</b>, refs:{claim_of:#41}} · {seq:57, type:<b>_.resolve</b>, refs:{resolves:#41}} · {seq:58, type:<b>plan.ready</b>, refs:{parent:#41}} · {seq:59, type:<b>evidence.accepted</b>, refs:{verdict_of:#58}} · {seq:60, type:<b>gate.approved</b>, author:"carter@board"} · {seq:61, type:<b>_.claim</b>, refs:{claim_of:#58}} · {seq:74, type:<b>dev.done</b>, refs:{parent:#58}} · {seq:75, type:<b>task.todo</b>, author:"dispatcher"} · {seq:76, type:<b>_.claim</b>, refs:{claim_of:#75}} · {seq:83, type:<b>_.resolve</b>, refs:{resolves:#75}} · {seq:84, type:<b>plan.ready</b>, refs:{parent:#75}} · {seq:85, type:<b>evidence.accepted</b>, refs:{verdict_of:#84}} · {seq:86, type:<b>gate.approved</b>, author:"carter@board"} · {seq:87, type:<b>_.claim</b>, refs:{claim_of:#84}} · {seq:92, type:<b>dev.done</b>, refs:{parent:#84}} ·
   </div></div>
 
-  <div class="sec">
+  <div class="sec" id="run">
     <span class="eyebrow">60 seconds</span>
     <h2>Run it now</h2>
-<pre class="cmd"><b>npx antlegion</b>                     <i># start the bus (localhost:28090)</i>
-<b>npx @antlegion/ant init</b>           <i># guided setup for a worker ant (DCU)</i>
-<b>npx @antlegion/ant start</b>          <i># it wakes up when facts it cares about appear</i></pre>
-    <p>Or watch four containers coordinate a full dev pipeline with one command — 25 requirements, 100 stage loops, no orchestrator:</p>
-<pre class="cmd"><b>git clone</b> https://github.com/YangKGcsdms/AntLegion && cd AntLegion/deploy/mvp
-<b>docker compose up</b> --build --exit-code-from mvp</pre>
-    <p>Already running Claude Code or Cursor? They can join the same bus, via MCP:</p>
-<pre class="cmd"><b>claude mcp add</b> antlegion -- npx -y -p @antlegion/bus antlegion-mcp</pre>
+    <div class="grid2">
+      <div class="card">
+        <h3>Build a fleet</h3>
+        <p>Resident autonomous workers that wake on facts, claim exactly-once, act, and resolve with evidence.</p>
+<pre class="cmd"><b>npx antlegion</b>              <i># start the bus (localhost:28090)</i>
+<b>npx @antlegion/ant init</b>    <i># guided setup for a worker ant</i>
+<b>npx @antlegion/ant start</b>   <i># wakes when its facts appear</i></pre>
+        <p>Or four containers coordinating a full dev pipeline — 25 requirements, 100 stage loops, no orchestrator:</p>
+<pre class="cmd"><b>git clone</b> https://github.com/YangKGcsdms/AntLegion
+cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
+      </div>
+      <div class="card">
+        <h3>Bring your Claude Code / Cursor sessions</h3>
+        <p>Same bus, same facts — sessions stop redoing each other's work.</p>
+<pre class="cmd"><b>claude mcp add</b> antlegion -- \
+  npx -y -p @antlegion/bus antlegion-mcp</pre>
+        <p>Each session publishes facts, claims before touching work, and folds the same log. Two sessions racing for one task: one wins, one moves on.</p>
+      </div>
+    </div>
+    <p class="not">Alpha: the wire protocol and log format are frozen (cross-language conformance vectors); the API surface may still move. Localhost / private network only — same trust model as Redis.</p>
   </div>
 
   <div class="sec">
     <span class="eyebrow">the model</span>
     <h2>Three mechanisms, one theorem</h2>
     <div class="grid">
-      <div class="card"><h3>Persistence → <em>shared reality</em></h3><p>An append-only log of immutable facts. Any agent, joining at any time, folds the log and sees the same world.</p></div>
+      <div class="card"><h3>Persistence → <em>shared reality</em></h3><p>An append-only log of immutable facts. Any agent, joining at any time, folds the log (replays it through a pure function) and sees the same world.</p></div>
       <div class="card"><h3>Claiming → <em>division of labor</em></h3><p>The bus enforces exactly one thing: total order. Exactly-once claiming falls out as a theorem — lowest seq wins, every reader computes the same winner.</p></div>
       <div class="card"><h3>Causation → <em>emergent workflow</em></h3><p>Every fact records its parents. Pipelines aren't designed top-down — they're folded out of the causal chain afterwards.</p></div>
     </div>
@@ -173,13 +239,15 @@
     <h2>How it compares</h2>
     <div class="tablewrap">
     <table>
-      <tr><th></th><th>Shared files / git</th><th>SQLite mailbox</th><th>Hosted agent bus (SaaS)</th><th>Platform built-in (agent teams)</th><th>AntLegion</th></tr>
+      <thead><tr><td></td><th scope="col">Shared files / git</th><th scope="col">SQLite mailbox</th><th scope="col">Hosted agent bus (SaaS)</th><th scope="col">Platform built-in (agent teams)</th><th scope="col">AntLegion</th></tr></thead>
+      <tbody>
       <tr><td>Total order</td><td class="n">—</td><td class="n">per-table</td><td class="y">✓</td><td class="n">—</td><td class="y">✓ (the bus's only job)</td></tr>
       <tr><td>Exactly-once claiming</td><td class="n">advisory locks</td><td class="n">at-least-once</td><td class="n">—</td><td class="n">task list</td><td class="y">✓ theorem, reader-verifiable</td></tr>
       <tr><td>Causal chains</td><td class="n">—</td><td class="n">threads</td><td class="n">—</td><td class="n">—</td><td class="y">✓ first-class refs</td></tr>
       <tr><td>Local &amp; embeddable</td><td class="y">✓</td><td class="y">✓</td><td class="n">cloud only</td><td class="y">✓</td><td class="y">✓ one process, JSONL file</td></tr>
       <tr><td>Cross-vendor</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">one vendor</td><td class="y">✓ MCP + HTTP + SDK</td></tr>
       <tr><td>Verifiable recovery</td><td class="n">—</td><td class="n">db state</td><td class="n">trust the server</td><td class="n">—</td><td class="y">✓ replay the log, HMAC-signed</td></tr>
+      </tbody>
     </table>
     </div>
   </div>
@@ -194,16 +262,26 @@
     <span class="eyebrow">faq</span>
     <h2>Questions</h2>
     <details><summary>How do I share state between multiple Claude Code / Cursor sessions?</summary><p>Start the bus (<code>npx antlegion</code>), then add the MCP adapter to each session (<code>claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp</code>). Every session can publish facts, claim work before touching it, and fold the same log — so two sessions never grab the same task or redo each other's work.</p></details>
+    <details><summary>Why not just use Claude Code subagents / agent teams?</summary><p>Use them — inside one machine, one process tree, one vendor, they're great. AntLegion starts where they stop: agents on physically isolated nodes — different machines, permission domains, or vendors — where no bigger single agent exists and the fallback is a human relaying state.</p></details>
+    <details id="faq-evidence"><summary>How were 8/8 forged reports intercepted?</summary><p>Every producer registers an evidence shape for its artifacts (a test report must include what it did <em>not</em> cover, an e2e report must carry deviations/defects/gaps…). An adjudicator unit folds each artifact against the registered shape and publishes accept/reject — it never trusts an agent's self-report. We injected 8 malformed "all-green" artifacts: all 8 rejected, with the missing fields named on-chain; 4 well-formed controls all passed. See <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md §3</a>.</p></details>
     <details><summary>Is this a message queue?</summary><p>No. Queues deliver commands to consumers and forget. AntLegion stores immutable facts forever (with compaction), in one total order, so any reader at any time can reconstruct who claimed what, what superseded what, and how an outcome came to be. Coordination semantics live in reader-side folds, not in the broker.</p></details>
     <details><summary>Does it lock files?</summary><p>No. Conflicts are eliminated one layer earlier: agents claim a unit of work before acting, and exactly-once claiming guarantees a single owner. If nobody edits the same thing, nothing needs locking.</p></details>
     <details><summary>What happens when an agent crashes mid-task?</summary><p>Its claim expires (bus-stamped time, not the agent's clock), and any surviving agent wins the re-claim and takes over. Recovery is deterministic: replay the log, get the same world. Measured: the chain healed 12.2s after a SIGKILL.</p></details>
     <details><summary>Which agents can join?</summary><p>Native worker ants via <code>@antlegion/ant</code> (script or LLM-powered acts), anything MCP-speaking (Claude Code, Cursor, Cline, Codex CLI, Windsurf, Zed…), and anything that can speak HTTP or import the TypeScript SDK.</p></details>
     <details><summary>Is it production-ready?</summary><p>Alpha. The core protocol is stable and verified — 218 tests, cross-language conformance vectors, ~160k appends/s — but it's designed for trusted environments (like Redis): keep it on localhost or a private network, set a stable secret.</p></details>
+    <p class="not">Questions the FAQ didn't answer? → <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a></p>
+  </div>
+
+  <div class="star">
+    <p>Still here? Then it probably solves a problem you have.</p>
+    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion">Star it on GitHub</a>
   </div>
 
   <footer>
     <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
     <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Protocol spec</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/releases">Releases</a>
     <a href="/zh/" lang="zh-CN">中文</a>
     <a href="/llms.txt">llms.txt</a>
     <span>MIT · built by Carter.Yang</span>
