@@ -20,9 +20,9 @@ Type "clear"
 Enter
 Show
 
-Type "npx @antlegion/bus demo"
+Type "npx -y @antlegion/bus demo"
 Sleep 500ms
 Enter
 
-# ACT 1 (race) + ACT 2 (crash) + ACT 3 (replay) ≈ 12-16s, then verdict
-Sleep 24s
+# npx fetch + ACT 1 (race) + ACT 2 (crash) + ACT 3 (replay) + verdict
+Sleep 32s

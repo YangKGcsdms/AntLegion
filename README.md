@@ -6,7 +6,7 @@
 
 **Run several AI agents on the same project and they re-do each other's work, lose each other's context, and drift apart.** AntLegion fixes this at the fact level: an append-only **fact bus** where autonomous work units post what happened, claim work exactly-once, and let the workflow emerge — no orchestrator, nobody commands anybody. Local, embeddable infrastructure (think Redis, not SaaS).
 
-<!-- demo GIF: `npx @antlegion/bus demo` recording lands here with the 0.3.0 release -->
+![npx @antlegion/bus demo — exactly-once race, crash takeover, byte-identical replay](deploy/media/demo.gif)
 
 It doesn't lock files or serialize your agents — conflicts are eliminated at the division-of-work layer, before two units ever touch the same task. Your existing Claude Code / Cursor sessions can join the same bus as work units too, via [MCP](#connect-via-mcp).
 
