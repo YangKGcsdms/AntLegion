@@ -1,32 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AntLegion — a fact bus for autonomous agents</title>
-<meta name="description" content="Local, embeddable coordination infrastructure: agents share immutable facts on an append-only bus — never commands. Exactly-once claiming, causal chains, reader-side folds. No orchestrator.">
-<link rel="canonical" href="https://antlegion.dev/">
+<title>AntLegion — 自治智能体的事实总线</title>
+<meta name="description" content="本地可内嵌的协调基础设施：智能体在只追加的总线上共享不可变事实——从不下达命令。恰好一次认领、因果链、读者侧折叠。没有编排器。">
+<link rel="canonical" href="https://antlegion.dev/zh/">
 <link rel="alternate" hreflang="en" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/">
 <link rel="alternate" hreflang="x-default" href="https://antlegion.dev/">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://antlegion.dev/">
-<meta property="og:title" content="AntLegion — a fact bus for autonomous agents">
-<meta property="og:description" content="Agents coordinate by sharing immutable facts — never by sending each other commands. Exactly-once claiming as a theorem. No orchestrator.">
+<meta property="og:url" content="https://antlegion.dev/zh/">
+<meta property="og:title" content="AntLegion — 自治智能体的事实总线">
+<meta property="og:description" content="智能体通过共享不可变事实协作——从不互相下达命令。恰好一次认领是定理。没有编排器。"><meta property="og:locale" content="zh_CN">
 <meta property="og:image" content="https://antlegion.dev/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="AntLegion — a fact bus for autonomous agents">
-<meta name="twitter:description" content="Agents coordinate by sharing immutable facts — never commands. No orchestrator.">
+<meta name="twitter:title" content="AntLegion — 自治智能体的事实总线">
+<meta name="twitter:description" content="智能体通过共享不可变事实协作——从不下达命令。没有编排器。">
 <meta name="twitter:image" content="https://antlegion.dev/og.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"A fact bus for autonomous agents — append-only, totally-ordered coordination infrastructure with exactly-once claiming and causal chains.","url":"https://antlegion.dev","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"自治智能体的事实总线——只追加、全序的协调基础设施，恰好一次认领与因果链。","url":"https://antlegion.dev/zh/","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
 </script>
 <style>
   :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#75726a;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
   *{box-sizing:border-box;margin:0}
   html{scroll-behavior:smooth}
-  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
+  body{font-family:system-ui,-apple-system,"Segoe UI","Noto Sans SC","PingFang SC",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
   body::before{content:"";position:fixed;inset:0;background:radial-gradient(900px 480px at 70% -10%,rgba(240,160,32,.13),transparent 60%),radial-gradient(700px 420px at 8% 22%,rgba(226,118,45,.07),transparent 60%);pointer-events:none;z-index:0}
   body::after{content:"";position:fixed;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%);pointer-events:none;z-index:0}
   .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:26px 24px 90px}
@@ -113,31 +113,31 @@
     <span class="word">AntLegion</span>
     <span class="links">
       <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
-      <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Protocol</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">协议</a>
       <a href="https://www.npmjs.com/package/@antlegion/bus">npm</a>
-      <a href="/zh/" lang="zh-CN">中文</a>
+      <a href="/" lang="en">English</a>
     </span>
   </nav>
 
   <span class="eyebrow">facts, not commands</span>
-  <h1>A fact bus for<br><span class="g">autonomous agents</span></h1>
-  <p class="tag">Local, embeddable infrastructure where agents coordinate by sharing <b>immutable facts</b> — never by sending each other commands. No orchestrator. Work doesn't duplicate, doesn't drop, and every outcome traces back to its origin.</p>
+  <h1>自治智能体的<br><span class="g">事实总线</span></h1>
+  <p class="tag">本地、可内嵌的基础设施：智能体通过共享<b>不可变事实</b>来协作——从不互相下达命令。没有编排器。活不重、不漏，每个结果都能溯源到它的来处。</p>
   <div class="cta">
-    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion">Star on GitHub</a>
+    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion">GitHub 加星</a>
     <a class="btn s" href="https://www.npmjs.com/package/@antlegion/bus">@antlegion/bus</a>
     <a class="btn s" href="https://www.npmjs.com/package/@antlegion/ant">@antlegion/ant</a>
   </div>
 
   <div class="term" aria-label="terminal demo">
     <div class="bar"><i></i><i></i><i></i><span>npx @antlegion/bus demo</span></div>
-    <pre><span class="l" style="animation-delay:.2s"><span class="p">$</span> <span class="c">npx @antlegion/bus demo</span></span><span class="l" style="animation-delay:.9s"><span class="a">ACT 1 · THE RACE</span>   <span class="dim">8 agent processes from 4 frameworks · one log</span></span><span class="l" style="animation-delay:1.6s">resolved 400/400 · races 107 · <span class="ok">dupes 0</span>  <span class="dim">← a theorem, not a lock</span></span><span class="l" style="animation-delay:2.4s"><span class="a">ACT 2 · THE CRASH</span>  <span class="kill">kill -9 crewai-2</span> <span class="dim">— holding 9 live claims</span></span><span class="l" style="animation-delay:3.2s">claims expired on bus time · re-won by survivors · <span class="ok">0 duplicates</span></span><span class="l" style="animation-delay:4.0s"><span class="a">ACT 3 · THE REPLAY</span> <span class="dim">kill the bus, replay the journal</span></span><span class="l" style="animation-delay:4.8s">head_seq ✓ · stream sha256 <span class="ok">identical</span> · every owner/state <span class="ok">identical</span></span><span class="l" style="animation-delay:5.7s"><span class="ok">✅ KILLER DEMO PASSED</span> <span class="dim">— 15s, zero config, zero API key</span></span></pre>
+    <pre><span class="l" style="animation-delay:.2s"><span class="p">$</span> <span class="c">npx @antlegion/bus demo</span></span><span class="l" style="animation-delay:.9s"><span class="a">ACT 1 · THE RACE</span>   <span class="dim">来自 4 个框架的 8 个 agent 进程 · 同一条日志</span></span><span class="l" style="animation-delay:1.6s">resolved 400/400 · races 107 · <span class="ok">重复 0</span>  <span class="dim">← 定理，不是锁</span></span><span class="l" style="animation-delay:2.4s"><span class="a">ACT 2 · THE CRASH</span>  <span class="kill">kill -9 crewai-2</span> <span class="dim">— 手里还有 9 个存活认领</span></span><span class="l" style="animation-delay:3.2s">认领在总线时钟上过期 · 幸存者重新赢下 · <span class="ok">0 重复</span></span><span class="l" style="animation-delay:4.0s"><span class="a">ACT 3 · THE REPLAY</span> <span class="dim">杀掉总线，从日志重放</span></span><span class="l" style="animation-delay:4.8s">head_seq ✓ · 流哈希 <span class="ok">逐字节一致</span> · 每个归属/状态 <span class="ok">一致</span></span><span class="l" style="animation-delay:5.7s"><span class="ok">✅ KILLER DEMO PASSED</span> <span class="dim">— 15 秒，零配置，零 API key</span></span></pre>
   </div>
 
   <div class="stats">
-    <div class="stat"><b>0</b><span>double executions — 100 claim units, 4× replicated workers racing</span></div>
-    <div class="stat"><b>8/8</b><span>forged "all-green" reports intercepted · 0 false kills</span></div>
-    <div class="stat"><b>12.2s</b><span>from SIGKILL of a claim holder to a sibling finishing the work</span></div>
-    <div class="stat"><b>160k/s</b><span>appends in-process · 218 tests · cross-language conformance</span></div>
+    <div class="stat"><b>0</b><span>双执行——100 个认领单元、4 倍副本竞争</span></div>
+    <div class="stat"><b>8/8</b><span>伪造"全绿"报告被拦截 · 0 误杀</span></div>
+    <div class="stat"><b>12.2s</b><span>从 SIGKILL 认领持有者到兄弟单元完成工作</span></div>
+    <div class="stat"><b>160k/s</b><span>进程内 append/s · 218 个测试 · 跨语言一致性</span></div>
   </div>
 
   <div class="ticker" aria-hidden="true"><div>
@@ -145,68 +145,68 @@
   </div></div>
 
   <div class="sec">
-    <span class="eyebrow">60 seconds</span>
-    <h2>Run it now</h2>
-<pre class="cmd"><b>npx antlegion</b>                     <i># start the bus (localhost:28090)</i>
-<b>npx @antlegion/ant init</b>           <i># guided setup for a worker ant (DCU)</i>
-<b>npx @antlegion/ant start</b>          <i># it wakes up when facts it cares about appear</i></pre>
-    <p>Or watch four containers coordinate a full dev pipeline with one command — 25 requirements, 100 stage loops, no orchestrator:</p>
+    <span class="eyebrow">60 秒</span>
+    <h2>现在就跑</h2>
+<pre class="cmd"><b>npx antlegion</b>                     <i># 起总线（localhost:28090）</i>
+<b>npx @antlegion/ant init</b>           <i># 问答式配置一只工蚁（DCU）</i>
+<b>npx @antlegion/ant start</b>          <i># 它关心的事实出现时，它自己醒来</i></pre>
+    <p>或者一条命令看四个容器协作跑完整条开发流水线——25 条需求、100 个阶段循环、没有编排器：</p>
 <pre class="cmd"><b>git clone</b> https://github.com/YangKGcsdms/AntLegion && cd AntLegion/deploy/mvp
 <b>docker compose up</b> --build --exit-code-from mvp</pre>
-    <p>Already running Claude Code or Cursor? They can join the same bus, via MCP:</p>
+    <p>已经在用 Claude Code 或 Cursor？它们可以经 MCP 接入同一条总线：</p>
 <pre class="cmd"><b>claude mcp add</b> antlegion -- npx -y -p @antlegion/bus antlegion-mcp</pre>
   </div>
 
   <div class="sec">
-    <span class="eyebrow">the model</span>
-    <h2>Three mechanisms, one theorem</h2>
+    <span class="eyebrow">模型</span>
+    <h2>三个机制，一条定理</h2>
     <div class="grid">
-      <div class="card"><h3>Persistence → <em>shared reality</em></h3><p>An append-only log of immutable facts. Any agent, joining at any time, folds the log and sees the same world.</p></div>
-      <div class="card"><h3>Claiming → <em>division of labor</em></h3><p>The bus enforces exactly one thing: total order. Exactly-once claiming falls out as a theorem — lowest seq wins, every reader computes the same winner.</p></div>
-      <div class="card"><h3>Causation → <em>emergent workflow</em></h3><p>Every fact records its parents. Pipelines aren't designed top-down — they're folded out of the causal chain afterwards.</p></div>
+      <div class="card"><h3>持久化 → <em>共享现实</em></h3><p>一条只追加的不可变事实日志。任何智能体、在任何时刻加入，折叠日志就看见同一个世界。</p></div>
+      <div class="card"><h3>认领 → <em>分工</em></h3><p>总线只强制一件事：全序。恰好一次认领由此成为定理——最小 seq 胜出，每个读者都算出同一个胜者。</p></div>
+      <div class="card"><h3>因果 → <em>涌现的工作流</em></h3><p>每条事实都记录自己的来处。流水线不是自上而下设计的——它是事后从因果链里折叠出来的。</p></div>
     </div>
-    <p class="not">Not a message queue · not an orchestrator · not a workflow engine — and it doesn't lock files: conflicts are eliminated at the division-of-labor layer, before anyone edits anything.</p>
+    <p class="not">不是消息队列 · 不是编排器 · 不是工作流引擎——也不锁文件：冲突在分工层就被消灭了，根本轮不到谁去编辑同一处。</p>
   </div>
 
   <div class="sec">
-    <span class="eyebrow">landscape</span>
-    <h2>How it compares</h2>
+    <span class="eyebrow">格局</span>
+    <h2>横向对比</h2>
     <div class="tablewrap">
     <table>
-      <tr><th></th><th>Shared files / git</th><th>SQLite mailbox</th><th>Hosted agent bus (SaaS)</th><th>Platform built-in (agent teams)</th><th>AntLegion</th></tr>
-      <tr><td>Total order</td><td class="n">—</td><td class="n">per-table</td><td class="y">✓</td><td class="n">—</td><td class="y">✓ (the bus's only job)</td></tr>
-      <tr><td>Exactly-once claiming</td><td class="n">advisory locks</td><td class="n">at-least-once</td><td class="n">—</td><td class="n">task list</td><td class="y">✓ theorem, reader-verifiable</td></tr>
-      <tr><td>Causal chains</td><td class="n">—</td><td class="n">threads</td><td class="n">—</td><td class="n">—</td><td class="y">✓ first-class refs</td></tr>
-      <tr><td>Local &amp; embeddable</td><td class="y">✓</td><td class="y">✓</td><td class="n">cloud only</td><td class="y">✓</td><td class="y">✓ one process, JSONL file</td></tr>
-      <tr><td>Cross-vendor</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">one vendor</td><td class="y">✓ MCP + HTTP + SDK</td></tr>
-      <tr><td>Verifiable recovery</td><td class="n">—</td><td class="n">db state</td><td class="n">trust the server</td><td class="n">—</td><td class="y">✓ replay the log, HMAC-signed</td></tr>
+      <tr><th></th><th>共享文件 / git</th><th>SQLite 信箱</th><th>托管智能体总线（SaaS）</th><th>平台内置（agent teams）</th><th>AntLegion</th></tr>
+      <tr><td>全序</td><td class="n">—</td><td class="n">按表</td><td class="y">✓</td><td class="n">—</td><td class="y">✓（总线唯一的职责）</td></tr>
+      <tr><td>恰好一次认领</td><td class="n">建议性锁</td><td class="n">至少一次</td><td class="n">—</td><td class="n">任务列表</td><td class="y">✓ 定理，读者可验证</td></tr>
+      <tr><td>因果链</td><td class="n">—</td><td class="n">线程</td><td class="n">—</td><td class="n">—</td><td class="y">✓ 一等公民 refs</td></tr>
+      <tr><td>本地可内嵌</td><td class="y">✓</td><td class="y">✓</td><td class="n">仅云端</td><td class="y">✓</td><td class="y">✓ 一个进程一个 JSONL</td></tr>
+      <tr><td>跨厂商</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">绑单一厂商</td><td class="y">✓ MCP + HTTP + SDK</td></tr>
+      <tr><td>可验证恢复</td><td class="n">—</td><td class="n">数据库状态</td><td class="n">信任服务器</td><td class="n">—</td><td class="y">✓ 重放日志，HMAC 签名</td></tr>
     </table>
     </div>
   </div>
 
   <div class="sec">
-    <span class="eyebrow">origin</span>
-    <h2>Born on a CAN bus</h2>
-    <p>On a car's CAN bus (1986), no central computer commands the control units — each one listens for the messages it cares about and acts when its local condition holds. AntLegion keeps that broadcast discipline and adds the two things CAN never had: <b style="color:var(--ink)">memory</b> (the append-only log) and <b style="color:var(--ink)">causality</b> (the fact lineage). Worker units are called DCUs, in honor of ECUs.</p>
+    <span class="eyebrow">起源</span>
+    <h2>生于 CAN 总线</h2>
+    <p>汽车的 CAN 总线（1986）上，没有中央电脑指挥各个控制单元——每个单元监听自己关心的报文，本地条件满足就行动。AntLegion 保留了这种广播纪律，并补上 CAN 从未有过的两样东西：<b style="color:var(--ink)">记忆</b>（只追加日志）与<b style="color:var(--ink)">因果</b>（事实的血缘）。工作单元命名为 DCU，向 ECU 致敬。</p>
   </div>
 
   <div class="sec">
-    <span class="eyebrow">faq</span>
-    <h2>Questions</h2>
-    <details><summary>How do I share state between multiple Claude Code / Cursor sessions?</summary><p>Start the bus (<code>npx antlegion</code>), then add the MCP adapter to each session (<code>claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp</code>). Every session can publish facts, claim work before touching it, and fold the same log — so two sessions never grab the same task or redo each other's work.</p></details>
-    <details><summary>Is this a message queue?</summary><p>No. Queues deliver commands to consumers and forget. AntLegion stores immutable facts forever (with compaction), in one total order, so any reader at any time can reconstruct who claimed what, what superseded what, and how an outcome came to be. Coordination semantics live in reader-side folds, not in the broker.</p></details>
-    <details><summary>Does it lock files?</summary><p>No. Conflicts are eliminated one layer earlier: agents claim a unit of work before acting, and exactly-once claiming guarantees a single owner. If nobody edits the same thing, nothing needs locking.</p></details>
-    <details><summary>What happens when an agent crashes mid-task?</summary><p>Its claim expires (bus-stamped time, not the agent's clock), and any surviving agent wins the re-claim and takes over. Recovery is deterministic: replay the log, get the same world. Measured: the chain healed 12.2s after a SIGKILL.</p></details>
-    <details><summary>Which agents can join?</summary><p>Native worker ants via <code>@antlegion/ant</code> (script or LLM-powered acts), anything MCP-speaking (Claude Code, Cursor, Cline, Codex CLI, Windsurf, Zed…), and anything that can speak HTTP or import the TypeScript SDK.</p></details>
-    <details><summary>Is it production-ready?</summary><p>Alpha. The core protocol is stable and verified — 218 tests, cross-language conformance vectors, ~160k appends/s — but it's designed for trusted environments (like Redis): keep it on localhost or a private network, set a stable secret.</p></details>
+    <span class="eyebrow">常见问题</span>
+    <h2>你可能想问</h2>
+    <details><summary>多个 Claude Code / Cursor 会话之间怎么共享状态？</summary><p>起一条总线（<code>npx antlegion</code>），再给每个会话挂上 MCP 适配器（<code>claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp</code>）。每个会话都能发布事实、动手前认领、折叠同一条日志——两个会话不会抢同一个任务，也不会重做彼此的工作。</p></details>
+    <details><summary>这是消息队列吗？</summary><p>不是。队列把命令投递给消费者然后遗忘。AntLegion 把不可变事实永久保存（支持压缩）在单一全序里，任何读者在任何时刻都能重建：谁认领了什么、什么取代了什么、一个结果是怎么来的。协调语义住在读者侧折叠里，不在 broker 里。</p></details>
+    <details><summary>它锁文件吗？</summary><p>不锁。冲突在更早的一层被消灭：智能体动手前先认领工作单元，恰好一次认领保证了唯一归属。没有人编辑同一处，就没有什么需要锁。</p></details>
+    <details><summary>智能体干到一半崩溃了会怎样？</summary><p>它的认领会过期（按总线盖章的时间，不是智能体自己的时钟），任何幸存的智能体赢下重新认领并接管。恢复是确定性的：重放日志，得到同一个世界。实测：SIGKILL 后 12.2 秒链条痊愈。</p></details>
+    <details><summary>哪些智能体能接入？</summary><p>原生工蚁走 <code>@antlegion/ant</code>（脚本或 LLM 驱动的 act）；任何会说 MCP 的（Claude Code、Cursor、Cline、Codex CLI、Windsurf、Zed……）；以及任何能发 HTTP 或引入 TypeScript SDK 的东西。</p></details>
+    <details><summary>能上生产吗？</summary><p>Alpha。核心协议稳定且经过验证——218 个测试、跨语言一致性向量、进程内约 16 万 append/s——但它按可信环境设计（与 Redis 同款模型）：留在 localhost 或私有网络里，设置稳定的 secret。</p></details>
   </div>
 
   <footer>
     <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
-    <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Protocol spec</a>
-    <a href="/zh/" lang="zh-CN">中文</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">协议规范</a>
+    <a href="/" lang="en">English</a>
     <a href="/llms.txt">llms.txt</a>
-    <span>MIT · built by Carter.Yang</span>
+    <span>MIT · Carter.Yang 出品</span>
   </footer>
 </div>
 </body>
