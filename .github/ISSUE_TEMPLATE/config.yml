@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question / idea
+    url: https://github.com/YangKGcsdms/AntLegion/discussions
+    about: For anything that isn't a reproducible bug — usage questions, coordination patterns, protocol ideas.

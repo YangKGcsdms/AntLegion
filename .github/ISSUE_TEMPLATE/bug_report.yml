@@ -1,0 +1,41 @@
+name: Bug report
+description: Something didn't work
+labels: [bug]
+body:
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 15.5 / Ubuntu 24.04 / Windows 11 (WSL2)
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: "`node --version`"
+      placeholder: v22.22.0
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Package versions
+      description: "`npm view @antlegion/bus version` and/or `@antlegion/ant`"
+      placeholder: "@antlegion/bus 0.2.1, @antlegion/ant 0.2.0"
+    validations:
+      required: true
+  - type: textarea
+    id: first-boot
+    attributes:
+      label: First startup output
+      description: The complete terminal output of your first `npx @antlegion/bus` (or the failing command) — including the lines that look irrelevant.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened / what did you expect?
+    validations:
+      required: true

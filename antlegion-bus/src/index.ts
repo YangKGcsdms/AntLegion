@@ -3,6 +3,7 @@
  * v2 entry point — boot the append-only fact bus over HTTP.
  *
  *   PORT=28090 ANTLEGION_BUS_SECRET=... node dist/index.js
+ *   npx @antlegion/bus demo    → the three-act killer demo (src/demo.ts)
  *
  * The server is the trusted core (§0.2): assign order, verify, stamp+sign,
  * persist, serve a range. All coordination semantics live in the client SDK
@@ -12,6 +13,13 @@
 import { serve } from "@hono/node-server";
 import { createServerV2 } from "./server.js";
 import { loadConfig } from "./config.js";
+
+// `antlegion demo` — the three-act demo instead of a server. Everything else
+// (no arg, or unknown args) boots the bus, preserving `npx @antlegion/bus`.
+if (process.argv[2] === "demo") {
+  const { runDemo } = await import("./demo.js");
+  await runDemo(); // never returns
+}
 
 const cfg = loadConfig();
 

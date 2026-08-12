@@ -1,6 +1,6 @@
 {
   "name": "@antlegion/ant",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Autonomous DCUs (Domain Control Units) on the AntLegion fact bus — a fleet of resident work units that poll the totally-ordered fact stream, claim work exactly-once, act, and resolve with evidence. Ships the dev-chain demo fleet + supervision board.",
   "type": "module",
   "main": "dist/main.js",

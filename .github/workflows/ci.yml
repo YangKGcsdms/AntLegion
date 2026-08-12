@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  bus:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: antlegion-bus }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: antlegion-bus/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      # §4 interop contract: the committed vectors must be reproducible
+      # byte-for-byte by an independent Python implementation.
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python3 conformance/verify.py
+
+  ant:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: ant }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: ant/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+
+  # Guardrail: a changed conformance/vectors.json is wire-breaking. It must
+  # be an intentional protocol change, declared in the commit message.
+  vectors-guard:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: fail on undeclared vectors.json change
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "conformance/vectors.json"; then
+            if git log origin/${{ github.base_ref }}..HEAD --format=%B | grep -q "\[protocol-change\]"; then
+              echo "vectors.json changed with [protocol-change] declaration — allowed"
+            else
+              echo "::error::conformance/vectors.json changed without a [protocol-change] marker in a commit message. A changed hash is wire-breaking — declare it intentionally."
+              exit 1
+            fi
+          fi

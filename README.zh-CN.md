@@ -4,7 +4,11 @@
 
 # AntLegion
 
-**面向自治 Agent 的事实总线** — 本地、可内嵌的基础设施，让多个 Agent 通过共享不可变的事实来协作，而非互相下达命令。
+**几个 AI 智能体跑在同一个项目上，就会互相重做工作、丢失彼此的上下文、各走各路。** AntLegion 在事实层面解决它：一条只追加的**事实总线**，自治工作单元把发生的事贴上去、恰好一次地认领工作、让工作流自己涌现——没有编排器，没有谁指挥谁。本地、可内嵌的基础设施（像 Redis，不是 SaaS）。
+
+<!-- demo GIF：`npx @antlegion/bus demo` 录屏随 0.3.0 发布放入 -->
+
+它不锁文件、不串行化你的智能体——冲突在**分工层**就被消灭了，两个单元根本不会碰同一个任务。你已有的 Claude Code / Cursor 会话也能作为工作单元接入同一条总线（[MCP](#通过-mcp-接入)）。
 
 [![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
@@ -48,7 +52,17 @@
 
 总线只强制执行一件事：**全序（total order）**。从全序中，恰好一次（exactly-once）的归属权自然成为数学定理——序号最小的认领胜出，所有读者从同一不可变流中计算出完全相同的结果。
 
-这不是口号，而是[可运行的多 Agent 压测验证过的](#经验证的保证)。
+这不是口号，而是[可运行的多 Agent 压测验证过的](#经验证的保证)，并且[在真实竞争下测量过](research/s2-experiments-2026-08.md)。
+
+## 为什么存在
+
+每一套多智能体系统都会遭遇三种事故,它们同根同源——没有一份共享的、有序的"已发生"记录：
+
+1. **重复劳动。** 两个 agent 领了同一个任务，因为谁也看不见对方的意图。在这里，"领任务"本身就是一条事实（`_.claim`），全序让恰好一次成为定理——实测 **4 倍副本竞争下 100 个认领单元、双执行 0 次**（[实验记录](research/s2-experiments-2026-08.md)）。
+2. **上下文丢失。** A 学到的东西传不到 B，或者传过去时已经是过期的散文。在这里，每个观察都是不可变、内容寻址的事实，任何单元按自己的节奏折叠。
+3. **靠散文维系的工作流。** "先方案、再开发、后测试"写在提示词里，直到有人跳过一步。在这里，流水线是因果结构（`refs.parent`），证据形状由裁决者强制——注入实验中，"全绿但没写没测什么"的伪造报告被 **8/8 拦截、0 误杀**。
+
+这些失效模式在文献中早有记录——MAST 多智能体失效分类（[arXiv:2503.13657](https://arxiv.org/abs/2503.13657)）把智能体间失调与验证缺失列为主要失效类。但上面的数字是我们自己的：第一手、每个都能用一条命令复现。
 
 ## 核心特性
 
@@ -62,9 +76,32 @@
 | **持久化** | 只追加日志（`facts-v2.jsonl`），支持可配置的 `appendfsync` 策略；崩溃恢复只需重放日志，无需重建状态机 |
 | **可验证** | 总线对每条事实进行 HMAC 签名；恢复时校验签名；互操作由[跨语言一致性向量集](antlegion-bus/conformance/vectors.json)保证 |
 
+### 它是什么——不是什么
+
+不是消息队列（没有东西被消费掉）、不是编排器（没有人分派工作）、不是工作流引擎（流水线从流里折叠出来，从不被存储）。与今天其他的协作方式相比：
+
+| | 共享文件/草稿板 | SQLite 信箱 | 托管协调 SaaS | 平台内置共享状态（Agent Teams 类） | **AntLegion** |
+|---|---|---|---|---|---|
+| 全序 | ✗ | 按表、隐式 | 不透明 | 不透明 | ✓ 核心本原 |
+| 恰好一次认领 | ✗（靠锁和运气） | ✗（行锁） | 厂商定义 | 厂商定义 | ✓ 全序的定理 |
+| 因果/审计 | ✗ | ✗ | 部分 | 部分 | ✓ `refs` + 签名日志 |
+| 本地可内嵌 | ✓ | ✓ | ✗ | ✗ | ✓ 一个进程一个文件 |
+| 跨 harness | ✓（勉强） | ✓ | 绑框架 | 绑单一厂商 | ✓ HTTP + MCP，任何 agent |
+| 协议开放 | — | — | ✗ | ✗ | ✓ [PROTOCOL.md](PROTOCOL.md) + 一致性向量 |
+
+### 三个机制，一套协作模型
+
+**持久化让 agent 共享现实，认领让 agent 分得清工，因果让工作流自己涌现。** 系统里的一切都是这三者之一，从同一条有序日志读出——持久化是只追加日志（[§1](PROTOCOL.md)），认领是最小 seq 定理（[§3.1](PROTOCOL.md)），因果是 `refs.parent` 链（[§3.4](PROTOCOL.md)）。
+
 ## 快速上手
 
 **前置要求：Node.js ≥ 20**
+
+**最快的一眼**——三幕 demo（恰好一次竞速 → 崩溃接管 → 字节级重放），零配置零 key，约 15 秒：
+
+```bash
+npx @antlegion/bus demo
+```
 
 主线是两个包、四条命令：起一条总线，放一支 DCU 舰队上去，喂一条需求，看着它自治跑完。
 
@@ -73,6 +110,7 @@
 ```bash
 npx @antlegion/bus
 # [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
+# [antlegion-v2] dashboard → http://127.0.0.1:28090/dashboard
 ```
 
 **2. 起 DCU 舰队**（[`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant)——dev-chain 六单元：4 个阶段 DCU + 裁决者 + 看门狗）：
@@ -310,6 +348,34 @@ claude mcp add antlegion \
 
 MCP 适配器与 HTTP 客户端使用同一套 `ClientV2` 折叠 SDK——协调语义只实现一次，不会因适配器而重复。
 
+### 挂载后的第一条 prompt
+
+采用发生在提示词里，不在安装里。给刚拿到工具的 agent 贴这段作为第一条消息：
+
+> 查看 antlegion 事实总线上有没有开放的 `task.todo` 事实。有未认领的就先认领再干活；只有认领成功才继续。做完后用简短的结果 payload 解决它。如果没有开放任务，就把你接下来打算做的事发布成一条 `task.todo`，让其他 agent 看得见。
+
+### 贴进 CLAUDE.md / .cursorrules 的协作规则
+
+```markdown
+## 多智能体协作（AntLegion）
+- 动手前先查总线；某任务的 task.todo 已被认领就换别的活。
+- 干活前先认领（antlegion_claim）；只有赢了才继续。输掉认领是常态——换下一个。
+- 完成后解决事实（antlegion_resolve）并附上产出。绝不只用散文宣布完工。
+- 把重要观察发布成事实，让其他 agent 能够反应——别囤上下文。
+```
+
+### 双窗口实验（5 分钟）
+
+开两个 Claude Code 窗口，都挂上 MCP，然后在**窗口 A**：
+
+> 发布一条 task.todo 事实：{"title": "写一首关于全序的俳句"}——然后认领它并开始工作。
+
+紧接着在**窗口 B**：
+
+> 找到总线上最新的 task.todo 并认领它。
+
+窗口 B 会输：认领工具返回 `won: false` 并报出 A 是胜者，B 转头去干别的而不是重复劳动。这就是零锁的恰好一次——由哪条认领先落进全序决定，两个读者算出同一个结果。
+
 ## 经验证的保证
 
 出发点——「Agent 只靠事实协作、无命令」——由 [`antlegion-bus/examples/`](antlegion-bus/examples) 中四个可运行的 swarm 压测验证。每个都启动一个真实服务端、拉起约 20 个自治 Agent，并断言一个可量化的通过门槛：
@@ -358,6 +424,27 @@ ANTLEGION_DATA_DIR=/var/lib/antlegion \
 ANTLEGION_FSYNC=always \
 node dist/index.js
 ```
+
+### 运维小抄
+
+- **数据在哪？** 一个只追加文件：`$ANTLEGION_DATA_DIR/facts-v2.jsonl`（默认 `.data-v2/`）。备份=复制它。
+- **想清零：** 停总线、删数据目录。别处没有任何状态。
+- **Ctrl-C 是安全的：** 关闭时日志落盘；恢复时重放并校验每条签名。
+- **务必设置稳定的 `ANTLEGION_BUS_SECRET`：** 不设的话每次启动都换新 HMAC 密钥——重启后先前写入的 `sig` 无法再验证（在 `/info` 里表现为 `sig_failures`）。
+
+### 安全模型
+
+与 Redis 同款信任边界：总线**信任它的调用方**。默认只绑 `127.0.0.1`；只有在你控制的边界内（docker 网络、VPC）才设 `HOST=0.0.0.0`。目前没有鉴权（[路线图](#路线图)）——不要暴露到不可信网络。
+
+### 疑难排查
+
+| 症状 | 原因 / 处理 |
+|---|---|
+| `error: port 28090 already in use` | 已有总线在跑——直接复用，或 `PORT=28091 npx @antlegion/bus` |
+| `/info` 里 `sig_failures > 0` | 总线用了不同（或缺失）的 `ANTLEGION_BUS_SECRET` 重启——设一个稳定值 |
+| alctl/SDK 报 `cannot reach bus` | 那个 URL 上没有总线——`npx @antlegion/bus`，或把 `ANTLEGION_BUS_URL` 指对 |
+| `resolve ignored — fact is owned by 'X'` | 你输掉了认领；这正是系统在工作。查状态、换活干 |
+| 两个单元做了同一个任务 | 是不是两个进程共用同一个身份？一个身份 = 一个进程（[为什么](research/s2-experiments-2026-08.md)） |
 
 ## 架构
 
@@ -466,14 +553,27 @@ antlegion-platform/
 
 ### 路线图
 
-- [x] 发布 npm 包——[`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus)（`npx @antlegion/bus` 一行起总线）
-- [x] [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant)——DCU 运行时 + dev-chain 六单元舰队 + 监督看板（`npx @antlegion/ant chain`）
-- [ ] `ant init` / `ant start`——问答式引导 + 常驻守护（0.2）
-- [ ] 真实 worker：act 步骤挂接 LLM 会话（协调留在确定性代码，LLM 只干活）
-- [ ] 多语言客户端 SDK——Go、Python、Rust（一致性向量已就绪，可直接对齐）
-- [ ] 面向公网的鉴权 + 每作者速率限制
-- [ ] 复制 / 高可用（协议设计：单写者 + 故障切换，见 PROTOCOL.md §7）
-- [ ] 在 CI 中集成跨语言 Python 校验器
+**近期——任何人五分钟能上手的 MVP**
+- [x] npm 包：[`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus) · [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant)
+- [x] LLM 驱动的 worker（pi-ai → DeepSeek 或任何 OpenAI 兼容端点）——协调保持确定性，LLM 只产内容
+- [x] `ant init` / `ant start`——问答引导 + 常驻蚁群
+- [x] `npx @antlegion/bus demo`——三幕 killer demo，零配置零 key
+- [x] CI（测试 + 类型检查 + 跨语言一致性校验 + 破线护栏）
+- [ ] README 顶部 demo GIF · GitHub Releases
+
+**中期——被测量的协调层**
+- [ ] 多语言客户端 SDK——Go、Python、Rust（[一致性向量](antlegion-bus/conformance/vectors.json)就是测试标靶）
+- [ ] 评估基准：重复劳动率、认领竞争结果、接管时延、拦截率——[S2 实验系列](research/s2-experiments-2026-08.md)是它的种子
+- [ ] 只读运维看板（fold.ts 跑在浏览器里——读者折叠模型本身就是可观测性）
+- [ ] 面向暴露部署的鉴权 + 每作者速率限制
+
+**远期——智能体舰队的默认协调层**
+- [ ] 复制 / 高可用（单写者 + 故障切换，PROTOCOL.md §7）
+- [ ] DCU 生态：角色模板（`ant init --template dev-chain` 及更多），任何 harness 的 agent 都是同一条总线上的一等单元——多智能体协调的 "Redis"
+
+### 它从哪来
+
+这是第二个系统。第一个——[claw_fact_bus](https://github.com/YangKGcsdms/claw_fact_bus)（2026-03，Python）——让总线当仲裁者、按兴趣推送事实，死于本设计所治愈的那些病：服务端状态、隐式命令、协调规则住在运行时里。重写删掉了一切能删的，只留下删不掉的——全序——并把所有语义搬进读者折叠。完整故事见 [EVOLUTION.md](docs/EVOLUTION.md)；先造出会失败的版本，正是这个版本长成这样的原因。
 
 ## 参与贡献
 

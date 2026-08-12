@@ -4,7 +4,11 @@
 
 # AntLegion
 
-**A fact bus for autonomous agents** — local, embeddable infrastructure where agents coordinate by sharing immutable facts, never by sending each other commands.
+**Run several AI agents on the same project and they re-do each other's work, lose each other's context, and drift apart.** AntLegion fixes this at the fact level: an append-only **fact bus** where autonomous work units post what happened, claim work exactly-once, and let the workflow emerge — no orchestrator, nobody commands anybody. Local, embeddable infrastructure (think Redis, not SaaS).
+
+<!-- demo GIF: `npx @antlegion/bus demo` recording lands here with the 0.3.0 release -->
+
+It doesn't lock files or serialize your agents — conflicts are eliminated at the division-of-work layer, before two units ever touch the same task. Your existing Claude Code / Cursor sessions can join the same bus as work units too, via [MCP](#connect-via-mcp).
 
 [![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
@@ -48,7 +52,17 @@ No agent ever addresses another. Agents publish observations about the world, re
 
 The bus enforces exactly one thing: **total order**. From total order, exactly-once assignment falls out as a mathematical theorem: the claim with the lowest sequence number wins, and every reader computes the same winner from the same immutable stream.
 
-This is not aspirational. It is [validated by runnable multi-agent swarms](#validated-guarantees).
+This is not aspirational. It is [validated by runnable multi-agent swarms](#validated-guarantees) and [measured under contention](research/s2-experiments-2026-08.md).
+
+## Why this exists
+
+Three accidents happen to every multi-agent setup, and they all have the same root cause — there is no shared, ordered record of what already happened:
+
+1. **Duplicated work.** Two agents pick up the same task because neither can see the other's intent. Here, picking up work *is* a fact (`_.claim`), and the total order makes exactly-once a theorem — measured at **0 double-executions across 100 claim units with 4× replicated workers racing** ([experiment log](research/s2-experiments-2026-08.md)).
+2. **Lost context.** What agent A learned never reaches agent B, or reaches it as stale prose. Here every observation is an immutable, content-addressed fact any unit can fold at its own pace.
+3. **Workflows held together by prose.** "First plan, then dev, then test" lives in a prompt until someone skips a step. Here the pipeline is causal structure (`refs.parent`), and evidence shapes are enforced by an adjudicator — forged "all green" reports were intercepted at **8/8 with 0 false kills** in our injection test.
+
+These failure modes are well documented in the literature — MAST, the multi-agent failure taxonomy ([arXiv:2503.13657](https://arxiv.org/abs/2503.13657)), catalogs inter-agent misalignment and verification gaps as dominant failure classes. The numbers above, though, are ours: first-party, reproducible with one command each.
 
 ## Key properties
 
@@ -62,9 +76,32 @@ This is not aspirational. It is [validated by runnable multi-agent swarms](#vali
 | **Durable** | Append-only journal (`facts-v2.jsonl`) with configurable `appendfsync` policy; crash recovery replays the log — no state machine to rebuild |
 | **Verifiable** | Every fact is HMAC-signed by the bus; signature verified on recovery; interop guaranteed by a [cross-language conformance vector set](antlegion-bus/conformance/vectors.json) |
 
+### What it is — and isn't
+
+Not a message queue (nothing is consumed), not an orchestrator (nobody assigns work), not a workflow engine (the pipeline is folded out of the stream, never stored). Against the other ways people coordinate agents today:
+
+| | shared files / scratchpad | SQLite mailbox | hosted coordination SaaS | platform built-in shared state (Agent-Teams-style) | **AntLegion** |
+|---|---|---|---|---|---|
+| total order | ✗ | per-table, implicit | opaque | opaque | ✓ the core primitive |
+| exactly-once claiming | ✗ (locks, hope) | ✗ (row locks) | vendor-defined | vendor-defined | ✓ theorem of the order |
+| causality / audit | ✗ | ✗ | partial | partial | ✓ `refs` + signed log |
+| local & embeddable | ✓ | ✓ | ✗ | ✗ | ✓ one process, one file |
+| cross-harness | ✓ (barely) | ✓ | agent-framework-specific | single vendor | ✓ HTTP + MCP, any agent |
+| open protocol | — | — | ✗ | ✗ | ✓ [PROTOCOL.md](PROTOCOL.md) + conformance vectors |
+
+### Three mechanisms, one collaboration model
+
+**Persistence lets agents share reality. Claiming lets them divide work. Causation lets workflows emerge.** Everything else in the system is one of these three, read from the same ordered log — persistence is the append-only journal ([§1](PROTOCOL.md)), claiming is the lowest-seq theorem ([§3.1](PROTOCOL.md)), causation is `refs.parent` chains ([§3.4](PROTOCOL.md)).
+
 ## Quickstart
 
 **Requires Node.js ≥ 20**
+
+**Fastest possible look** — the three-act demo (exactly-once race → crash takeover → byte-identical replay), zero config, zero API key, ~15 seconds:
+
+```bash
+npx @antlegion/bus demo
+```
 
 The main path is two packages and four commands: boot a bus, put a DCU fleet on it, feed it a requirement, and watch it run autonomously.
 
@@ -73,6 +110,7 @@ The main path is two packages and four commands: boot a bus, put a DCU fleet on 
 ```bash
 npx @antlegion/bus
 # [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
+# [antlegion-v2] dashboard → http://127.0.0.1:28090/dashboard
 ```
 
 **2. Start the DCU fleet** ([`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — the dev-chain: 4 stage DCUs + adjudicator + watchdog):
@@ -312,6 +350,34 @@ server itself.
 
 The MCP adapter uses the same `ClientV2` fold SDK as the HTTP client — coordination semantics are implemented once, not per-adapter.
 
+### First prompt after mounting
+
+Adoption happens in the prompt, not the install. Paste this as your first message to an agent that just got the tools:
+
+> Check the antlegion fact bus for open `task.todo` facts. If one is unclaimed, claim it before working on it; only proceed if you won the claim. When done, resolve it with a short result payload. If there are no open tasks, publish one `task.todo` describing the next thing you plan to do, so other agents can see it.
+
+### Rules snippet for CLAUDE.md / .cursorrules
+
+```markdown
+## Multi-agent coordination (AntLegion)
+- Before starting any task: query the fact bus; if a `task.todo` for it exists and is claimed, pick different work.
+- Claim before you work (`antlegion_claim`); proceed ONLY if you won. Losing a claim is normal — move on.
+- When finished, resolve the fact (`antlegion_resolve`) with what you produced. Never mark work done in prose only.
+- Publish significant observations as facts so other agents can react — don't hoard context.
+```
+
+### The two-window experiment (5 minutes)
+
+Open two Claude Code windows, mount the MCP server in both, then in **window A**:
+
+> Publish a task.todo fact: {"title": "write a haiku about total order"} — then claim it and start working.
+
+Immediately in **window B**:
+
+> Find the latest task.todo on the bus and claim it.
+
+Window B loses: the claim tool reports `won: false` with A as the winner, and B moves on instead of duplicating the work. That's exactly-once with zero locks — decided by which claim landed first in the total order, computed identically by both readers.
+
 ## Validated guarantees
 
 The founding premise is exercised by four runnable swarms in [`antlegion-bus/examples/`](antlegion-bus/examples). Each boots a real server, spawns ~20 autonomous agents, and asserts a concrete, measurable pass gate:
@@ -360,6 +426,27 @@ ANTLEGION_DATA_DIR=/var/lib/antlegion \
 ANTLEGION_FSYNC=always \
 node dist/index.js
 ```
+
+### Ops cheat sheet
+
+- **Where's my data?** One append-only file: `$ANTLEGION_DATA_DIR/facts-v2.jsonl` (default `.data-v2/`). Back it up by copying it.
+- **Start fresh:** stop the bus, delete the data dir. There is no other state anywhere.
+- **Ctrl-C is safe:** the journal is flushed on shutdown; recovery replays the log and verifies every signature.
+- **Always set a stable `ANTLEGION_BUS_SECRET`:** unset, the bus mints a fresh HMAC key each boot — after a restart, `sig`s written earlier can no longer be verified (they surface as `sig_failures` in `/info`).
+
+### Security model
+
+Same trust boundary as Redis: the bus **trusts its callers**. It binds to `127.0.0.1` by default; set `HOST=0.0.0.0` only inside a boundary you control (a docker network, a VPC). There is no authentication yet ([roadmap](#roadmap)) — do not expose it to untrusted networks.
+
+### Troubleshooting
+
+| symptom | cause / fix |
+|---|---|
+| `error: port 28090 already in use` | another bus is running — reuse it, or `PORT=28091 npx @antlegion/bus` |
+| `sig_failures > 0` in `/info` | the bus restarted with a different (or missing) `ANTLEGION_BUS_SECRET` — set a stable one |
+| `error: cannot reach bus at <url>` from alctl/SDK | no bus on that URL — `npx @antlegion/bus`, or point `ANTLEGION_BUS_URL` at the right host |
+| `resolve ignored — fact is owned by 'X'` | you lost the claim; that's the system working. Query state, pick other work |
+| two units act on the same task | are two processes sharing one identity/author? one identity = one process ([why](research/s2-experiments-2026-08.md)) |
 
 ## Architecture
 
@@ -467,14 +554,27 @@ antlegion-platform/
 
 ### Roadmap
 
-- [x] Published npm package — [`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus) (`npx @antlegion/bus` boots a bus)
-- [x] [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — DCU runtime + dev-chain fleet + supervision board (`npx @antlegion/ant chain`)
-- [ ] `ant init` / `ant start` — guided setup + resident daemon (0.2)
-- [ ] Real workers: the act step spawns an LLM session (coordination stays in deterministic code; the LLM only does the work)
-- [ ] Multi-language client SDKs — Go, Python, Rust (conformance vectors are ready to test against)
-- [ ] Auth + per-author rate limiting for public-facing deployments
-- [ ] Replication / HA (protocol design: single-writer + failover; see PROTOCOL.md §7)
-- [ ] CI integration for the cross-language Python verifier
+**Near — a polished MVP anyone can adopt in five minutes**
+- [x] npm packages: [`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus) · [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant)
+- [x] LLM-acted workers (pi-ai → DeepSeek or any OpenAI-compatible endpoint) — coordination stays deterministic; the LLM only produces content
+- [x] `ant init` / `ant start` — guided setup + resident colony
+- [x] `npx @antlegion/bus demo` — the three-act killer demo, zero config, zero key
+- [x] CI (tests + typecheck + cross-language conformance verifier + wire-break guard)
+- [ ] demo GIF in this README · GitHub Releases with notes
+
+**Mid — the measured coordination layer**
+- [ ] Multi-language client SDKs — Go, Python, Rust (the [conformance vectors](antlegion-bus/conformance/vectors.json) are the test target, already shipping)
+- [ ] Evaluation benchmark: duplicated-work rate, claim-contention outcomes, takeover latency, interception rate — the [S2 experiment series](research/s2-experiments-2026-08.md) is its seed
+- [ ] Read-only ops dashboard (fold.ts running in the browser — the reader-fold model as its own observability)
+- [ ] Auth + per-author rate limiting for exposed deployments
+
+**Far — the default coordination layer for agent fleets**
+- [ ] Replication / HA (single-writer + failover; PROTOCOL.md §7)
+- [ ] A DCU ecosystem: role templates (`ant init --template dev-chain` and beyond), any harness's agents as first-class units on one bus — the "Redis of multi-agent coordination"
+
+### Where this came from
+
+This is a second system. The first — [claw_fact_bus](https://github.com/YangKGcsdms/claw_fact_bus) (2026-03, Python) — made the bus an arbiter that pushed facts to interested agents, and died of exactly the diseases this design cures: server-side state, implicit commands, coordination rules living in the runtime. The rewrite deleted everything except what cannot be deleted — the total order — and moved every meaning into reader folds. [EVOLUTION.md](docs/EVOLUTION.md) tells the whole story; building the failed version first is why this one is shaped like this.
 
 ## Contributing
 

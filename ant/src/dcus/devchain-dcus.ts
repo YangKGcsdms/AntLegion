@@ -162,15 +162,18 @@ export async function publishRegistry(
 
 // ── stage DCU ──
 
-export function stageDCU(stage: Stage, busUrl: string, workspaceRoot: string): DCUSpec {
+export function stageDCU(stage: Stage, busUrl: string, workspaceRoot: string, replica = 0): DCUSpec {
   const spec = DEVCHAIN[stage];
+  // Replicas are distinct identities racing for the same claims — that is
+  // the point: exactly-once must hold under contention, not just solo.
+  const author = replica === 0 ? spec.dcu : `${spec.dcu.split("@")[0]}-r${replica}@devchain`;
   return {
-    name: spec.dcu,
-    author: spec.dcu,
+    name: author,
+    author,
     busUrl,
     pollMs: 1000,
     init: async (ctx) => {
-      await publishRegistry(busUrl, spec.dcu, spec, {}, ctx.log);
+      await publishRegistry(busUrl, author, spec, replica > 0 ? { replica_of: spec.dcu } : {}, ctx.log);
     },
     onBatch: async (_batch, ctx) => {
       const views = foldDevchain(ctx.mirror);
@@ -254,15 +257,17 @@ export function adjudicatorDCU(busUrl: string): DCUSpec {
   };
 }
 
-/** The whole fleet, ready for Promise.all(runDCU). */
+/** The whole fleet, ready for Promise.all(runDCU). `replicas: 2` doubles
+ * every stage DCU with distinct identities — a live exactly-once stress. */
 export function devchainFleet(
-  busUrl: string, workspaceRoot: string, opts: { autoGate?: boolean } = {},
+  busUrl: string, workspaceRoot: string, opts: { autoGate?: boolean; replicas?: number } = {},
 ): DCUSpec[] {
-  const fleet = [
-    ...STAGES.map((s) => stageDCU(s, busUrl, workspaceRoot)),
-    adjudicatorDCU(busUrl),
-    watchdogDCU(busUrl),
-  ];
+  const replicas = Math.max(1, opts.replicas ?? 1);
+  const fleet: DCUSpec[] = [];
+  for (let r = 0; r < replicas; r++) {
+    fleet.push(...STAGES.map((s) => stageDCU(s, busUrl, workspaceRoot, r)));
+  }
+  fleet.push(adjudicatorDCU(busUrl), watchdogDCU(busUrl));
   if (opts.autoGate) fleet.push(gateApproverDCU(busUrl));
   return fleet;
 }

@@ -28,6 +28,13 @@ export interface WatchRoot {
 export interface AntConfig {
   busUrl: string;
   watchRoots: WatchRoot[];
+  /** Act mode for stage workers (ant start): "llm" routes acts through the
+   * configured model via pi-ai; "simulated" needs no key. Env ANT_WORKER wins. */
+  worker?: "llm" | "simulated";
+  /** Model id for llm acts (default deepseek-v4-flash). Env ANT_LLM_MODEL wins. */
+  model?: string;
+  /** Auto-approve human gates (unattended). Env ANT_AUTO_GATE wins. */
+  autoGate?: boolean;
 }
 
 /** Package root (board.html and friends live here) — works from src/ and dist/. */
@@ -57,7 +64,13 @@ export async function loadConfig(configPath = path.join(process.cwd(), "ant.conf
       throw new Error(`each watchRoots entry needs {root, origin} (${configPath})`);
     }
   }
-  return { busUrl: envBusUrl() ?? raw.busUrl ?? DEFAULT_BUS_URL, watchRoots };
+  return {
+    busUrl: envBusUrl() ?? raw.busUrl ?? DEFAULT_BUS_URL,
+    watchRoots,
+    ...(raw.worker === "llm" || raw.worker === "simulated" ? { worker: raw.worker } : {}),
+    ...(typeof raw.model === "string" && raw.model ? { model: raw.model } : {}),
+    ...(typeof raw.autoGate === "boolean" ? { autoGate: raw.autoGate } : {}),
+  };
 }
 
 /** Resolve a configured root to an absolute path (relative ⇒ cwd). */

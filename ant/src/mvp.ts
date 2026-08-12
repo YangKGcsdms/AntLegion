@@ -31,12 +31,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function runMvp(args: string[]): Promise<void> {
   let reqs = 25;
   let noFleet = false;
+  let replicas = 1;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--reqs") reqs = parseInt(args[++i] ?? "", 10);
     else if (args[i] === "--no-fleet") noFleet = true;
+    else if (args[i] === "--replicas") replicas = parseInt(args[++i] ?? "", 10);
   }
-  if (!Number.isFinite(reqs) || reqs < 1) {
-    console.error("usage: ant mvp [--reqs N] [--no-fleet]");
+  if (!Number.isFinite(reqs) || reqs < 1 || !Number.isFinite(replicas) || replicas < 1) {
+    console.error("usage: ant mvp [--reqs N] [--replicas N] [--no-fleet]");
     process.exit(2);
   }
 
@@ -62,9 +64,9 @@ export async function runMvp(args: string[]): Promise<void> {
     // same folds. This process only feeds and keeps score.
     log("expecting an external fleet on the bus (started with `ant chain [--dcus …]`)");
   } else {
-    // The fleet: 4 stage DCUs + adjudicator + watchdog + gate-approver (unattended).
-    const fleet = devchainFleet(cfg.busUrl, root, { autoGate: true });
-    log(`fleet: ${fleet.map((s) => s.name).join(", ")}`);
+    // The fleet: stage DCUs ×replicas + adjudicator + watchdog + gate-approver.
+    const fleet = devchainFleet(cfg.busUrl, root, { autoGate: true, replicas });
+    log(`fleet (${fleet.length} DCUs${replicas > 1 ? `, stage replicas ×${replicas}` : ""}): ${fleet.map((s) => s.name).join(", ")}`);
     for (const spec of fleet) void runDCU(spec);
   }
 
@@ -116,12 +118,37 @@ function printScoreboard(facts: Fact[], mine: Set<string>, reqs: number, elapsed
   };
   const count = (pred: (f: Fact) => boolean) => facts.filter(pred).length;
 
+  // Everything below is scoped to THIS run's facts: seed ids (req.registered
+  // + artifacts of our slugs), then count only events targeting those ids.
+  const runIds = new Set(facts.filter((f) => ofRun(f)).map((f) => f.id));
+  const targets = (f: Fact) => f.refs.claim_of ?? f.refs.resolves ?? f.refs.verdict_of ?? f.refs.gate_of;
+  const inRun = (f: Fact) => { const t = targets(f); return typeof t === "string" && runIds.has(t); };
+
   const artifacts = count((f) => ARTIFACT_TYPES.has(f.type) && ofRun(f));
-  const accepted = count((f) => f.type === EVIDENCE_ACCEPTED);
-  const rejected = count((f) => f.type === EVIDENCE_REJECTED);
+  const accepted = count((f) => f.type === EVIDENCE_ACCEPTED && inRun(f));
+  const rejected = count((f) => f.type === EVIDENCE_REJECTED && inRun(f));
   const gates = count((f) => f.type === GATE_APPROVED && ofRun(f));
-  const claims = count((f) => f.type === "_.claim");
-  const resolves = count((f) => f.type === "_.resolve");
+  const claims = count((f) => f.type === "_.claim" && inRun(f));
+  const resolves = count((f) => f.type === "_.resolve" && inRun(f));
+
+  // ── S2 experiment 1: exactly-once under contention ──
+  // double execution = more than one artifact for the same (req, stage);
+  // contested claim = an input fact claimed by more than one identity.
+  const artifactKey = new Map<string, number>();
+  for (const f of facts) {
+    if (!ARTIFACT_TYPES.has(f.type) || !ofRun(f)) continue;
+    const k = `${String((f.payload as Record<string, unknown>).reqSlug)}:${f.type}`;
+    artifactKey.set(k, (artifactKey.get(k) ?? 0) + 1);
+  }
+  const doubleExec = [...artifactKey.values()].filter((n) => n > 1).reduce((s, n) => s + (n - 1), 0);
+  const claimsByTarget = new Map<string, Set<string>>();
+  for (const f of facts) {
+    if (f.type !== "_.claim" || !f.refs.claim_of || !runIds.has(f.refs.claim_of)) continue;
+    const set = claimsByTarget.get(f.refs.claim_of) ?? new Set<string>();
+    set.add(f.author);
+    claimsByTarget.set(f.refs.claim_of, set);
+  }
+  const contested = [...claimsByTarget.values()].filter((s) => s.size > 1).length;
 
   const stageCycles = artifacts;            // each artifact = one trigger→claim→act→resolve cycle
   const responses = artifacts + accepted + rejected + gates; // every DCU wake→act→publish
@@ -133,6 +160,8 @@ function printScoreboard(facts: Fact[], mine: Set<string>, reqs: number, elapsed
   console.log(`gate approvals        ${gates}`);
   console.log(`total responses       ${responses}  (artifacts + verdicts + gates)`);
   console.log(`claims / resolves     ${claims} / ${resolves}`);
+  console.log(`contested claims      ${contested}  (inputs claimed by >1 identity)`);
+  console.log(`double executions     ${doubleExec}  ${doubleExec === 0 ? "✓ exactly-once held" : "✗ EXACTLY-ONCE VIOLATED"}`);
   console.log(`facts on the bus      ${facts.length}`);
   console.log(`elapsed               ${(elapsedMs / 1000).toFixed(1)}s`);
   if (workerMode() === "llm" && !externalFleet) {

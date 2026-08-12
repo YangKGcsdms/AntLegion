@@ -83,6 +83,31 @@ async function runChain(): Promise<void> {
   await Promise.all(fleet.map((spec) => runDCU(spec)));
 }
 
+/**
+ * `ant start` — the resident colony, driven by ./ant.config.json (see
+ * `ant init`): fleet + ingestor, worker mode / model / auto-gate from
+ * config (env vars still win). Crash-safe by construction: a claim held
+ * by a dead unit expires on bus time and a sibling re-wins it.
+ */
+async function runStart(): Promise<void> {
+  const cfg = await loadConfig();
+  // config → env, so worker code (which reads env at act time) follows it
+  if (cfg.worker && !process.env.ANT_WORKER) process.env.ANT_WORKER = cfg.worker;
+  if (cfg.model && !process.env.ANT_LLM_MODEL) process.env.ANT_LLM_MODEL = cfg.model;
+  if (process.env.ANT_WORKER === "llm" && !process.env.DEEPSEEK_API_KEY) {
+    console.error("error: worker mode is llm but DEEPSEEK_API_KEY is not set — export it or set worker to simulated");
+    process.exit(1);
+  }
+  const autoGate = process.env.ANT_AUTO_GATE === "1" || (cfg.autoGate ?? false);
+  const root = dcuWorkspaceRoot(cfg);
+  console.error(`[start] bus ${cfg.busUrl} · worker ${process.env.ANT_WORKER ?? "simulated"} · autoGate ${autoGate} · workspace ${root}`);
+
+  const fleet = devchainFleet(cfg.busUrl, root, { autoGate });
+  const loops = fleet.map((spec) => runDCU(spec));
+  loops.push(runIngestor()); // mirror the workspace so req dirs/docs become facts
+  await Promise.all(loops);
+}
+
 async function runBoard(): Promise<void> {
   const cfg = await loadConfig();
   const port = process.env.BOARD_PORT ? parseInt(process.env.BOARD_PORT, 10) : 28091;
@@ -153,7 +178,10 @@ usage: ant <command>
                               ANT_WORKER=llm routes acts through DeepSeek;
                               --no-fleet feeds/scores an external fleet
 
-  init / start                guided setup + resident daemon — coming in 0.2
+  init                        guided setup → ./ant.config.json (bus URL,
+                              workspace, act mode llm|simulated, auto-gate)
+  start                       resident colony from the config: fleet +
+                              workspace ingestor; wakes on facts, sleeps after
 
 config: ./ant.config.json (optional; sensible defaults apply)
 env:    ANTLEGION_BUS_URL (default http://localhost:28090) · BOARD_PORT (28091)
@@ -181,6 +209,14 @@ switch (cmd) {
     import("./mvp.js")
       .then((m) => m.runMvp(process.argv.slice(3)))
       .catch((err) => { console.error(err); process.exit(1); });
+    break;
+  case "init":
+    import("./init.js")
+      .then((m) => m.runInit())
+      .catch((err) => { console.error(err instanceof Error ? err.message : err); process.exit(1); });
+    break;
+  case "start":
+    runStart().catch((err) => { console.error(err); process.exit(1); });
     break;
   case "--version":
   case "-v":
