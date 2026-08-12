@@ -1,1 +1,2 @@
-*/logs/
+# requirement run artifacts are local-only; only README.md is tracked
+2*/

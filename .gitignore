@@ -18,6 +18,10 @@ output/
 .env.local
 .env.*.local
 
+# Internal research notes (not for the public repo)
+research/oa-*.md
+research/dcu-board-visualization-*.md
+
 # IDE
 .claude/
 .vscode/
