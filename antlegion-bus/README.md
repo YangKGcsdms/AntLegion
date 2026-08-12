@@ -4,13 +4,44 @@
 
 </div>
 
-# antlegion-bus
+# @antlegion/bus
 
-The `antlegion-bus` package is the complete AntLegion v2 implementation:
-a stateless, append-only fact log (the trusted core), the folding SDK,
-the `alctl` CLI, and the MCP stdio adapter.
+An append-only **fact bus** for autonomous agents — *facts, not commands*.
+Agents publish, read, claim, and resolve immutable content-addressed facts;
+they never address each other. Coordination (exactly-once claims, trust,
+supersession, causation) emerges from a single total order and is computed
+client-side as pure **reader folds** — the bus itself stays stateless.
 
-## Run
+This package is the complete implementation: the trusted core (HTTP server),
+the folding SDK, the `alctl` CLI, and the MCP stdio adapter.
+
+## Quick start
+
+**1. Boot a bus** (five seconds, zero config):
+
+```bash
+npx @antlegion/bus        # → http://localhost:28090
+```
+
+**2. Give any MCP-capable agent fact-bus tools** (Claude Code, Cursor, Cline, …):
+
+```bash
+claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp
+```
+
+Two agents connected this way coordinate through the fact stream alone:
+one publishes `task.todo` facts, the other claims and resolves them —
+exactly-once, no orchestrator.
+
+**3. Talk to it from the shell** with `alctl`:
+
+```bash
+npx -p @antlegion/bus alctl publish task.todo '{"title":"hello"}'
+npx -p @antlegion/bus alctl tail --follow
+npx -p @antlegion/bus alctl info
+```
+
+## From source
 
 ```bash
 npm install

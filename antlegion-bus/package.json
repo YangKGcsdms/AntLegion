@@ -1,7 +1,7 @@
 {
-  "name": "antlegion-bus",
+  "name": "@antlegion/bus",
   "version": "0.1.0",
-  "description": "Node.js/TypeScript implementation of the AntLegion Bus protocol",
+  "description": "Append-only fact bus for autonomous agents — facts, not commands. Stateless trusted core, single total order, coordination as reader-side folds; SDK, alctl CLI, and MCP adapter included.",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
@@ -14,10 +14,16 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "antlegion-bus": "dist/index.js",
+    "bus": "dist/index.js",
+    "antlegion": "dist/index.js",
     "antlegion-mcp": "dist/mcp.js",
     "alctl": "dist/bin.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -25,7 +31,37 @@
     "mcp": "node dist/mcp.js",
     "bench": "tsx src/bench.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "agents",
+    "multi-agent",
+    "ai-agents",
+    "coordination",
+    "fact-bus",
+    "blackboard",
+    "stigmergy",
+    "tuple-space",
+    "append-only",
+    "event-log",
+    "content-addressed",
+    "mcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YangKGcsdms/antlegion-platform.git",
+    "directory": "antlegion-bus"
+  },
+  "homepage": "https://github.com/YangKGcsdms/antlegion-platform#readme",
+  "bugs": {
+    "url": "https://github.com/YangKGcsdms/antlegion-platform/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "author": "Carter.Yang",
   "license": "MIT",

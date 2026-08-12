@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * v2 entry point — boot the append-only fact bus over HTTP.
  *

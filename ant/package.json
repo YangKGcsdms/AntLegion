@@ -1,0 +1,43 @@
+{
+  "name": "@antlegion/ant",
+  "version": "0.0.1",
+  "description": "Autonomous worker ants (DCUs) for the AntLegion fact bus — install one, tell it what facts to watch, and it wakes up and works. Pre-release name reservation; the runtime lands here next.",
+  "type": "module",
+  "bin": {
+    "ant": "cli.js"
+  },
+  "files": [
+    "cli.js",
+    "README.md"
+  ],
+  "keywords": [
+    "agents",
+    "multi-agent",
+    "ai-agents",
+    "autonomous-agents",
+    "coordination",
+    "fact-bus",
+    "blackboard",
+    "stigmergy",
+    "worker",
+    "daemon",
+    "antlegion"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YangKGcsdms/antlegion-platform.git",
+    "directory": "ant"
+  },
+  "homepage": "https://github.com/YangKGcsdms/antlegion-platform#readme",
+  "bugs": {
+    "url": "https://github.com/YangKGcsdms/antlegion-platform/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Carter.Yang",
+  "license": "MIT"
+}
