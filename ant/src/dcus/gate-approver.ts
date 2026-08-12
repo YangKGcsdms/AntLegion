@@ -13,6 +13,7 @@
 
 import type { DCUSpec } from "../runtime.js";
 import { GATE_APPROVED, SYS_REGISTRY, foldDevchain } from "../folds/devchain.js";
+import { foldOpts } from "./devchain-dcus.js";
 import { httpTransport } from "@antlegion/bus/client";
 
 export const GATE_APPROVER_AUTHOR = "dcu-gate-approver@devchain";
@@ -43,7 +44,7 @@ export function gateApproverDCU(busUrl: string): DCUSpec {
       ctx.log(`registry ${r.deduped ? "deduped" : "published"} (seq ${r.seq})`);
     },
     onBatch: async (_batch, ctx) => {
-      for (const req of foldDevchain(ctx.mirror)) {
+      for (const req of foldDevchain(ctx.mirror, foldOpts())) {
         for (const stage of req.stages) {
           if (stage.state !== "gated" || !stage.inputId || approved.has(stage.inputId)) continue;
           approved.add(stage.inputId);

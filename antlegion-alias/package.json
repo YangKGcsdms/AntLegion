@@ -1,0 +1,45 @@
+{
+  "name": "antlegion",
+  "version": "0.3.0",
+  "description": "AntLegion — append-only fact bus for autonomous agents. This is a convenience alias: `npx antlegion` boots @antlegion/bus (and `npx antlegion demo` runs the three-act demo).",
+  "type": "module",
+  "bin": {
+    "antlegion": "cli.js"
+  },
+  "files": [
+    "cli.js",
+    "README.md"
+  ],
+  "keywords": [
+    "agents",
+    "multi-agent",
+    "ai-agents",
+    "coordination",
+    "fact-bus",
+    "blackboard",
+    "stigmergy",
+    "append-only",
+    "mcp",
+    "antlegion"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YangKGcsdms/AntLegion.git",
+    "directory": "antlegion-alias"
+  },
+  "homepage": "https://github.com/YangKGcsdms/AntLegion#readme",
+  "bugs": {
+    "url": "https://github.com/YangKGcsdms/AntLegion/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Carter.Yang",
+  "license": "MIT",
+  "dependencies": {
+    "@antlegion/bus": "^0.3.0"
+  }
+}

@@ -51,7 +51,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function runDCU(spec: DCUSpec): Promise<void> {
   const pollMs = spec.pollMs ?? 1000;
   const pageSize = spec.pageSize ?? 500;
-  const client = new ClientV2(httpTransport(spec.busUrl), spec.author);
+  // ANT_CLAIM_DELTA (seconds): claim-expiry Δ for every fold this DCU runs.
+  // Shorter Δ = faster crash takeover; must exceed the longest act duration.
+  const delta = process.env.ANT_CLAIM_DELTA ? parseFloat(process.env.ANT_CLAIM_DELTA) : NaN;
+  const client = new ClientV2(
+    httpTransport(spec.busUrl), spec.author,
+    Number.isFinite(delta) && delta > 0 ? { claimTimeout: delta } : undefined,
+  );
   const log = (msg: string) => console.error(`[${spec.name}] ${new Date().toISOString()} ${msg}`);
 
   let cursor = 0;

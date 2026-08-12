@@ -14,7 +14,7 @@ import {
   CHAIN_STARVED, ESCALATE_HUMAN, WATCHDOG_AUTHOR, STARVED_AFTER_S, ESCALATE_CLAIMS,
   alreadyReported, detectEscalations, detectOrphanRejections, detectStarved,
 } from "../folds/watchdog.js";
-import { publishRegistry } from "./devchain-dcus.js";
+import { foldOpts, publishRegistry } from "./devchain-dcus.js";
 
 export function watchdogDCU(busUrl: string): DCUSpec {
   return {
@@ -35,7 +35,7 @@ export function watchdogDCU(busUrl: string): DCUSpec {
       }, ctx.log);
     },
     onBatch: async (_batch, ctx) => {
-      const views = foldDevchain(ctx.mirror);
+      const views = foldDevchain(ctx.mirror, foldOpts());
       const reported = alreadyReported(ctx.mirror);
       const nowSec = Date.now() / 1000;
 

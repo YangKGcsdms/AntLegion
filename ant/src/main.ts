@@ -16,7 +16,8 @@ import { httpTransport } from "@antlegion/bus/client";
 import { loadConfig, resolveWatchRoot, dcuWorkspaceRoot, PKG_ROOT } from "./config.js";
 import { runDCU } from "./runtime.js";
 import { AUTHOR, backfill, newKnownState, startWatcher } from "./dcus/ingestor-req.js";
-import { devchainFleet } from "./dcus/devchain-dcus.js";
+import { devchainFleet, stageDCU } from "./dcus/devchain-dcus.js";
+import { STAGES } from "./folds/devchain.js";
 import { createBoardServer } from "./board.js";
 import { createRequirement } from "./req-new.js";
 
@@ -62,13 +63,19 @@ async function runIngestor(): Promise<void> {
 async function runChain(): Promise<void> {
   const args = process.argv.slice(3);
   let dcus: string[] | null = null;
+  let replica = 0;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--dcus") dcus = (args[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    else if (args[i] === "--replica") replica = parseInt(args[++i] ?? "0", 10) || 0;
   }
   const cfg = await loadConfig();
   const root = dcuWorkspaceRoot(cfg);
   const autoGate = process.env.ANT_AUTO_GATE === "1" || (dcus?.includes("gate") ?? false);
-  let fleet = devchainFleet(cfg.busUrl, root, { autoGate });
+  // --replica N shifts stage identities (dcu-plan-rN…) so a second process
+  // joins the same bus as a SIBLING, never as a same-identity twin.
+  let fleet = replica > 0
+    ? [...STAGES.map((s) => stageDCU(s, cfg.busUrl, root, replica))]
+    : devchainFleet(cfg.busUrl, root, { autoGate });
   if (dcus) {
     fleet = fleet.filter((spec) => {
       const short = spec.name.split("@")[0]!; // e.g. dcu-plan

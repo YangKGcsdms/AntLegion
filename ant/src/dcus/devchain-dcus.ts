@@ -37,6 +37,13 @@ const WORK_MS: Record<Stage, number> = { plan: 2500, dev: 4000, unittest: 3000, 
 export const workerMode = (): "simulated" | "llm" =>
   process.env.ANT_WORKER === "llm" ? "llm" : "simulated";
 
+/** Fold options honoring ANT_CLAIM_DELTA (see runtime.ts) — the stage
+ * predicate must expire stale claims at the same Δ the client uses. */
+export function foldOpts(): { claimTimeout?: number } {
+  const d = process.env.ANT_CLAIM_DELTA ? parseFloat(process.env.ANT_CLAIM_DELTA) : NaN;
+  return Number.isFinite(d) && d > 0 ? { claimTimeout: d } : {};
+}
+
 // ── workers ──
 
 export type Worker = (req: ReqChainView, ctx: DCUContext, workspaceRoot: string) => Promise<Record<string, unknown>>;
@@ -176,7 +183,7 @@ export function stageDCU(stage: Stage, busUrl: string, workspaceRoot: string, re
       await publishRegistry(busUrl, author, spec, replica > 0 ? { replica_of: spec.dcu } : {}, ctx.log);
     },
     onBatch: async (_batch, ctx) => {
-      const views = foldDevchain(ctx.mirror);
+      const views = foldDevchain(ctx.mirror, foldOpts());
       for (const req of views) {
         const mine = req.stages.find((s) => s.stage === stage);
         if (!mine || mine.state !== "open" || !mine.inputId) continue;
