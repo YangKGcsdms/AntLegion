@@ -2,3 +2,5 @@ node_modules/
 .data/
 .run/
 dist/
+.env
+.env.*

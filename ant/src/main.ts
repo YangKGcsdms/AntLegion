@@ -58,7 +58,8 @@ async function runIngestor(): Promise<void> {
 async function runChain(): Promise<void> {
   const cfg = await loadConfig();
   const root = dcuWorkspaceRoot(cfg);
-  await Promise.all(devchainFleet(cfg.busUrl, root).map((spec) => runDCU(spec)));
+  const autoGate = process.env.ANT_AUTO_GATE === "1";
+  await Promise.all(devchainFleet(cfg.busUrl, root, { autoGate }).map((spec) => runDCU(spec)));
 }
 
 async function runBoard(): Promise<void> {
@@ -125,6 +126,9 @@ usage: ant <command>
   board                       serve the supervision board (http://localhost:28091)
   req new "<名称>" [-s slug]  create a requirement in dcu-workspace and
                               publish req.registered
+  mvp [--reqs N]              unattended throughput run: fleet + auto-gate +
+                              N requirements (default 25 → 100 stage cycles);
+                              ANT_WORKER=llm routes acts through DeepSeek
 
   init / start                guided setup + resident daemon — coming in 0.2
 
@@ -149,6 +153,11 @@ switch (cmd) {
     break;
   case "req":
     runReqNew().catch((err) => { console.error(err instanceof Error ? err.message : err); process.exit(1); });
+    break;
+  case "mvp":
+    import("./mvp.js")
+      .then((m) => m.runMvp(process.argv.slice(3)))
+      .catch((err) => { console.error(err); process.exit(1); });
     break;
   case "--version":
   case "-v":

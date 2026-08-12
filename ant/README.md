@@ -32,6 +32,27 @@ roots (`ANTLEGION_BUS_URL` overrides).
 
 > `ant init` (guided setup) and `ant start` (resident daemon) land in 0.2.
 
+### LLM acts + the unattended MVP run
+
+The act step can route through an LLM (pi-ai → DeepSeek) while every bit of
+coordination — the loop, folds, claims, evidence shapes — stays deterministic
+code. The LLM produces content; it cannot choose what to listen to or claim:
+
+```bash
+export DEEPSEEK_API_KEY=sk-…             # never committed
+ANT_WORKER=llm ant chain                  # fleet with LLM acts
+ANT_AUTO_GATE=1 ANT_WORKER=llm ant chain  # + auto-approved gates (unattended)
+
+ANT_WORKER=llm ant mvp --reqs 25          # throughput run: feeds 25 requirements
+# → 100 stage cycles (trigger → claim → llm act → resolve), 100 adjudications,
+#   25 gate approvals; prints a scoreboard with LLM token usage at the end
+```
+
+`ANT_LLM_MODEL` (default `deepseek-v4-flash`) and `ANT_LLM_BASE_URL`
+(default `https://api.deepseek.com`) select the model; any OpenAI-compatible
+endpoint works. A malformed completion degrades to a valid deterministic
+fallback — the chain never stalls on a bad generation.
+
 This package ships three layers, built up in steps:
 
 - **Step 0–2** — the bus lifecycle + the `ingestor-req` DCU that mirrors

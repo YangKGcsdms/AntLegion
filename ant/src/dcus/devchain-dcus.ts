@@ -21,6 +21,7 @@ import { httpTransport } from "@antlegion/bus/client";
 import type { DCUContext, DCUSpec } from "../runtime.js";
 import { findExistingBySlug } from "../req-new.js";
 import { watchdogDCU } from "./watchdog-dcu.js";
+import { gateApproverDCU } from "./gate-approver.js";
 import {
   ADJUDICATOR_AUTHOR, ARTIFACT_TYPES, DEVCHAIN, EVIDENCE_ACCEPTED, EVIDENCE_REJECTED,
   SYS_REGISTRY, STAGES, foldDevchain, pendingAdjudications,
@@ -32,23 +33,24 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Simulated work durations — long enough to watch the board move. */
 const WORK_MS: Record<Stage, number> = { plan: 2500, dev: 4000, unittest: 3000, e2e: 3500 };
 
-// ── simulated workers ──
+/** Act mode: deterministic simulation (default) or LLM content (ANT_WORKER=llm). */
+export const workerMode = (): "simulated" | "llm" =>
+  process.env.ANT_WORKER === "llm" ? "llm" : "simulated";
 
-type Worker = (req: ReqChainView, ctx: DCUContext, workspaceRoot: string) => Promise<Record<string, unknown>>;
+// ── workers ──
+
+export type Worker = (req: ReqChainView, ctx: DCUContext, workspaceRoot: string) => Promise<Record<string, unknown>>;
 
 /**
- * plan worker also writes a real docs/方案.md into the requirement dir (when
- * it exists) so the ingestor mirrors a doc.updated fact — the two boards
- * corroborate each other. Never overwrites an existing 方案.md.
+ * Write a real docs/方案.md into the requirement dir (when it exists) so the
+ * ingestor mirrors a doc.updated fact — the two boards corroborate each
+ * other. Never overwrites an existing 方案.md.
  */
-const planWorker: Worker = async (req, ctx, workspaceRoot) => {
-  const payload = {
-    reqSlug: req.slug,
-    doc: "docs/方案.md",
-    scope: `实现「${req.name}」：按需求拆解出的最小闭环`,
-    out_of_scope: ["不改动存量计算口径", "不引入新的外部依赖"],
-    acceptance: ["单测通过且报告列明未覆盖项", "E2E 报告含偏差/缺陷/缺口三段且页面已验证"],
-  };
+export async function writePlanDoc(
+  req: ReqChainView, ctx: DCUContext, workspaceRoot: string,
+  payload: { scope: string; out_of_scope: string[]; acceptance: string[] },
+  generatedBy: string,
+): Promise<void> {
   try {
     const dirname = await findExistingBySlug(workspaceRoot, req.slug);
     if (dirname) {
@@ -62,7 +64,7 @@ const planWorker: Worker = async (req, ctx, workspaceRoot) => {
           "",
           "状态：方案待评审",
           "",
-          `> 由 ${DEVCHAIN.plan.dcu} 生成（simulated worker）· 等待 H1 方案评审`,
+          `> 由 ${DEVCHAIN.plan.dcu} 生成（${generatedBy}）· 等待 H1 方案评审`,
           "",
           `## 范围`, payload.scope, "",
           `## 不做什么`, ...payload.out_of_scope.map((s) => `- ${s}`), "",
@@ -74,6 +76,17 @@ const planWorker: Worker = async (req, ctx, workspaceRoot) => {
   } catch (err) {
     ctx.log(`doc write skipped (${err instanceof Error ? err.message : String(err)})`);
   }
+}
+
+const planWorker: Worker = async (req, ctx, workspaceRoot) => {
+  const payload = {
+    reqSlug: req.slug,
+    doc: "docs/方案.md",
+    scope: `实现「${req.name}」：按需求拆解出的最小闭环`,
+    out_of_scope: ["不改动存量计算口径", "不引入新的外部依赖"],
+    acceptance: ["单测通过且报告列明未覆盖项", "E2E 报告含偏差/缺陷/缺口三段且页面已验证"],
+  };
+  await writePlanDoc(req, ctx, workspaceRoot, payload, "simulated worker");
   return payload;
 };
 
@@ -103,9 +116,17 @@ const e2eWorker: Worker = async (req) => ({
   gaps: ["未在真实数据环境验证（H4 留给人工）"],
 });
 
-const WORKERS: Record<Stage, Worker> = {
+const SIM_WORKERS: Record<Stage, Worker> = {
   plan: planWorker, dev: devWorker, unittest: unittestWorker, e2e: e2eWorker,
 };
+
+/** Resolve the active worker set. LLM workers are imported lazily so the
+ * simulated path never touches the LLM module (or requires an API key). */
+async function activeWorkers(): Promise<Record<Stage, Worker>> {
+  if (workerMode() !== "llm") return SIM_WORKERS;
+  const m = await import("./workers-llm.js");
+  return { plan: m.llmPlanWorker, dev: m.llmDevWorker, unittest: m.llmUnittestWorker, e2e: m.llmE2eWorker };
+}
 
 // ── registry fact (deterministic → dedups across restarts) ──
 
@@ -126,7 +147,7 @@ export async function publishRegistry(
     payload: {
       domain: "devchain",
       dcu: author,
-      worker: "simulated",
+      worker: workerMode(),
       ...(spec ? {
         stage: spec.stage, order: spec.order, listens: spec.listens,
         produces: spec.produces, gate: spec.gate, skills: spec.skills,
@@ -168,9 +189,14 @@ export function stageDCU(stage: Stage, busUrl: string, workspaceRoot: string): D
           continue;
         }
 
-        ctx.log(`claimed ${spec.listens} of ${req.slug} — working (${WORK_MS[stage]}ms, simulated)`);
-        await sleep(WORK_MS[stage]);
-        const payload = await WORKERS[stage](req, ctx, workspaceRoot);
+        const mode = workerMode();
+        if (mode === "simulated") {
+          ctx.log(`claimed ${spec.listens} of ${req.slug} — working (${WORK_MS[stage]}ms, simulated)`);
+          await sleep(WORK_MS[stage]);
+        } else {
+          ctx.log(`claimed ${spec.listens} of ${req.slug} — working (llm act)`);
+        }
+        const payload = await (await activeWorkers())[stage](req, ctx, workspaceRoot);
 
         try {
           await ctx.client.resolve(mine.inputId, [
@@ -229,10 +255,14 @@ export function adjudicatorDCU(busUrl: string): DCUSpec {
 }
 
 /** The whole fleet, ready for Promise.all(runDCU). */
-export function devchainFleet(busUrl: string, workspaceRoot: string): DCUSpec[] {
-  return [
+export function devchainFleet(
+  busUrl: string, workspaceRoot: string, opts: { autoGate?: boolean } = {},
+): DCUSpec[] {
+  const fleet = [
     ...STAGES.map((s) => stageDCU(s, busUrl, workspaceRoot)),
     adjudicatorDCU(busUrl),
     watchdogDCU(busUrl),
   ];
+  if (opts.autoGate) fleet.push(gateApproverDCU(busUrl));
+  return fleet;
 }
