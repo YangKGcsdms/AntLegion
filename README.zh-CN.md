@@ -345,6 +345,7 @@ npx tsx examples/demo-killer.ts
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
 | `PORT` | `28090` | HTTP 监听端口 |
+| `HOST` | `127.0.0.1` | 监听地址——总线信任它的调用方（与 Redis 同款安全模型）；只在信任边界内设 `0.0.0.0` |
 | `ANTLEGION_DATA_DIR` | `.data-v2` | 日志文件目录（内含 `facts-v2.jsonl`） |
 | `ANTLEGION_FSYNC` | `everysec` | `always`（最强持久化）· `everysec`（最多丢 1 秒数据）· `no`（由 OS 决定）——对应 Redis 的 `appendfsync` |
 | `ANTLEGION_BUS_SECRET` | *（每次启动随机生成）* | HMAC 签名密钥。**生产环境务必设置稳定值**——不设置则每次重启后无法验证之前写入的签名 |

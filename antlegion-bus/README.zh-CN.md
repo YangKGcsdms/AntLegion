@@ -65,6 +65,7 @@ npm run bench                  # 吞吐 benchmark（进程内约 16 万 append/s
 | 变量 | 默认值 | 用途 |
 |---|---|---|
 | `PORT` | `28090` | HTTP 监听端口 |
+| `HOST` | `127.0.0.1` | 监听地址。总线信任它的调用方（与 Redis 同款安全模型）——只有在信任边界内（如 docker 网络）才设 `0.0.0.0` |
 | `ANTLEGION_DATA_DIR` | `.data-v2` | 只追加日志目录（内含 `facts-v2.jsonl`） |
 | `ANTLEGION_FSYNC` | `everysec` | `always` · `everysec` · `no`——对应 Redis `appendfsync` |
 | `ANTLEGION_BUS_SECRET` | 每次启动随机生成 | HMAC 签名密钥；**设为稳定值**以便重启后签名仍可验证 |

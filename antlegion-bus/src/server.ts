@@ -7,8 +7,13 @@
  *   GET  /facts/head       { head_seq } — start a reader at "newest only"
  *   GET  /facts/:id        one fact by content address
  *   GET  /health
+ *   GET  /dashboard        the zero-dependency live dashboard (read-only:
+ *                          it only polls /facts + /info)
  */
 
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { BusV2 } from "./bus.js";
@@ -16,12 +21,26 @@ import type { ReadQuery } from "./bus.js";
 import type { FsyncPolicy } from "./log.js";
 import type { FactInput } from "./types.js";
 
+const DASHBOARD_HTML = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)), "..", "demo", "dashboard.html",
+);
+
 export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy; maxDepth?: number }) {
   const bus = new BusV2(opts);
   const app = new Hono();
   app.use("*", cors());
 
   app.get("/health", (c) => c.json({ status: "ok", protocol: "2.0", head_seq: bus.headSeq() }));
+
+  // Live dashboard — a static page that reads the public wire surface.
+  app.get("/dashboard", async (c) => {
+    try {
+      const html = await fs.readFile(DASHBOARD_HTML, "utf-8");
+      return c.html(html);
+    } catch {
+      return c.json({ error: "dashboard not bundled in this install" }, 404);
+    }
+  });
 
   // INFO (redis INFO analog) + rewrite (BGREWRITEAOF analog)
   app.get("/info", (c) => c.json(bus.info()));

@@ -17,8 +17,12 @@ const cfg = loadConfig();
 
 const { app, bus } = createServerV2({ dataDir: cfg.dataDir, fsync: cfg.fsync, secret: cfg.secret, maxDepth: cfg.maxDepth });
 
-const server = serve({ fetch: app.fetch, port: cfg.port }, (info) => {
-  console.log(`[antlegion-v2] append-only fact bus on http://localhost:${info.port} (fsync=${cfg.fsync})`);
+const server = serve({ fetch: app.fetch, port: cfg.port, hostname: cfg.host }, (info) => {
+  console.log(`[antlegion-v2] append-only fact bus on http://${cfg.host}:${info.port} (fsync=${cfg.fsync})`);
+  console.log(`[antlegion-v2] dashboard → http://${cfg.host}:${info.port}/dashboard`);
+  if (cfg.host !== "127.0.0.1" && cfg.host !== "localhost") {
+    console.log(`[antlegion-v2] listening beyond loopback (HOST=${cfg.host}) — the bus trusts its callers; keep it inside your trust boundary`);
+  }
 });
 
 // Human-grade startup failure: a busy port gets one clear line, not a stack trace.

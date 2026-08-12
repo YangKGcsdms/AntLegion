@@ -68,6 +68,7 @@ npm run bench                  # throughput benchmark (~160k appends/s in-proces
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `28090` | HTTP listen port |
+| `HOST` | `127.0.0.1` | Listen address. The bus trusts its callers (Redis-shaped security model) — set `0.0.0.0` only inside a trust boundary (e.g. a docker network) |
 | `ANTLEGION_DATA_DIR` | `.data-v2` | Append-only log directory (`facts-v2.jsonl` inside) |
 | `ANTLEGION_FSYNC` | `everysec` | `always` · `everysec` · `no` — mirrors Redis `appendfsync` |
 | `ANTLEGION_BUS_SECRET` | random per boot | HMAC signing secret; **set a stable value** so signatures verify across restarts |

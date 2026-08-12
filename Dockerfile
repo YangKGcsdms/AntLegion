@@ -15,6 +15,8 @@ FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=28090
+# containers are reached from outside; the docker network is the trust boundary
+ENV HOST=0.0.0.0
 ENV ANTLEGION_DATA_DIR=/data
 ENV ANTLEGION_FSYNC=everysec
 COPY antlegion-bus/package*.json ./

@@ -203,7 +203,8 @@
 "use strict";
 // ── config ──
 const Q = new URLSearchParams(location.search);
-const BUS = (Q.get("bus") || "http://localhost:28090").replace(/\/$/, "");
+// default: same origin when served by the bus itself (GET /dashboard), else localhost
+const BUS = (Q.get("bus") || (location.protocol.startsWith("http") ? location.origin : "http://localhost:28090")).replace(/\/$/, "");
 const DELTA = parseFloat(Q.get("delta") || "600");   // claim timeout seconds (demo uses 3)
 const STALE = parseFloat(Q.get("stale") || "8");     // agent "alive" window in bus-time seconds
 

@@ -29,6 +29,7 @@ services:
     command: ["antlegion"]
     environment:
       PORT: "28090"
+      HOST: 0.0.0.0   # cross-container access; the compose network is the trust boundary
       ANTLEGION_BUS_SECRET: ${ANTLEGION_BUS_SECRET:-mvp-docker-secret}
       ANTLEGION_DATA_DIR: /work/data
     ports:

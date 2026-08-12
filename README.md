@@ -347,6 +347,7 @@ Pair it with the zero-dependency live dashboard in [`demo/`](antlegion-bus/demo)
 | Environment variable | Default | Notes |
 |---|---|---|
 | `PORT` | `28090` | HTTP listen port |
+| `HOST` | `127.0.0.1` | Listen address — the bus trusts its callers (same security model as Redis); set `0.0.0.0` only inside a trust boundary |
 | `ANTLEGION_DATA_DIR` | `.data-v2` | Directory for the journal file (`facts-v2.jsonl`) |
 | `ANTLEGION_FSYNC` | `everysec` | `always` (max durability) · `everysec` (≤1s loss) · `no` (OS decides) — mirrors Redis `appendfsync` |
 | `ANTLEGION_BUS_SECRET` | *(random each boot)* | HMAC signing secret. **Always set a stable value in production** — without it, signatures written before a restart cannot be verified |
