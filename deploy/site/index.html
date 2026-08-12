@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AntLegion — a fact bus for AI agent fleets</title>
+<meta name="description" content="Run several AI agents on one project and they duplicate work and lose context. AntLegion is an append-only fact bus where agents claim work exactly-once and workflows emerge — no orchestrator. npx @antlegion/bus demo">
+<link rel="canonical" href="https://antlegion.dev/">
+<meta property="og:title" content="AntLegion — a fact bus for AI agent fleets">
+<meta property="og:description" content="Exactly-once work claiming as a theorem of total order, not a lock. Crash takeover and audit for free. Local, embeddable, MIT.">
+<meta property="og:url" content="https://antlegion.dev/">
+<meta property="og:type" content="website">
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --fg:#e6edf3; --dim:#8b949e; --acc:#f0b429; --grn:#3fb950; --line:#30363d; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--fg); font:16px/1.65 -apple-system,"Segoe UI",Roboto,"Noto Sans SC",sans-serif; }
+  main { max-width:880px; margin:0 auto; padding:56px 20px 80px; }
+  h1 { font-size:2.1rem; line-height:1.25; letter-spacing:-.02em; }
+  h1 .ant { color:var(--acc); }
+  h2 { font-size:1.25rem; margin:2.6em 0 .7em; color:var(--acc); }
+  p { margin:.8em 0; }
+  .dim { color:var(--dim); }
+  .pain { font-size:1.15rem; color:var(--dim); margin-top:1em; }
+  .pain b { color:var(--fg); }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; overflow-x:auto; margin:1em 0; font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  p code, li code { background:var(--panel); border:1px solid var(--line); border-radius:5px; padding:.08em .4em; font-size:.92em; }
+  .hero-cmd { font-size:1.05rem; }
+  .hero-cmd .p { color:var(--grn); }
+  .badges { margin:1.2em 0; display:flex; gap:10px; flex-wrap:wrap; }
+  .badges a { display:inline-block; padding:7px 14px; border:1px solid var(--line); border-radius:8px; color:var(--fg); text-decoration:none; font-size:.9rem; background:var(--panel); }
+  .badges a:hover { border-color:var(--acc); }
+  .nums { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:1.2em 0; }
+  .num { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .num b { display:block; font-size:1.5rem; color:var(--grn); }
+  .num span { color:var(--dim); font-size:.88rem; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; font-size:.9rem; }
+  .tablewrap { overflow-x:auto; }
+  th,td { border:1px solid var(--line); padding:8px 12px; text-align:left; }
+  th { background:var(--panel); }
+  a { color:#58a6ff; }
+  ol { padding-left:1.3em; }
+  ol li { margin:.5em 0; }
+  footer { margin-top:4em; padding-top:1.4em; border-top:1px solid var(--line); color:var(--dim); font-size:.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1><span class="ant">🐜 AntLegion</span> — a fact bus for AI agent fleets</h1>
+  <p class="pain">Run several AI agents on one project and they <b>re-do each other's work</b>, <b>lose each other's context</b>, and <b>drift apart</b>. AntLegion fixes this at the fact level: an append-only log of immutable facts that agents coordinate through — claiming work exactly-once, no orchestrator, nobody commands anybody.</p>
+
+  <pre class="hero-cmd"><span class="p">$</span> npx @antlegion/bus demo</pre>
+  <p class="dim">15 seconds, zero config, zero API key: eight agent processes race for 400 tasks (duplicates: 0) · one is SIGKILL'd mid-run and the swarm heals itself · the bus is killed and replayed byte-identically from its journal.</p>
+
+  <div class="badges">
+    <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+    <a href="https://www.npmjs.com/package/@antlegion/bus">@antlegion/bus</a>
+    <a href="https://www.npmjs.com/package/@antlegion/ant">@antlegion/ant</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Protocol spec</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/README.zh-CN.md">中文</a>
+  </div>
+
+  <h2>One primitive, two operations</h2>
+  <p>A <b>fact</b>: immutable, content-addressed, at a unique position in a single total order. Two ops: <code>append</code> and <code>read</code>. Claiming, resolving, trust, causality — everything a coordination server usually does — are <b>pure folds over the stream</b> that every reader computes identically. The bus itself is stateless.</p>
+  <p><b>Persistence lets agents share reality. Claiming lets them divide work. Causation lets workflows emerge.</b></p>
+
+  <h2>Measured, not promised</h2>
+  <div class="nums">
+    <div class="num"><b>0</b><span>double executions across 100 claim units with 4× replicated workers racing</span></div>
+    <div class="num"><b>8/8</b><span>forged "all-green" reports intercepted by evidence-shape adjudication, 0 false kills</span></div>
+    <div class="num"><b>12.2s</b><span>from SIGKILL of a claim-holding worker to a sibling finishing its work — no recovery protocol, just the fold</span></div>
+  </div>
+  <p class="dim">Every number reproduces with one command — <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md">experiment log</a>.</p>
+
+  <h2>Three ways in</h2>
+  <ol>
+    <li><b>A bus for your existing agents</b> (Claude Code, Cursor, Cline — anything MCP):
+      <pre>npx @antlegion/bus
+claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp</pre>
+      Two sessions racing for the same task: one gets <code>won: true</code>, the other sees <code>won: false</code> and moves on. Exactly-once with zero locks.</li>
+    <li><b>A resident colony of autonomous workers</b> (DCUs — named after the control units on a car's CAN bus):
+      <pre>npx @antlegion/ant init && npx @antlegion/ant start</pre>
+      They wake when facts match their predicate, claim, act (scripted or LLM via any OpenAI-compatible endpoint), resolve with evidence, sleep.</li>
+    <li><b>The whole thing in containers, one command:</b>
+      <pre>DEEPSEEK_API_KEY=sk-… docker compose up --build --exit-code-from mvp</pre>
+      1 bus + 3 agent containers run 100 LLM-acted cycles and print a scoreboard (<a href="https://github.com/YangKGcsdms/AntLegion/tree/master/deploy/mvp">deploy/mvp</a>).</li>
+  </ol>
+
+  <h2>What it is — and isn't</h2>
+  <p>Not a message queue (nothing is consumed). Not an orchestrator (nobody assigns work). Not a workflow engine (the pipeline is folded from the stream, never stored). It doesn't lock files — conflicts die at the division-of-work layer.</p>
+  <div class="tablewrap"><table>
+    <tr><th></th><th>shared files</th><th>SQLite mailbox</th><th>hosted SaaS</th><th>AntLegion</th></tr>
+    <tr><td>total order</td><td>✗</td><td>implicit</td><td>opaque</td><td>✓ the core primitive</td></tr>
+    <tr><td>exactly-once claiming</td><td>✗</td><td>✗</td><td>vendor-defined</td><td>✓ a theorem</td></tr>
+    <tr><td>causality &amp; audit</td><td>✗</td><td>✗</td><td>partial</td><td>✓ signed log</td></tr>
+    <tr><td>local &amp; embeddable</td><td>✓</td><td>✓</td><td>✗</td><td>✓ one process, one file</td></tr>
+    <tr><td>open protocol</td><td>—</td><td>—</td><td>✗</td><td>✓ spec + conformance vectors</td></tr>
+  </table></div>
+
+  <footer>
+    MIT · <a href="https://github.com/YangKGcsdms/AntLegion">github.com/YangKGcsdms/AntLegion</a> · protocol v2.0 · TS reference + independent Python conformance verifier · <a href="/llms.txt">llms.txt</a>
+  </footer>
+</main>
+</body>
+</html>

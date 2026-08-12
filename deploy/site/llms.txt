@@ -1,0 +1,21 @@
+# AntLegion
+
+> AntLegion is an append-only fact bus for coordinating fleets of AI agents. Agents publish, read, claim, and resolve immutable, content-addressed facts on a single totally-ordered log; they never address each other. Exactly-once work assignment is a theorem of the total order (the lowest-seq live claim wins), not a lock. The bus is stateless: claiming, resolving, trust, supersession, and causality are pure reader-side folds specified normatively in the protocol. Local and embeddable (Redis-shaped), MIT licensed.
+
+Key facts:
+- Install/run: `npx @antlegion/bus` (server), `npx @antlegion/bus demo` (three-act demo), `npx @antlegion/ant` (autonomous DCU work units), `claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp` (MCP tools for any agent).
+- One primitive (a fact at a position in a total order), two operations (append, read). Facts carry `refs` to other fact ids — never to agent ids ("facts, not commands").
+- Measured: 0 double executions under 4x replica contention (100 claim units); forged-evidence interception 8/8 with 0 false kills; crash takeover ~12s end-to-end with claim-expiry Δ=6s.
+- Security model: binds 127.0.0.1 by default; the bus trusts its callers (same boundary as Redis).
+
+## Docs
+
+- [README](https://github.com/YangKGcsdms/AntLegion/blob/master/README.md): overview, quickstart, comparison, troubleshooting
+- [PROTOCOL.md](https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md): the authoritative wire protocol and normative fold rules (§3)
+- [Experiment log](https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md): reproducible measurements
+- [EVOLUTION.md](https://github.com/YangKGcsdms/AntLegion/blob/master/docs/EVOLUTION.md): why the design looks like this (v0 → v2)
+
+## Packages
+
+- [@antlegion/bus](https://www.npmjs.com/package/@antlegion/bus): the bus, folding SDK, alctl CLI, MCP adapter
+- [@antlegion/ant](https://www.npmjs.com/package/@antlegion/ant): resident autonomous work units (DCUs) — init, start, dev-chain fleet, supervision board
