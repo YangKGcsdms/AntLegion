@@ -1,83 +1,113 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AntLegion · console</title>
+<title>AntLegion · 控制台</title>
 <!--
-  AntLegion bus console (P1a: stream + health) — a browser-shaped `tail -f` + INFO.
+  AntLegion bus console — a browser-shaped `tail -f` + INFO, now with a
+  settings drawer (claim Δ / poll / time format / language), per-fact
+  lifecycle badges (a faithful JS port of fold.ts §3.1 over the loaded
+  window), and a causation tree (refs.parent chain + loaded descendants).
 
-  Read-only by design: this page only polls GET /facts (since cursor) and
-  GET /info. It never writes. Single file, zero dependencies, zero build.
+  Read-only by design: this page only issues GET /facts (since cursor),
+  GET /facts/head, GET /facts/:id and GET /info. It never writes.
+  Single file, zero dependencies, zero build.
 
   URL is the whole state:
-    /console?bus=http://host:28090&poll=1000&type=task.*&author=ant-3&refkey=claim_of&refval=<id>
+    /console?bus=http://host:28090&poll=1000&type=task.*&author=ant-3
+            &refkey=claim_of&refval=<id>&q=needle
+            &lang=en&delta=600&tfmt=abs
 -->
 <style>
-  :root{--bg:#0b0b10;--panel:#11111a;--row:#0e0e15;--ink:#e8e6df;--ink2:#a9a69c;--ink3:#8b887f;--line:#23232e;--acc:#f0a020;--grn:#4ade80;--red:#f87171;--yel:#fbbf24;--blu:#7dd3fc}
+  :root{
+    --bg:#0a0a0f;--panel:#12121b;--panel2:#161624;--row:#0e0e16;--line:#232334;--line2:#2e2e42;
+    --ink:#eceadf;--ink2:#aeab9f;--ink3:#807d74;
+    --acc:#f0a020;--acc-dim:rgba(240,160,32,.14);
+    --grn:#4ade80;--red:#f87171;--yel:#fbbf24;--blu:#7dd3fc;--vio:#c4b5fd;
+  }
   *{box-sizing:border-box;margin:0}
-  body{background:var(--bg);color:var(--ink);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  body{background:var(--bg);color:var(--ink);font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;height:100vh;display:flex;flex-direction:column;overflow:hidden}
   a{color:var(--acc);text-decoration:none}
-  button{font:inherit;background:none;border:1px solid var(--line);color:var(--ink2);border-radius:6px;padding:3px 10px;cursor:pointer}
+  button{font:inherit;background:none;border:1px solid var(--line2);color:var(--ink2);border-radius:7px;padding:3px 11px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
   button:hover{border-color:var(--acc);color:var(--ink)}
   :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
-  /* ── health bar (persistent) ── */
-  #bar{display:flex;gap:16px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;flex-shrink:0}
-  #bar .logo{color:var(--acc);font-weight:700}
+  input{background:var(--row);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:4px 9px;font:inherit}
+  input:focus{border-color:var(--acc);outline:none}
+
+  /* ── 顶栏（常驻健康条） ── */
+  #bar{display:flex;gap:15px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;flex-shrink:0}
+  #bar .logo{color:var(--acc);font-weight:700;letter-spacing:.4px}
   #bar .kv b{color:var(--ink)}
   #bar .kv{color:var(--ink3)}
-  #dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink3);margin-right:4px;vertical-align:0}
-  #dot.live{background:var(--grn);box-shadow:0 0 6px var(--grn)}
-  #dot.down{background:var(--red);box-shadow:0 0 6px var(--red)}
+  #dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink3);margin-right:5px;vertical-align:0}
+  #dot.live{background:var(--grn);box-shadow:0 0 7px var(--grn)}
+  #dot.down{background:var(--red);box-shadow:0 0 7px var(--red)}
   #bar .warn{color:var(--yel)}
   #bar .bad{color:var(--red)}
   #bar .tabs{margin-left:auto;display:flex;gap:6px}
-  #bar .tabs button.on{border-color:var(--acc);color:var(--acc)}
-  /* ── disconnect banner ── */
+  #bar .tabs button.on{border-color:var(--acc);color:var(--acc);background:var(--acc-dim)}
+
+  /* ── 断连横幅 ── */
   #down{display:none;background:rgba(248,113,113,.12);color:var(--red);padding:5px 14px;border-bottom:1px solid rgba(248,113,113,.3);flex-shrink:0}
-  /* ── filters ── */
-  #filters{display:flex;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap;flex-shrink:0}
-  #filters input{background:var(--row);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:4px 8px;font:inherit;width:130px}
-  #filters input:focus{border-color:var(--acc);outline:none}
+
+  /* ── 过滤器 ── */
+  #filters{display:flex;gap:9px;padding:8px 14px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap;flex-shrink:0;background:var(--panel2)}
+  #filters input{width:130px}
   #filters label{color:var(--ink3);font-size:12px}
   #filters .hint{color:var(--ink3);font-size:11.5px;margin-left:auto}
-  /* ── stream ── */
+
+  /* ── 事实流 ── */
   #stream{flex:1;overflow-y:auto;position:relative}
   table{border-collapse:collapse;width:100%}
-  #stream thead th{position:sticky;top:0;background:var(--panel);color:var(--ink3);font-weight:600;text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);font-size:11.5px;z-index:2}
+  #stream thead th{position:sticky;top:0;background:var(--panel);color:var(--ink3);font-weight:600;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.6px;z-index:2}
   #stream td{padding:4px 10px;border-bottom:1px solid var(--row);vertical-align:top;white-space:nowrap}
   #stream tbody tr.f{cursor:pointer}
   #stream tbody tr.f:hover{background:var(--row)}
   #stream tr.hl>td{animation:flash 2s}
-  @keyframes flash{0%,60%{background:rgba(240,160,32,.22)}100%{background:none}}
+  @keyframes flash{0%,60%{background:var(--acc-dim)}100%{background:none}}
   td.seq{color:var(--ink3);text-align:right}
   td.recv{color:var(--ink3)}
   td.id{color:var(--ink3)}
   td.id:hover{color:var(--acc)}
   td.payload{color:var(--ink2);max-width:340px;overflow:hidden;text-overflow:ellipsis}
-  .chip{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 6px;margin:0 3px 2px 0;color:var(--blu);font-size:11.5px;cursor:pointer}
+  .chip{display:inline-block;border:1px solid var(--line2);border-radius:6px;padding:0 6px;margin:0 3px 2px 0;color:var(--blu);font-size:11.5px;cursor:pointer;background:rgba(125,211,252,.05)}
   .chip:hover{border-color:var(--blu)}
   .chip i{font-style:normal;color:var(--ink3)}
-  tr.detail td{white-space:normal;background:var(--row);padding:10px 14px}
+  tr.detail td{white-space:normal;background:var(--row);padding:11px 14px}
   tr.detail pre{white-space:pre-wrap;word-break:break-all;color:var(--ink2);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;margin:6px 0}
   tr.detail .k{color:var(--ink3)}
   tr.detail .skew-bad{color:var(--yel)}
-  tr.detail .acts{margin-top:8px;display:flex;gap:8px}
+  tr.detail .acts{margin-top:9px;display:flex;gap:8px}
   #older{display:block;margin:8px auto;color:var(--ink3)}
-  /* ── follow pill ── */
-  #pill{display:none;position:fixed;top:86px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--acc);color:var(--acc);border-radius:99px;padding:5px 16px;cursor:pointer;z-index:5}
-  /* ── empty state ── */
-  #empty{display:none;color:var(--ink3);padding:40px;text-align:center}
+
+  /* ── 生命周期徽章 ── */
+  .badge{display:inline-block;border-radius:6px;padding:0 8px;font-size:11.5px;border:1px solid}
+  .badge.open{color:var(--blu);border-color:rgba(125,211,252,.45);background:rgba(125,211,252,.08)}
+  .badge.claimed{color:var(--yel);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.08)}
+  .badge.resolved{color:var(--grn);border-color:rgba(74,222,128,.45);background:rgba(74,222,128,.08)}
+  .badge.dead{color:var(--red);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.08)}
+  .tiny{font-size:11px;color:var(--ink3)}
+
+  /* ── 跟随药丸 ── */
+  #pill{display:none;position:fixed;top:92px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--acc);color:var(--acc);border-radius:99px;padding:5px 16px;cursor:pointer;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+
+  /* ── 空态 ── */
+  #empty{display:none;color:var(--ink3);padding:44px;text-align:center}
   #empty code{color:var(--acc)}
-  /* ── inspector (pinned side card) ── */
-  #inspect{display:none;position:fixed;right:12px;top:96px;width:min(440px,90vw);max-height:70vh;overflow-y:auto;background:var(--panel);border:1px solid var(--acc);border-radius:10px;padding:12px 14px;z-index:6;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+
+  /* ── 检视卡（钉住的窗口外事实） ── */
+  #inspect{display:none;position:fixed;right:12px;top:96px;width:min(460px,90vw);max-height:70vh;overflow-y:auto;background:var(--panel);border:1px solid var(--acc);border-radius:11px;padding:12px 14px;z-index:6;box-shadow:0 18px 50px rgba(0,0,0,.6)}
   #inspect h4{color:var(--acc);font-size:12px;margin-bottom:6px;display:flex;justify-content:space-between}
   #inspect pre{white-space:pre-wrap;word-break:break-all;color:var(--ink2);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0}
-  /* ── health tab ── */
+  #inspect .k{color:var(--ink3)}
+  #inspect .acts{margin-top:8px;display:flex;gap:8px}
+
+  /* ── 健康页 ── */
   #health{flex:1;overflow-y:auto;padding:18px 22px;display:none}
-  #health h3{color:var(--acc);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin:18px 0 8px}
+  #health h3{color:var(--acc);font-size:12px;letter-spacing:1.5px;margin:20px 0 8px}
   #health h3:first-child{margin-top:0}
-  #health .grid{display:grid;grid-template-columns:220px 1fr;gap:3px 16px;max-width:720px}
+  #health .grid{display:grid;grid-template-columns:220px 1fr;gap:3px 16px;max-width:720px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
   #health .grid .k{color:var(--ink3)}
   #health .note{color:var(--yel);grid-column:1/3;font-size:12px}
   #health .note.bad{color:var(--red)}
@@ -85,67 +115,131 @@
   #health th{color:var(--ink3);text-align:left;font-weight:600;font-size:11.5px;padding:4px 10px;border-bottom:1px solid var(--line)}
   #health td{padding:4px 10px;border-bottom:1px solid var(--row);color:var(--ink2)}
   #health .src{color:var(--ink3);font-size:11.5px;margin-top:26px}
-  #spark{background:var(--row);border:1px solid var(--line);border-radius:8px}
+  #spark{background:var(--panel2);border:1px solid var(--line);border-radius:10px}
+
+  /* ── 设置抽屉 ── */
+  #shade{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:8}
+  #settings{position:fixed;top:0;right:-360px;width:340px;height:100vh;background:var(--panel);border-left:1px solid var(--line2);z-index:9;padding:16px 18px;transition:right .18s ease;overflow-y:auto}
+  #settings.on{right:0}
+  #settings h4{color:var(--acc);font-size:13px;display:flex;justify-content:space-between;margin-bottom:14px}
+  #settings .grp{margin-bottom:16px}
+  #settings .grp>.lbl{color:var(--ink2);font-size:12px;margin-bottom:6px}
+  #settings .grp>.sub{color:var(--ink3);font-size:11px;margin-top:5px;line-height:1.5}
+  #settings input[type=number]{width:110px}
+  .seg{display:inline-flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+  .seg button{border:none;border-radius:0;padding:3px 12px}
+  .seg button.on{background:var(--acc-dim);color:var(--acc)}
+
+  /* ── 因果树 ── */
+  #treewrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10}
+  #tree{position:absolute;left:50%;top:9vh;transform:translateX(-50%);width:min(760px,94vw);max-height:78vh;overflow-y:auto;background:var(--panel);border:1px solid var(--acc);border-radius:12px;padding:14px 18px;box-shadow:0 24px 70px rgba(0,0,0,.7)}
+  #tree h4{color:var(--acc);font-size:12.5px;display:flex;justify-content:space-between;margin-bottom:10px}
+  #tree .tnote{color:var(--ink3);font-size:11.5px;margin-bottom:10px}
+  .tnode{padding:3px 8px;border-radius:7px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tnode:hover{background:var(--row)}
+  .tnode.me{background:var(--acc-dim);border:1px solid rgba(240,160,32,.4)}
+  .tnode .guide{color:var(--ink3)}
+  .tnode .ty2{color:var(--vio)}
+  .tnode .au2{color:var(--ink2)}
+  .tnode .id2{color:var(--ink3)}
+  .tnode.missing{color:var(--ink3);cursor:default}
 </style>
 </head>
 <body>
   <div id="bar">
-    <span class="logo">🐜 console</span>
-    <span class="kv"><span id="dot"></span><span id="st">connecting…</span></span>
-    <span class="kv">head <b id="b-head">–</b></span>
-    <span class="kv"><b id="b-rate">–</b> facts/s</span>
+    <span class="logo">🐜 <span id="l-logo">AntLegion 控制台</span></span>
+    <span class="kv"><span id="dot"></span><span id="st">连接中…</span></span>
+    <span class="kv"><span id="l-head">头部</span> <b id="b-head">–</b></span>
+    <span class="kv"><b id="b-rate">–</b> <span id="l-rate">事实/秒</span></span>
     <span class="kv">fsync <b id="b-fsync">–</b></span>
     <span class="kv" id="b-sig">sig_failures <b>–</b></span>
     <span class="tabs">
-      <button id="t-stream" class="on">stream</button>
-      <button id="t-health">health</button>
+      <button id="t-stream" class="on">事实流</button>
+      <button id="t-health">健康</button>
+      <button id="t-gear" title="设置">⚙</button>
     </span>
   </div>
   <div id="down"></div>
 
   <div id="filters">
-    <label>type <input id="f-type" placeholder="task.*"></label>
-    <label>author <input id="f-author" placeholder="exact"></label>
-    <label>ref <input id="f-refkey" placeholder="claim_of" style="width:90px"><input id="f-refval" placeholder="fact id" style="width:150px"></label>
-    <label>payload <input id="f-q" placeholder="substring"></label>
-    <button id="f-clear">clear ↺</button>
-    <span class="hint" id="f-hint">payload search scans loaded facts only</span>
+    <label><span id="l-ftype">类型</span> <input id="f-type" placeholder="task.*"></label>
+    <label><span id="l-fauthor">作者</span> <input id="f-author" placeholder="精确匹配"></label>
+    <label><span id="l-fref">引用</span> <input id="f-refkey" placeholder="claim_of" style="width:90px"><input id="f-refval" placeholder="事实 id" style="width:150px"></label>
+    <label><span id="l-fq">载荷</span> <input id="f-q" placeholder="子串搜索"></label>
+    <button id="f-clear">清空 ↺</button>
+    <span class="hint" id="f-hint">载荷搜索仅扫描已加载的事实</span>
   </div>
 
   <div id="stream">
-    <button id="older">↑ load earlier</button>
+    <button id="older">↑ 加载更早</button>
     <table>
-      <thead><tr><th>seq</th><th>recv</th><th>type</th><th>author</th><th>id</th><th>refs</th><th>payload</th></tr></thead>
+      <thead><tr><th id="h-seq">序号</th><th id="h-recv">时间</th><th id="h-type">类型</th><th id="h-author">作者</th><th>ID</th><th id="h-refs">引用</th><th id="h-payload">载荷</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div id="empty"></div>
   </div>
 
   <div id="health">
-    <h3>throughput</h3>
-    <svg id="spark" width="360" height="48" viewBox="0 0 360 48" aria-label="append rate, last 5 minutes"></svg>
+    <h3 id="s-thr">吞吐</h3>
+    <svg id="spark" width="360" height="48" viewBox="0 0 360 48" aria-label="最近 5 分钟写入速率"></svg>
     <div class="grid" id="h-stream"></div>
-    <h3>log</h3>
+    <h3 id="s-log">日志</h3>
     <div class="grid" id="h-log"></div>
-    <h3>integrity</h3>
+    <h3 id="s-int">完整性</h3>
     <div class="grid" id="h-int"></div>
-    <h3>process</h3>
+    <h3 id="s-proc">进程</h3>
     <div class="grid" id="h-proc"></div>
-    <h3>author activity <span style="color:var(--ink3);text-transform:none;letter-spacing:0">(folded from the loaded stream)</span></h3>
-    <table><thead><tr><th>author</th><th>last seen</th><th>facts (loaded)</th><th>max clock skew</th></tr></thead><tbody id="h-authors"></tbody></table>
-    <p class="src">read-only: this page polls GET /facts (since cursor) and GET /info — it never writes. · rewrite hint: <span style="color:var(--ink2)">curl -X POST $BUS/admin/rewrite</span></p>
+    <h3 id="s-authors">作者活跃 <span class="tiny" id="s-authors-sub" style="letter-spacing:0">（基于已加载的事实流折叠）</span></h3>
+    <table><thead><tr><th id="a-author">作者</th><th id="a-last">最近活跃</th><th id="a-n">事实数（已加载）</th><th id="a-skew">最大时钟偏差</th></tr></thead><tbody id="h-authors"></tbody></table>
+    <p class="src" id="l-readonly">只读页面：只轮询 GET /facts（游标增量）与 GET /info，从不写入。 · 压缩提示：<span style="color:var(--ink2)">curl -X POST $BUS/admin/rewrite</span></p>
   </div>
 
-  <div id="pill">⏸ paused · <b id="pill-n">0</b> new — jump to bottom</div>
-  <div id="inspect"><h4><span>pinned fact</span><button id="i-close">×</button></h4><div id="i-body"></div></div>
+  <div id="pill">⏸ <span id="l-paused">已暂停</span> · <b id="pill-n">0</b> <span id="l-newf">条新事实 — 回到底部</span></div>
+  <div id="inspect"><h4><span id="l-pinned">钉住的事实</span><button id="i-close">×</button></h4><div id="i-body"></div></div>
+
+  <div id="shade"></div>
+  <div id="settings">
+    <h4><span id="l-settings">设置</span><button id="g-close">×</button></h4>
+    <div class="grp">
+      <div class="lbl" id="l-lang">语言 / Language</div>
+      <span class="seg"><button id="lang-zh">中文</button><button id="lang-en">English</button></span>
+    </div>
+    <div class="grp">
+      <div class="lbl" id="l-delta">claim 过期时间 Δ（秒）</div>
+      <input type="number" id="g-delta" min="1" step="1">
+      <div class="sub" id="l-delta-sub">生命周期折叠的认领超时。协议 §8 默认 600 秒；只影响本页显示，不改总线任何数据。</div>
+    </div>
+    <div class="grp">
+      <div class="lbl" id="l-poll">轮询间隔（毫秒）</div>
+      <input type="number" id="g-poll" min="250" step="250">
+      <div class="sub" id="l-poll-sub">拉取新事实的频率，最低 250ms。</div>
+    </div>
+    <div class="grp">
+      <div class="lbl" id="l-tfmt">时间显示</div>
+      <span class="seg"><button id="tfmt-rel">相对</button><button id="tfmt-abs">绝对</button></span>
+    </div>
+    <div class="sub" id="l-settings-note">所有设置即时生效并写入 URL——分享链接即分享视图。</div>
+  </div>
+
+  <div id="treewrap"><div id="tree">
+    <h4><span id="tr-title">因果树</span><button id="tr-close">×</button></h4>
+    <div class="tnote" id="tr-note">沿 refs.parent 上溯（窗口外祖先自动补拉）；子级仅统计已加载窗口。点击节点跳转。</div>
+    <div id="tr-body"></div>
+  </div></div>
 
 <script>
 "use strict";
-/* ── state from URL ── */
+/* ── URL 即状态 ── */
 const Q = new URLSearchParams(location.search);
 const BUS = (Q.get("bus") || (location.protocol.startsWith("http") ? location.origin : "http://localhost:28090")).replace(/\/$/, "");
-const POLL = Math.max(250, parseInt(Q.get("poll") || "1000", 10) || 1000);
 const $ = (id) => document.getElementById(id);
+
+const cfg = {
+  lang: Q.get("lang") === "en" ? "en" : "zh",
+  delta: Math.max(1, parseInt(Q.get("delta") || "600", 10) || 600),
+  poll: Math.max(250, parseInt(Q.get("poll") || "1000", 10) || 1000),
+  tfmt: Q.get("tfmt") === "abs" ? "abs" : "rel",
+};
 
 const filters = {
   type: Q.get("type") || "",
@@ -160,18 +254,139 @@ $("f-refkey").value = filters.refkey; $("f-refval").value = filters.refval; $("f
 function syncURL() {
   const u = new URLSearchParams();
   if (Q.get("bus")) u.set("bus", Q.get("bus"));
-  if (POLL !== 1000) u.set("poll", String(POLL));
+  if (cfg.poll !== 1000) u.set("poll", String(cfg.poll));
+  if (cfg.lang !== "zh") u.set("lang", cfg.lang);
+  if (cfg.delta !== 600) u.set("delta", String(cfg.delta));
+  if (cfg.tfmt !== "rel") u.set("tfmt", cfg.tfmt);
   for (const [k, v] of Object.entries(filters)) if (v) u.set(k, v);
   history.replaceState(null, "", location.pathname + (u.toString() ? "?" + u : ""));
 }
 
-/* ── buffer ── */
+/* ── 词典（zh 默认，?lang=en 切英文） ── */
+const STR = {
+  zh: {
+    title: "AntLegion · 控制台", logo: "AntLegion 控制台",
+    connecting: "连接中…", live: "在线", unreachable: "不可达",
+    head: "头部", rate: "事实/秒", tab_stream: "事实流", tab_health: "健康",
+    ftype: "类型", fauthor: "作者", fref: "引用", fq: "载荷",
+    fauthor_ph: "精确匹配", frefval_ph: "事实 id", fq_ph: "子串搜索",
+    fclear: "清空 ↺", fhint: "载荷搜索仅扫描已加载的事实",
+    th_seq: "序号", th_recv: "时间", th_type: "类型", th_author: "作者", th_refs: "引用", th_payload: "载荷",
+    older: "↑ 加载更早", older_end: "— 日志起点 —",
+    paused: "已暂停", newf: "条新事实 — 回到底部",
+    pinned: "钉住的事实", not_found: "在这条总线上找不到事实",
+    empty_bus: "总线是空的。发布第一条事实：", empty_filter: "没有事实命中服务端过滤条件（已扫描至序号 {n}）。",
+    empty_q: "已加载的 {n} 条事实没有命中载荷搜索（纯客户端）。",
+    down_banner: "总线不可达 · 重试中（上次成功：{t}）— 已加载的事实保留在屏幕上", never: "从未",
+    refs: "引用", refs_none: "—", backrefs: "被引用（已加载窗口）", backrefs_none: "窗口内暂无",
+    ts: "声称时间", recv: "落盘时间", skew: "偏差", skew_na: "n/a（ts:0，确定性内容）", nonce: "nonce", sig: "签名",
+    copy_id: "复制 id", copy_curl: "复制 curl", copied: "已复制 ✓",
+    lifecycle: "生命周期", st_open: "开放", st_claimed: "已认领", st_resolved: "已完成", st_dead: "已删除",
+    lc_note: "Δ={d}s · 基于已加载窗口折叠",
+    tree_btn: "因果树", tree_title: "因果树",
+    tree_note: "沿 refs.parent 上溯（窗口外祖先自动补拉）；子级仅统计已加载窗口。点击节点跳转。",
+    tree_missing: "（补拉失败：{id}…）", tree_root: "根", tree_more: "…子级过多，仅显示前 {n} 个",
+    s_thr: "吞吐", s_log: "日志", s_int: "完整性", s_proc: "进程",
+    s_authors: "作者活跃", s_authors_sub: "（基于已加载的事实流折叠）",
+    a_author: "作者", a_last: "最近活跃", a_n: "事实数（已加载）", a_skew: "最大时钟偏差",
+    no_facts: "暂无已加载的事实", ago: "前", just_now: "刚刚",
+    k_rate: "写入速率", k_uptime: "运行时长", k_poll: "轮询",
+    note_fsync: "fsync=no — 崩溃可能丢失最后未刷盘的写入",
+    note_sig: "{n} 条事实在恢复时签名校验失败——换过密钥？日志被篡改？",
+    note_secret: "密钥是本次启动临时生成的——重启前写入的签名将无法校验。请设置固定的 ANTLEGION_BUS_SECRET",
+    spark_wait: "采样中…", spark_peak: "峰值 {v}/秒",
+    readonly: "只读页面：只轮询 GET /facts（游标增量）与 GET /info，从不写入。 · 压缩提示：",
+    settings: "设置", lang: "语言 / Language",
+    delta_lbl: "claim 过期时间 Δ（秒）",
+    delta_sub: "生命周期折叠的认领超时。协议 §8 默认 600 秒；只影响本页显示，不改总线任何数据。",
+    poll_lbl: "轮询间隔（毫秒）", poll_sub: "拉取新事实的频率，最低 250ms。",
+    tfmt_lbl: "时间显示", tfmt_rel: "相对", tfmt_abs: "绝对",
+    settings_note: "所有设置即时生效并写入 URL——分享链接即分享视图。",
+  },
+  en: {
+    title: "AntLegion · console", logo: "AntLegion console",
+    connecting: "connecting…", live: "LIVE", unreachable: "unreachable",
+    head: "head", rate: "facts/s", tab_stream: "stream", tab_health: "health",
+    ftype: "type", fauthor: "author", fref: "ref", fq: "payload",
+    fauthor_ph: "exact", frefval_ph: "fact id", fq_ph: "substring",
+    fclear: "clear ↺", fhint: "payload search scans loaded facts only",
+    th_seq: "seq", th_recv: "recv", th_type: "type", th_author: "author", th_refs: "refs", th_payload: "payload",
+    older: "↑ load earlier", older_end: "— beginning of log —",
+    paused: "paused", newf: "new — jump to bottom",
+    pinned: "pinned fact", not_found: "not found on this bus",
+    empty_bus: "bus is empty. publish the first fact:", empty_filter: "no facts match the server filters (scanned ≤ seq {n}).",
+    empty_q: "no loaded facts match the payload search (client-side, {n} loaded).",
+    down_banner: "bus unreachable · retrying (last success {t}) — loaded facts are kept on screen", never: "never",
+    refs: "refs", refs_none: "—", backrefs: "referenced by (loaded window)", backrefs_none: "none in loaded window",
+    ts: "ts", recv: "recv", skew: "skew", skew_na: "n/a (ts:0, deterministic)", nonce: "nonce", sig: "sig",
+    copy_id: "copy id", copy_curl: "copy curl", copied: "copied ✓",
+    lifecycle: "lifecycle", st_open: "open", st_claimed: "claimed", st_resolved: "resolved", st_dead: "dead",
+    lc_note: "Δ={d}s · folded over the loaded window",
+    tree_btn: "causation tree", tree_title: "causation tree",
+    tree_note: "walks refs.parent upward (out-of-window ancestors fetched); descendants from the loaded window only. Click a node to jump.",
+    tree_missing: "(fetch failed: {id}…)", tree_root: "root", tree_more: "…too many children, first {n} shown",
+    s_thr: "throughput", s_log: "log", s_int: "integrity", s_proc: "process",
+    s_authors: "author activity", s_authors_sub: "(folded from the loaded stream)",
+    a_author: "author", a_last: "last seen", a_n: "facts (loaded)", a_skew: "max clock skew",
+    no_facts: "no facts loaded", ago: "ago", just_now: "now",
+    k_rate: "append rate", k_uptime: "uptime", k_poll: "poll",
+    note_fsync: "fsync=no — a crash may lose the last unflushed writes",
+    note_sig: "{n} facts failed sig verification on recovery — changed secret? tampered log?",
+    note_secret: "secret minted this boot — sigs written before a restart can't be verified. set a stable ANTLEGION_BUS_SECRET",
+    spark_wait: "collecting samples…", spark_peak: "peak {v}/s",
+    readonly: "read-only: this page polls GET /facts (since cursor) and GET /info — it never writes. · rewrite hint:",
+    settings: "settings", lang: "Language / 语言",
+    delta_lbl: "claim timeout Δ (seconds)",
+    delta_sub: "Claim timeout for the lifecycle fold. Protocol §8 default is 600s; display-only, never touches the bus.",
+    poll_lbl: "poll interval (ms)", poll_sub: "How often new facts are fetched, min 250ms.",
+    tfmt_lbl: "time display", tfmt_rel: "relative", tfmt_abs: "absolute",
+    settings_note: "Every setting applies instantly and is written to the URL — share the link, share the view.",
+  },
+};
+const T = (k) => (STR[cfg.lang] && STR[cfg.lang][k]) || STR.en[k] || k;
+const TF = (k, vars) => Object.entries(vars).reduce((s, [n, v]) => s.replaceAll("{" + n + "}", String(v)), T(k));
+
+function applyLang() {
+  document.documentElement.lang = cfg.lang === "zh" ? "zh-CN" : "en";
+  document.title = T("title");
+  $("l-logo").textContent = T("logo");
+  $("l-head").textContent = T("head"); $("l-rate").textContent = T("rate");
+  $("t-stream").textContent = T("tab_stream"); $("t-health").textContent = T("tab_health");
+  $("l-ftype").textContent = T("ftype"); $("l-fauthor").textContent = T("fauthor");
+  $("l-fref").textContent = T("fref"); $("l-fq").textContent = T("fq");
+  $("f-author").placeholder = T("fauthor_ph"); $("f-refval").placeholder = T("frefval_ph"); $("f-q").placeholder = T("fq_ph");
+  $("f-clear").textContent = T("fclear"); $("f-hint").textContent = T("fhint");
+  $("h-seq").textContent = T("th_seq"); $("h-recv").textContent = T("th_recv"); $("h-type").textContent = T("th_type");
+  $("h-author").textContent = T("th_author"); $("h-refs").textContent = T("th_refs"); $("h-payload").textContent = T("th_payload");
+  if (!$("older").dataset.end) $("older").textContent = T("older");
+  $("l-paused").textContent = T("paused"); $("l-newf").textContent = T("newf");
+  $("l-pinned").textContent = T("pinned");
+  $("s-thr").textContent = T("s_thr"); $("s-log").textContent = T("s_log");
+  $("s-int").textContent = T("s_int"); $("s-proc").textContent = T("s_proc");
+  $("s-authors").firstChild.textContent = T("s_authors") + " ";
+  $("s-authors-sub").textContent = T("s_authors_sub");
+  $("a-author").textContent = T("a_author"); $("a-last").textContent = T("a_last");
+  $("a-n").textContent = T("a_n"); $("a-skew").textContent = T("a_skew");
+  $("l-readonly").firstChild.textContent = T("readonly") + " ";
+  $("l-settings").textContent = T("settings"); $("l-lang").textContent = T("lang");
+  $("l-delta").textContent = T("delta_lbl"); $("l-delta-sub").textContent = T("delta_sub");
+  $("l-poll").textContent = T("poll_lbl"); $("l-poll-sub").textContent = T("poll_sub");
+  $("l-tfmt").textContent = T("tfmt_lbl");
+  $("tfmt-rel").textContent = T("tfmt_rel"); $("tfmt-abs").textContent = T("tfmt_abs");
+  $("l-settings-note").textContent = T("settings_note");
+  $("tr-title").textContent = T("tree_title"); $("tr-note").textContent = T("tree_note");
+  $("lang-zh").className = cfg.lang === "zh" ? "on" : ""; $("lang-en").className = cfg.lang === "en" ? "on" : "";
+  $("tfmt-rel").className = cfg.tfmt === "rel" ? "on" : ""; $("tfmt-abs").className = cfg.tfmt === "abs" ? "on" : "";
+  $("st").textContent = lastOK ? ($("dot").className === "down" ? T("unreachable") : T("live")) : T("connecting");
+}
+
+/* ── 缓冲区 ── */
 const CAP = 2000;
-let facts = [];            // seq-ascending window
+let facts = [];            // 按 seq 升序的窗口
 const bySeq = new Map();   // seq -> fact
 const byId = new Map();    // id -> fact
-let cursor = 0;            // highest seq fetched (follow)
-let oldest = Infinity;     // lowest seq loaded (load-earlier)
+let cursor = 0;            // 已拉取的最高 seq（跟随）
+let oldest = Infinity;     // 已加载的最低 seq（往前翻）
 let following = true;
 let pendingNew = 0;
 let failures = 0;
@@ -190,11 +405,50 @@ function clientMatch(f) {
   try { return JSON.stringify(f.payload).toLowerCase().includes(filters.q.toLowerCase()); } catch { return false; }
 }
 
-/* ── rendering ── */
+/* ── 生命周期折叠：fold.ts §3.1 的逐字 JS 复刻（基于已加载窗口） ──
+   claim/release/resolve 按 refs 匹配（与类型无关）；tombstone 必须
+   type === "_.tombstone"。过期是 recv 锚定的确定性判定：后续事实的
+   recv 越过 claim.recv+Δ 即过期；只有尾部 claim 回退墙钟 now。 */
+const TOMBSTONE = "_.tombstone";
+function lifecycleOf(F) {
+  const now = Date.now() / 1000;
+  const delta = cfg.delta;
+  let active = [];
+  const rel = facts
+    .filter((g) => g.refs && (
+      g.refs.claim_of === F || g.refs.resolves === F || g.refs.release_of === F ||
+      (g.type === TOMBSTONE && g.refs.tombstones === F)))
+    .sort((a, b) => a.seq - b.seq);
+  for (const g of rel) {
+    if (g.type === TOMBSTONE) return { state: "dead", owner: null };
+    active = active.filter((c) => g.recv <= c.recv + delta);
+    if (g.refs.claim_of === F) {
+      active.push({ author: g.author, seq: g.seq, recv: g.recv });
+    } else if (g.refs.release_of === F) {
+      active = active.filter((c) => c.author !== g.author);
+    } else if (g.refs.resolves === F) {
+      const owner = active.length ? [...active].sort((a, b) => a.seq - b.seq)[0].author : null;
+      if (owner === null || g.author === owner) return { state: "resolved", owner };
+    }
+  }
+  active = active.filter((c) => now <= c.recv + delta);
+  if (active.length) return { state: "claimed", owner: [...active].sort((a, b) => a.seq - b.seq)[0].author };
+  return { state: "open", owner: null };
+}
+
+function badgeHTML(F) {
+  const lc = lifecycleOf(F);
+  const owner = lc.owner ? " · " + esc(lc.owner) : "";
+  return `<span class="badge ${lc.state}">${T("st_" + lc.state)}${owner}</span>`;
+}
+
+/* ── 渲染 ── */
 const rows = $("rows");
 const stream = $("stream");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const rel = (t) => { const d = Date.now() / 1000 - t; return d < 2 ? "now" : d < 60 ? Math.floor(d) + "s" : d < 3600 ? Math.floor(d / 60) + "m" : d < 86400 ? Math.floor(d / 3600) + "h" : Math.floor(d / 86400) + "d"; };
+const relTime = (t) => { const d = Date.now() / 1000 - t; return d < 2 ? T("just_now") : d < 60 ? Math.floor(d) + "s" : d < 3600 ? Math.floor(d / 60) + "m" : d < 86400 ? Math.floor(d / 3600) + "h" : Math.floor(d / 86400) + "d"; };
+const absTime = (t) => { const d = new Date(t * 1000), p = (n) => String(n).padStart(2, "0"); return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+const fmtTime = (t) => cfg.tfmt === "abs" ? absTime(t) : relTime(t);
 const hue = (s) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
 const isFactId = (v) => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
 
@@ -206,10 +460,10 @@ function chipHTML(k, v) {
 function rowHTML(f) {
   const refs = Object.entries(f.refs || {}).map(([k, v]) => chipHTML(k, v)).join("");
   let pv = ""; try { pv = JSON.stringify(f.payload); } catch { pv = ""; }
-  return `<td class="seq">${f.seq}</td><td class="recv" title="${new Date(f.recv * 1000).toISOString()}">${rel(f.recv)}</td>` +
+  return `<td class="seq">${f.seq}</td><td class="recv" title="${new Date(f.recv * 1000).toISOString()}">${fmtTime(f.recv)}</td>` +
     `<td style="color:hsl(${hue(f.type)},55%,70%)" class="ty" data-t="${esc(f.type)}">${esc(f.type)}</td>` +
     `<td class="au" data-a="${esc(f.author)}">${esc(f.author)}</td>` +
-    `<td class="id" data-id="${f.id}" title="click to copy full id">${f.id.slice(0, 8)}</td>` +
+    `<td class="id" data-id="${f.id}" title="${T("copy_id")}">${f.id.slice(0, 8)}</td>` +
     `<td>${refs}</td><td class="payload">${esc(pv.slice(0, 100))}</td>`;
 }
 
@@ -221,17 +475,22 @@ function makeRow(f) {
   return tr;
 }
 
+function lcLineHTML(f) {
+  return `<span class="k">${T("lifecycle")}</span> ${badgeHTML(f.id)} <span class="tiny">${TF("lc_note", { d: cfg.delta })}</span>`;
+}
+
 function detailHTML(f) {
   const skew = f.ts > 0 ? f.ts - f.recv : null;
-  const reflist = Object.entries(f.refs || {}).map(([k, v]) => `<div><span class="k">${esc(k)}</span> ${isFactId(v) ? `<span class="chip" data-ref="${v}">${v}</span>` : esc(String(v))}</div>`).join("") || '<span class="k">—</span>';
+  const reflist = Object.entries(f.refs || {}).map(([k, v]) => `<div><span class="k">${esc(k)}</span> ${isFactId(v) ? `<span class="chip" data-ref="${v}">${v}</span>` : esc(String(v))}</div>`).join("") || `<span class="k">${T("refs_none")}</span>`;
   const backrefs = facts.filter((g) => g.refs && Object.values(g.refs).includes(f.id))
-    .map((g) => `<span class="chip" data-ref="${g.id}"><i>#${g.seq} ${esc(g.type)}</i></span>`).join("") || '<span class="k">none in loaded window</span>';
-  return `<pre>${esc(JSON.stringify(f.payload, null, 2))}</pre>` +
-    `<div><span class="k">refs</span></div>${reflist}` +
-    `<div style="margin-top:6px"><span class="k">referenced by (loaded window)</span><br>${backrefs}</div>` +
-    `<div style="margin-top:6px"><span class="k">ts</span> ${f.ts} · <span class="k">recv</span> ${f.recv} · <span class="k">skew</span> ${skew === null ? '<span class="k">n/a (ts:0, deterministic)</span>' : `<span class="${Math.abs(skew) > 5 ? "skew-bad" : ""}">${skew >= 0 ? "+" : ""}${skew.toFixed(2)}s</span>`}${f.nonce ? ` · <span class="k">nonce</span> ${esc(f.nonce)}` : ""}</div>` +
-    `<div><span class="k">sig</span> ${f.sig ? f.sig.slice(0, 24) + "…" : "—"}</div>` +
-    `<div class="acts"><button data-copy="${f.id}">copy id</button><button data-copy="curl ${BUS}/facts/${f.id}">copy curl</button></div>`;
+    .map((g) => `<span class="chip" data-ref="${g.id}"><i>#${g.seq} ${esc(g.type)}</i></span>`).join("") || `<span class="k">${T("backrefs_none")}</span>`;
+  return `<div class="lcline" data-lc="${f.id}">${lcLineHTML(f)}</div>` +
+    `<pre>${esc(JSON.stringify(f.payload, null, 2))}</pre>` +
+    `<div><span class="k">${T("refs")}</span></div>${reflist}` +
+    `<div style="margin-top:6px"><span class="k">${T("backrefs")}</span><br>${backrefs}</div>` +
+    `<div style="margin-top:6px"><span class="k">${T("ts")}</span> ${f.ts} · <span class="k">${T("recv")}</span> ${f.recv} · <span class="k">${T("skew")}</span> ${skew === null ? `<span class="k">${T("skew_na")}</span>` : `<span class="${Math.abs(skew) > 5 ? "skew-bad" : ""}">${skew >= 0 ? "+" : ""}${skew.toFixed(2)}s</span>`}${f.nonce ? ` · <span class="k">${T("nonce")}</span> ${esc(f.nonce)}` : ""}</div>` +
+    `<div><span class="k">${T("sig")}</span> ${f.sig ? f.sig.slice(0, 24) + "…" : "—"}</div>` +
+    `<div class="acts"><button data-copy="${f.id}" data-kind="id">${T("copy_id")}</button><button data-copy="curl ${BUS}/facts/${f.id}" data-kind="curl">${T("copy_curl")}</button><button data-tree="${f.id}">${T("tree_btn")}</button></div>`;
 }
 
 function appendFacts(list, toTop) {
@@ -245,7 +504,7 @@ function appendFacts(list, toTop) {
   }
   if (toTop) { facts = list.concat(facts); rows.prepend(frag); }
   else { facts = facts.concat(list); rows.append(frag); }
-  while (facts.length > CAP && following) { // trim oldest while tailing
+  while (facts.length > CAP && following) { // 跟随时裁掉最旧的
     const dead = facts.shift();
     bySeq.delete(dead.seq); byId.delete(dead.id);
     const el = rows.querySelector(`tr[data-seq="${dead.seq}"]`);
@@ -255,21 +514,30 @@ function appendFacts(list, toTop) {
   updateEmpty();
 }
 
+function rerenderAll() { // 语言/时间格式切换后整表重画（关闭已展开的详情行）
+  rows.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  for (const f of facts) frag.appendChild(makeRow(f));
+  rows.append(frag);
+  updateEmpty();
+  if (following) stream.scrollTop = stream.scrollHeight;
+}
+
 function updateEmpty() {
   const anyVisible = facts.some(clientMatch);
   const e = $("empty");
   if (facts.length === 0) {
     e.style.display = "block";
     e.innerHTML = cursor === 0
-      ? `bus is empty. publish the first fact:<br><code>npx -p @antlegion/bus alctl publish task.created '{"title":"…"}'</code>`
-      : `no facts match the server filters (scanned ≤ seq ${cursor}).`;
+      ? `${esc(T("empty_bus"))}<br><code>npx -p @antlegion/bus alctl publish task.created '{"title":"…"}'</code>`
+      : esc(TF("empty_filter", { n: cursor }));
   } else if (!anyVisible) {
     e.style.display = "block";
-    e.innerHTML = `no loaded facts match the payload search (client-side, ${facts.length} loaded).`;
+    e.textContent = TF("empty_q", { n: facts.length });
   } else e.style.display = "none";
 }
 
-/* ── follow / scroll ── */
+/* ── 跟随 / 滚动 ── */
 function atBottom() { return stream.scrollHeight - stream.scrollTop - stream.clientHeight < 60; }
 stream.addEventListener("scroll", () => {
   if (atBottom()) { if (!following) { following = true; pendingNew = 0; $("pill").style.display = "none"; } }
@@ -277,7 +545,7 @@ stream.addEventListener("scroll", () => {
 });
 $("pill").onclick = () => { stream.scrollTop = stream.scrollHeight; };
 
-/* ── polling ── */
+/* ── 轮询 ── */
 async function pollFacts() {
   try {
     const page = await serverQuery(cursor, 500);
@@ -288,20 +556,20 @@ async function pollFacts() {
       else { pendingNew += page.length; $("pill-n").textContent = String(pendingNew); }
     }
   } catch { failures++; setDown(true); }
-  setTimeout(pollFacts, failures ? Math.min(5000, 1000 * 2 ** (failures - 1)) : POLL);
+  setTimeout(pollFacts, failures ? Math.min(5000, 1000 * 2 ** (failures - 1)) : cfg.poll);
 }
 
 function setDown(down) {
   $("dot").className = down ? "down" : "live";
-  $("st").textContent = down ? "unreachable" : "LIVE";
+  $("st").textContent = down ? T("unreachable") : T("live");
   const d = $("down");
   if (down) {
     d.style.display = "block";
-    d.textContent = `bus unreachable · retrying (last success ${lastOK ? rel(lastOK / 1000) + " ago" : "never"}) — loaded facts are kept on screen`;
+    d.textContent = TF("down_banner", { t: lastOK ? relTime(lastOK / 1000) + " " + T("ago") : T("never") });
   } else d.style.display = "none";
 }
 
-/* ── initial load ── */
+/* ── 首次加载 ── */
 async function init() {
   try {
     const head = (await (await fetch(BUS + "/facts/head")).json()).head_seq;
@@ -315,27 +583,27 @@ async function init() {
   pollFacts();
 }
 
-/* ── load earlier ── */
+/* ── 加载更早 ── */
 $("older").onclick = async () => {
-  if (oldest <= 1 || oldest === Infinity) { $("older").textContent = "— beginning of log —"; return; }
+  if (oldest <= 1 || oldest === Infinity) { $("older").dataset.end = "1"; $("older").textContent = T("older_end"); return; }
   const since = Math.max(0, oldest - 1 - 500);
   try {
     const page = (await serverQuery(since, 500)).filter((f) => f.seq < oldest);
     const keepY = stream.scrollHeight - stream.scrollTop;
     appendFacts(page, true);
     stream.scrollTop = stream.scrollHeight - keepY;
-    if (since === 0) $("older").textContent = "— beginning of log —";
-  } catch { /* banner already shows */ }
+    if (since === 0) { $("older").dataset.end = "1"; $("older").textContent = T("older_end"); }
+  } catch { /* 横幅已提示 */ }
 };
 
-/* ── filters ── */
+/* ── 过滤器 ── */
 function applyFilters() {
   filters.type = $("f-type").value.trim(); filters.author = $("f-author").value.trim();
   filters.refkey = $("f-refkey").value.trim(); filters.refval = $("f-refval").value.trim();
   filters.q = $("f-q").value.trim();
   syncURL();
   facts = []; bySeq.clear(); byId.clear(); cursor = 0; oldest = Infinity; pendingNew = 0;
-  rows.innerHTML = ""; $("older").textContent = "↑ load earlier"; following = true; $("pill").style.display = "none";
+  rows.innerHTML = ""; delete $("older").dataset.end; $("older").textContent = T("older"); following = true; $("pill").style.display = "none";
   init0 = false; initOnce();
 }
 let debounce;
@@ -343,7 +611,7 @@ for (const id of ["f-type", "f-author", "f-refkey", "f-refval"]) {
   $(id).addEventListener("change", applyFilters);
   $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") applyFilters(); });
 }
-$("f-q").addEventListener("input", () => {  // client-only: no refetch, just re-show rows
+$("f-q").addEventListener("input", () => {  // 纯客户端：不重拉，只重筛
   clearTimeout(debounce);
   debounce = setTimeout(() => {
     filters.q = $("f-q").value.trim(); syncURL();
@@ -360,15 +628,22 @@ $("f-clear").onclick = () => { for (const id of ["f-type", "f-author", "f-refkey
 let init0 = false;
 function initOnce() { if (!init0) { init0 = true; init(); } }
 
-/* ── row interactions (delegated) ── */
+/* ── 行交互（事件委托） ── */
 document.addEventListener("click", async (e) => {
   const t = e.target;
-  if (t.dataset.copy !== undefined && t.dataset.copy) { navigator.clipboard.writeText(t.dataset.copy); t.textContent = "copied ✓"; setTimeout(() => (t.textContent = t.dataset.copy.startsWith("curl") ? "copy curl" : "copy id"), 1200); return; }
+  if (t.dataset.copy !== undefined && t.dataset.copy) {
+    navigator.clipboard.writeText(t.dataset.copy); const kind = t.dataset.kind;
+    t.textContent = T("copied");
+    setTimeout(() => (t.textContent = kind === "curl" ? T("copy_curl") : T("copy_id")), 1200); return;
+  }
+  if (t.dataset.tree) { e.stopPropagation(); openTree(t.dataset.tree); return; }
+  const tn = t.closest(".tnode");
+  if (tn && tn.dataset.ref) { closeTree(); jump(tn.dataset.ref); return; }
   const chip = t.closest(".chip");
   if (chip && chip.dataset.ref) { e.stopPropagation(); jump(chip.dataset.ref); return; }
   if (t.classList.contains("ty")) { e.stopPropagation(); $("f-type").value = t.dataset.t; applyFilters(); return; }
   if (t.classList.contains("au")) { e.stopPropagation(); $("f-author").value = t.dataset.a; applyFilters(); return; }
-  if (t.classList.contains("id")) { e.stopPropagation(); navigator.clipboard.writeText(t.dataset.id); t.textContent = "copied ✓"; setTimeout(() => (t.textContent = t.dataset.id.slice(0, 8)), 1200); return; }
+  if (t.classList.contains("id")) { e.stopPropagation(); navigator.clipboard.writeText(t.dataset.id); t.textContent = T("copied"); setTimeout(() => (t.textContent = t.dataset.id.slice(0, 8)), 1200); return; }
   const row = t.closest("tr.f");
   if (row) {
     const next = row.nextElementSibling;
@@ -376,11 +651,21 @@ document.addEventListener("click", async (e) => {
     const f = bySeq.get(parseInt(row.dataset.seq, 10));
     if (!f) return;
     const tr = document.createElement("tr");
-    tr.className = "detail";
+    tr.className = "detail"; tr.dataset.for = f.seq;
     tr.innerHTML = `<td colspan="7">${detailHTML(f)}</td>`;
     row.after(tr);
   }
 });
+
+/* 展开中的详情行每 2 秒重折叠一次生命周期行——尾部 claim 的墙钟过期、Δ 调整
+   都能实时反映。只替换徽章那一行，不动其余 DOM：用户的文本选中不被打断。 */
+function refreshOpenDetails() {
+  for (const line of rows.querySelectorAll(".lcline")) {
+    const f = byId.get(line.dataset.lc) || bySeq.get(parseInt(line.closest("tr")?.dataset.for ?? "", 10));
+    if (f) line.innerHTML = lcLineHTML(f);
+  }
+}
+setInterval(refreshOpenDetails, 2000);
 
 async function jump(id) {
   const f = byId.get(id);
@@ -393,23 +678,105 @@ async function jump(id) {
       return;
     }
   }
-  try {  // outside the buffer → pinned inspector (never spliced into the stream)
+  try {  // 窗口外 → 钉住的检视卡（不拼进流里）
     const r = await fetch(BUS + "/facts/" + id);
     if (!r.ok) throw 0;
     const g = await r.json();
-    $("i-body").innerHTML = `<div class="k">#${g.seq} · ${esc(g.type)} · ${esc(g.author)} · ${rel(g.recv)} ago</div>` + detailHTML(g);
+    $("i-body").innerHTML = `<div class="k">#${g.seq} · ${esc(g.type)} · ${esc(g.author)} · ${fmtTime(g.recv)}</div>` + detailHTML(g);
     $("inspect").style.display = "block";
-  } catch { $("i-body").innerHTML = `<span class="k">fact ${esc(id.slice(0, 12))}… not found on this bus</span>`; $("inspect").style.display = "block"; }
+  } catch { $("i-body").innerHTML = `<span class="k">${esc(id.slice(0, 12))}… ${T("not_found")}</span>`; $("inspect").style.display = "block"; }
 }
 $("i-close").onclick = () => ($("inspect").style.display = "none");
 
-/* ── tabs ── */
-$("t-stream").onclick = () => { $("t-stream").classList.add("on"); $("t-health").classList.remove("on"); $("stream").style.display = "block"; $("filters").style.display = "flex"; $("health").style.display = "none"; };
-$("t-health").onclick = () => { $("t-health").classList.add("on"); $("t-stream").classList.remove("on"); $("stream").style.display = "none"; $("filters").style.display = "none"; $("health").style.display = "block"; renderAuthors(); };
+/* ── 因果树 ── */
+const fetched = new Map(); // 窗口外补拉的祖先缓存 id -> fact
+async function factById(id) {
+  if (byId.has(id)) return byId.get(id);
+  if (fetched.has(id)) return fetched.get(id);
+  const r = await fetch(BUS + "/facts/" + id);
+  if (!r.ok) throw new Error("fetch " + id);
+  const g = await r.json();
+  fetched.set(id, g);
+  return g;
+}
 
-/* ── health ── */
+function treeNodeHTML(f, depth, isMe) {
+  const guide = depth ? `<span class="guide">${"&nbsp;&nbsp;".repeat(depth)}└─ </span>` : "";
+  return `<div class="tnode${isMe ? " me" : ""}" data-ref="${f.id}">${guide}${badgeHTML(f.id)} ` +
+    `<span class="k">#${f.seq}</span> <span class="ty2">${esc(f.type)}</span> <span class="au2">${esc(f.author)}</span> <span class="id2">${f.id.slice(0, 8)}</span></div>`;
+}
+
+const TREE_CHILD_CAP = 200;
+async function openTree(id) {
+  let f;
+  try { f = await factById(id); } catch { return; }
+  // 祖先链：沿 refs.parent 上溯（补拉窗口外），深度上限对齐总线 maxDepth 默认 64
+  const chain = []; // 近 → 远
+  let cur = f, missing = null;
+  for (let i = 0; i < 64 && cur.refs && cur.refs.parent; i++) {
+    try { cur = await factById(cur.refs.parent); chain.push(cur); }
+    catch { missing = cur.refs.parent; break; }
+  }
+  let html = "";
+  const ancestors = chain.reverse(); // 根 → …… → 父
+  if (missing) html += `<div class="tnode missing">${TF("tree_missing", { id: esc(missing.slice(0, 12)) })}</div>`;
+  ancestors.forEach((a, i) => { html += treeNodeHTML(a, i, false); });
+  const meDepth = ancestors.length;
+  html += treeNodeHTML(f, meDepth, true);
+  // 子孙：已加载窗口内 refs.parent 指向链上的 BFS 展开
+  let shown = 0, capped = false;
+  const walk = (pid, depth) => {
+    if (capped) return;
+    const kids = facts.filter((g) => g.refs && g.refs.parent === pid).sort((a, b) => a.seq - b.seq);
+    for (const k of kids) {
+      if (shown >= TREE_CHILD_CAP) { capped = true; return; }
+      shown++;
+      html += treeNodeHTML(k, depth, false);
+      walk(k.id, depth + 1);
+    }
+  };
+  walk(f.id, meDepth + 1);
+  if (capped) html += `<div class="tnode missing">${TF("tree_more", { n: TREE_CHILD_CAP })}</div>`;
+  $("tr-title").textContent = `${T("tree_title")} · #${f.seq} ${f.type}`;
+  $("tr-body").innerHTML = html;
+  $("treewrap").style.display = "block";
+}
+function closeTree() { $("treewrap").style.display = "none"; }
+$("tr-close").onclick = closeTree;
+$("treewrap").addEventListener("click", (e) => { if (e.target === $("treewrap")) closeTree(); });
+
+/* ── 页签 ── */
+$("t-stream").onclick = () => { $("t-stream").classList.add("on"); $("t-health").classList.remove("on"); $("stream").style.display = "block"; $("filters").style.display = "flex"; $("health").style.display = "none"; };
+$("t-health").onclick = () => { $("t-health").classList.add("on"); $("t-stream").classList.remove("on"); $("stream").style.display = "none"; $("filters").style.display = "none"; $("health").style.display = "block"; renderAuthors(); if (lastInfo) renderHealth(lastInfo, lastRate); };
+
+/* ── 设置抽屉 ── */
+function openSettings() {
+  $("g-delta").value = cfg.delta; $("g-poll").value = cfg.poll;
+  $("shade").style.display = "block"; $("settings").classList.add("on");
+}
+function closeSettings() { $("shade").style.display = "none"; $("settings").classList.remove("on"); }
+$("t-gear").onclick = openSettings;
+$("g-close").onclick = closeSettings;
+$("shade").onclick = closeSettings;
+
+function setLang(l) { if (cfg.lang === l) return; cfg.lang = l; syncURL(); applyLang(); rerenderAll(); if (lastInfo) renderHealth(lastInfo, lastRate); renderAuthors(); updateEmpty(); }
+$("lang-zh").onclick = () => setLang("zh");
+$("lang-en").onclick = () => setLang("en");
+function setTfmt(m) { if (cfg.tfmt === m) return; cfg.tfmt = m; syncURL(); applyLang(); rerenderAll(); }
+$("tfmt-rel").onclick = () => setTfmt("rel");
+$("tfmt-abs").onclick = () => setTfmt("abs");
+$("g-delta").addEventListener("input", () => {
+  const v = parseInt($("g-delta").value, 10);
+  if (Number.isFinite(v) && v >= 1) { cfg.delta = v; syncURL(); refreshOpenDetails(); }
+});
+$("g-poll").addEventListener("input", () => {
+  const v = parseInt($("g-poll").value, 10);
+  if (Number.isFinite(v) && v >= 250) { cfg.poll = v; syncURL(); }
+});
+
+/* ── 健康页 ── */
 const samples = []; // [t, head]
-let lastInfo = null;
+let lastInfo = null, lastRate = 0;
 const fmtBytes = (n) => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB";
 const fmtUp = (s) => s < 60 ? Math.floor(s) + "s" : s < 3600 ? Math.floor(s / 60) + "m " + Math.floor(s % 60) + "s" : Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
 
@@ -424,6 +791,7 @@ async function pollInfo() {
       const [t0, h0] = samples[samples.length - 2], [t1, h1] = samples[samples.length - 1];
       rate = Math.max(0, (h1 - h0) / (t1 - t0));
     }
+    lastRate = rate;
     $("b-head").textContent = info.head_seq;
     $("b-rate").textContent = rate.toFixed(1);
     $("b-fsync").textContent = info.fsync;
@@ -431,7 +799,7 @@ async function pollInfo() {
     $("b-sig").innerHTML = `sig_failures <b>${info.sig_failures}</b>`;
     $("b-sig").className = "kv" + (info.sig_failures > 0 ? " bad" : "");
     renderHealth(info, rate);
-  } catch { /* bar dot handled by facts poll */ }
+  } catch { /* 圆点状态由事实轮询兜底 */ }
   setTimeout(pollInfo, 5000);
 }
 
@@ -440,15 +808,15 @@ function renderHealth(i, rate) {
     $(id).innerHTML = pairs.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join("") +
       notes.map((n) => `<div class="note${n.bad ? " bad" : ""}">${n.t}</div>`).join("");
   };
-  g("h-stream", [["head_seq", i.head_seq], ["facts", i.facts], ["dedup_hits", i.dedup_hits], ["append rate", rate.toFixed(2) + " facts/s"]]);
+  g("h-stream", [["head_seq", i.head_seq], ["facts", i.facts], ["dedup_hits", i.dedup_hits], [T("k_rate"), rate.toFixed(2) + " " + T("rate")]]);
   g("h-log", [["log_entries", i.log_entries], ["log_bytes", fmtBytes(i.log_bytes)], ["fsync", i.fsync], ["entries − facts", i.log_entries - i.facts]],
-    i.fsync === "no" ? [{ t: "fsync=no — a crash may lose the last unflushed writes" }] : []);
+    i.fsync === "no" ? [{ t: T("note_fsync") }] : []);
   const intNotes = [];
-  if (i.sig_failures > 0) intNotes.push({ bad: true, t: `${i.sig_failures} facts failed sig verification on recovery — changed secret? tampered log?` });
-  if (!i.secret_stable) intNotes.push({ t: "secret minted this boot — sigs written before a restart can't be verified. set a stable ANTLEGION_BUS_SECRET" });
+  if (i.sig_failures > 0) intNotes.push({ bad: true, t: TF("note_sig", { n: i.sig_failures }) });
+  if (!i.secret_stable) intNotes.push({ t: T("note_secret") });
   g("h-int", [["sig_failures", i.sig_failures], ["secret_stable", i.secret_stable], ["max_depth", i.max_depth]], intNotes);
-  g("h-proc", [["protocol", i.protocol], ["uptime", fmtUp(i.uptime_seconds)], ["bus", BUS], ["poll", POLL + "ms (?poll=)"]]);
-  // sparkline
+  g("h-proc", [["protocol", i.protocol], [T("k_uptime"), fmtUp(i.uptime_seconds)], ["bus", BUS], [T("k_poll"), cfg.poll + "ms (?poll=)"]]);
+  // 迷你走势
   const pts = [];
   for (let k = 1; k < samples.length; k++) {
     const r = Math.max(0, (samples[k][1] - samples[k - 1][1]) / (samples[k][0] - samples[k - 1][0]));
@@ -457,8 +825,8 @@ function renderHealth(i, rate) {
   const max = Math.max(1, ...pts);
   const svg = pts.map((r, k) => `${(k / Math.max(1, pts.length - 1)) * 352 + 4},${44 - (r / max) * 38}`).join(" ");
   $("spark").innerHTML = pts.length > 1
-    ? `<polyline points="${svg}" fill="none" stroke="var(--acc)" stroke-width="1.5"/><text x="6" y="12" fill="var(--ink3)" font-size="9">peak ${max.toFixed(1)}/s</text>`
-    : `<text x="6" y="26" fill="var(--ink3)" font-size="10">collecting samples…</text>`;
+    ? `<polyline points="${svg}" fill="none" stroke="var(--acc)" stroke-width="1.5"/><text x="6" y="12" fill="var(--ink3)" font-size="9">${TF("spark_peak", { v: max.toFixed(1) })}</text>`
+    : `<text x="6" y="26" fill="var(--ink3)" font-size="10">${T("spark_wait")}</text>`;
 }
 
 function renderAuthors() {
@@ -466,17 +834,18 @@ function renderAuthors() {
   for (const f of facts) {
     const a = m.get(f.author) || { n: 0, last: 0, skew: 0 };
     a.n++; a.last = Math.max(a.last, f.recv);
-    if (f.ts > 0) a.skew = Math.max(a.skew, Math.abs(f.ts - f.recv)); // ts:0 = deterministic content, not a clock
+    if (f.ts > 0) a.skew = Math.max(a.skew, Math.abs(f.ts - f.recv)); // ts:0 = 确定性内容，不是时钟
     m.set(f.author, a);
   }
   $("h-authors").innerHTML = [...m.entries()].sort((x, y) => y[1].last - x[1].last)
-    .map(([a, v]) => `<tr><td>${esc(a)}</td><td>${rel(v.last)} ago</td><td>${v.n}</td><td${v.skew > 5 ? ' style="color:var(--yel)"' : ""}>${v.skew.toFixed(1)}s</td></tr>`)
-    .join("") || `<tr><td colspan="4" style="color:var(--ink3)">no facts loaded</td></tr>`;
+    .map(([a, v]) => `<tr><td>${esc(a)}</td><td>${fmtTime(v.last)}${cfg.tfmt === "rel" ? " " + T("ago") : ""}</td><td>${v.n}</td><td${v.skew > 5 ? ' style="color:var(--yel)"' : ""}>${v.skew.toFixed(1)}s</td></tr>`)
+    .join("") || `<tr><td colspan="4" style="color:var(--ink3)">${T("no_facts")}</td></tr>`;
 }
 setInterval(() => { if ($("health").style.display === "block") renderAuthors(); }, 5000);
 
-/* ── go ── */
+/* ── 启动 ── */
 syncURL();
+applyLang();
 initOnce();
 pollInfo();
 </script>
