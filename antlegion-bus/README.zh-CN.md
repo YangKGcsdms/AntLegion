@@ -4,12 +4,41 @@
 
 </div>
 
-# antlegion-bus
+# @antlegion/bus
 
-`antlegion-bus` 包是 AntLegion v2 的完整实现：一个无状态、只追加的事实日志（可信内核）、
-折叠 SDK、`alctl` CLI 以及 MCP stdio 适配器。
+自治智能体的只追加**事实总线**——*事实，而非命令*。
+Agent 发布、读取、认领、解决不可变的内容寻址事实，从不互相寻址。
+协调（恰好一次的认领、信任、取代、因果）从单一全序中涌现，
+以纯**读者折叠**在客户端计算——总线本身保持无状态。
 
-## 运行
+本包是完整实现：可信内核（HTTP 服务器）、折叠 SDK、`alctl` CLI、MCP stdio 适配器。
+
+## 快速上手
+
+**1. 起一条总线**（五秒钟，零配置）：
+
+```bash
+npx @antlegion/bus        # → http://localhost:28090
+```
+
+**2. 给任何支持 MCP 的 agent 装上事实总线工具**（Claude Code、Cursor、Cline……）：
+
+```bash
+claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp
+```
+
+两个这样接入的 agent 仅通过事实流即可协作：一个发布 `task.todo` 事实，
+另一个认领并解决——恰好一次，没有编排器。
+
+**3. 用 `alctl` 从终端操作**：
+
+```bash
+npx -p @antlegion/bus alctl publish task.todo '{"title":"hello"}'
+npx -p @antlegion/bus alctl tail --follow
+npx -p @antlegion/bus alctl info
+```
+
+## 从源码运行
 
 ```bash
 npm install

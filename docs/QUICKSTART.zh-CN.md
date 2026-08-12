@@ -6,7 +6,7 @@
 
 # 快速上手 —— AntLegion v2
 
-从克隆到两个 Agent 借不可变事实协作，五分钟搞定。
+从 `npx` 到两个 Agent 借不可变事实协作，五分钟搞定。
 
 总线只负责给事实排序、校验、盖时间戳并按区间返回。所有协作——认领、解决、信任、
 因果——都是客户端 SDK 里的**读者折叠**。完整规范见 [PROTOCOL.md](../PROTOCOL.md)。
@@ -14,13 +14,16 @@
 ## 1. 运行总线
 
 ```bash
+npx @antlegion/bus
+# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
+```
+
+或从源码运行：
+
+```bash
 cd antlegion-bus
 npm install
-npm run dev
-# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
-
-# 或者先 build 再运行：
-npm run build && npm run start
+npm run dev            # 或先 build 再运行：npm run build && npm run start
 ```
 
 验证服务是否就绪：
@@ -67,33 +70,34 @@ curl -s http://localhost:28090/info | jq
 
 ## 3. 用终端操作（`alctl`）
 
-`alctl` 是 `redis-cli` 的对应物。先 build 一次——每条命令在 stdout 输出机器可读的
+`alctl` 是 `redis-cli` 的对应物——`npm i -g @antlegion/bus` 即可安装
+（或者给每条命令加前缀 `npx -y -p @antlegion/bus`）。每条命令在 stdout 输出机器可读的
 JSON；人类可读的错误走 stderr 并以非零码退出：
 
 ```bash
 # 发布
-node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
+alctl publish task.build '{"target":"todo-app"}' --author alice
 # {"id":"b3f1…","seq":1,"deduped":false}
 
 # 认领（恰好一个赢；输家退出码为 1）
-node dist/bin.js claim b3f1… --author bob
+alctl claim b3f1… --author bob
 # {"won":false,"winner":"alice"}
 
 # 查看生命周期状态
-node dist/bin.js state b3f1…
+alctl state b3f1…
 # {"state":"claimed","owner":"alice"}
 
 # 解决——只有认领胜者可以；其他人会以非零码退出：
 #   error: resolve ignored — fact <id> is owned by 'alice' (you are 'bob')
-node dist/bin.js resolve b3f1… --author alice
+alctl resolve b3f1… --author alice
 # {"state":"resolved","owner":"alice"}
 
 # tail 打印一次当前流即退出；--follow 持续轮询实时输出
-node dist/bin.js tail
-node dist/bin.js tail --follow
+alctl tail
+alctl tail --follow
 
 # 完整总线信息（protocol、head_seq、facts、fsync、sig_failures、secret_stable……）
-node dist/bin.js info
+alctl info
 ```
 
 `--author <名字>` 是全局旗标，对所有会写入事实的命令生效。身份解析顺序：
@@ -105,7 +109,7 @@ node dist/bin.js info
 ## 4. 从代码接入（折叠 SDK）
 
 ```typescript
-import { ClientV2, httpTransport } from "antlegion-bus/client";
+import { ClientV2, httpTransport } from "@antlegion/bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
@@ -157,20 +161,10 @@ SDK 吸收了「追加→读回确认→折叠」的底层工作（PROTOCOL.md �
 任何支持 MCP 的 Agent（Claude Code、Cursor、Cline、Windsurf、Zed……）都可以通过一行命令接入：
 
 ```bash
-npm run build   # 编译一次
-
-ANTLEGION_BUS_URL=http://localhost:28090 \
-ANTLEGION_AGENT_NAME=my-agent \
-node dist/mcp.js
-```
-
-或者直接注册到你的 MCP 客户端——以 Claude Code 为例：
-
-```bash
 claude mcp add antlegion \
   --env ANTLEGION_BUS_URL=http://localhost:28090 \
   --env ANTLEGION_AGENT_NAME=my-agent \
-  -- node /path/to/antlegion-bus/dist/mcp.js
+  -- npx -y -p @antlegion/bus antlegion-mcp
 ```
 
 或者通过 `.mcp.json`：
@@ -179,8 +173,8 @@ claude mcp add antlegion \
 {
   "mcpServers": {
     "antlegion": {
-      "command": "node",
-      "args": ["/path/to/antlegion-bus/dist/mcp.js"],
+      "command": "npx",
+      "args": ["-y", "-p", "@antlegion/bus", "antlegion-mcp"],
       "env": {
         "ANTLEGION_BUS_URL": "http://localhost:28090",
         "ANTLEGION_AGENT_NAME": "my-agent"

@@ -6,6 +6,7 @@
 
 **A fact bus for autonomous agents** — local, embeddable infrastructure where agents coordinate by sharing immutable facts, never by sending each other commands.
 
+[![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Tests](https://img.shields.io/badge/tests-147%20passing-brightgreen?style=flat-square)](antlegion-bus/test/)
@@ -63,21 +64,34 @@ This is not aspirational. It is [validated by runnable multi-agent swarms](#vali
 
 ## Quickstart
 
-**Requires Node.js ≥ 18**
+**Requires Node.js ≥ 20**
+
+**Stage 1 — boot a bus** (five seconds, zero config):
+
+```bash
+npx @antlegion/bus
+# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
+
+curl http://localhost:28090/health
+# {"status":"ok","protocol":"2.0","head_seq":0}
+```
+
+**Stage 2 — give your agents fact-bus tools** (Claude Code, Cursor, Cline, … — anything MCP-capable):
+
+```bash
+claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp
+```
+
+Two agents connected this way coordinate through the fact stream alone: one publishes `task.todo` facts, the other claims and resolves them — exactly-once, no orchestrator. See [Connect via MCP](#connect-via-mcp).
+
+**Stage 3 — resident autonomous workers**: [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — install a worker ant, tell it what facts to watch, and it wakes up, claims, works, resolves. *(pre-release — the runtime is being packaged from [`ecu/`](ecu))*
+
+**From source** (development):
 
 ```bash
 git clone https://github.com/YangKGcsdms/antlegion-platform.git
 cd antlegion-platform/antlegion-bus
-npm install
-npm run dev
-# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
-```
-
-Verify it's up:
-
-```bash
-curl http://localhost:28090/health
-# {"status":"ok","protocol":"2.0","head_seq":0}
+npm install && npm run dev
 ```
 
 **Or with Docker** (build from the repo root):
@@ -89,30 +103,31 @@ docker run -p 28090:28090 -e ANTLEGION_BUS_SECRET=your-stable-secret antlegion
 
 ### Drive it from the terminal (`alctl` — the redis-cli analog)
 
-Every command prints machine-readable JSON on stdout; human errors go to stderr with a non-zero exit code.
+`npm i -g @antlegion/bus` installs three commands: `antlegion` (the server), `alctl`, and `antlegion-mcp`. Every `alctl` command prints machine-readable JSON on stdout; human errors go to stderr with a non-zero exit code.
 
 ```bash
-# Build first, then:
-node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
+alctl publish task.build '{"target":"todo-app"}' --author alice
 # → {"id":"b3f1…","seq":1,"deduped":false}
 
-node dist/bin.js claim <id> --author bob
+alctl claim <id> --author bob
 # → {"won":false,"winner":"alice"}        (exit 1 — you lost the claim)
 
-node dist/bin.js state <id>
+alctl state <id>
 # → {"state":"claimed","owner":"alice"}
 
-node dist/bin.js resolve <id> --author alice   # only the claim winner can resolve
+alctl resolve <id> --author alice   # only the claim winner can resolve
 # → {"state":"resolved","owner":"alice"}
 # a non-winner's resolve fails loudly and exits non-zero:
 #   error: resolve ignored — fact <id> is owned by 'alice' (you are 'bob')
 
-node dist/bin.js tail            # prints the stream once and exits
-node dist/bin.js tail --follow   # live tail: polls ?since= until Ctrl-C
+alctl tail            # prints the stream once and exits
+alctl tail --follow   # live tail: polls ?since= until Ctrl-C
 
-node dist/bin.js info            # full INFO payload
+alctl info            # full INFO payload
 # → {"protocol":"2.0","head_seq":1,"facts":3,"fsync":"everysec","sig_failures":0,"secret_stable":true,…}
 ```
+
+*(without a global install: `npx -y -p @antlegion/bus alctl <cmd>`)*
 
 `--author <name>` is a global flag that works on every command that writes facts. Identity resolution order:
 
@@ -180,10 +195,10 @@ Reserved fact types the fold layer interprets:
 
 ## Coordinate from code
 
-The folding client SDK absorbs the append-then-read-back-and-fold work so your code stays clean:
+The folding client SDK absorbs the append-then-read-back-and-fold work so your code stays clean (`npm i @antlegion/bus`):
 
 ```typescript
-import { ClientV2, httpTransport } from "antlegion-bus/client";
+import { ClientV2, httpTransport } from "@antlegion/bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
@@ -235,8 +250,8 @@ await alice.publish("deploy.status", { stage: "done" },
 For the in-process embedding path (tests, tight integration):
 
 ```typescript
-import { BusV2 } from "antlegion-bus/bus";
-import { ClientV2, localTransport } from "antlegion-bus/client";
+import { BusV2 } from "@antlegion/bus/bus";
+import { ClientV2, localTransport } from "@antlegion/bus/client";
 
 const bus = new BusV2({ secret: "my-secret", dataDir: "./data" });
 const client = new ClientV2(localTransport(bus), "my-agent");
@@ -245,23 +260,13 @@ const client = new ClientV2(localTransport(bus), "my-agent");
 
 ## Connect via MCP
 
-Any MCP-capable agent — Claude Code, Cursor, Cline, Windsurf, Zed, Goose — can connect to the bus over stdio with a single configuration entry:
-
-```bash
-npm run build   # compile once
-
-ANTLEGION_BUS_URL=http://localhost:28090 \
-ANTLEGION_AGENT_NAME=my-agent \
-node dist/mcp.js
-```
-
-Or register it with your MCP client — e.g. Claude Code:
+Any MCP-capable agent — Claude Code, Cursor, Cline, Windsurf, Zed, Goose — can connect to the bus over stdio with a single line:
 
 ```bash
 claude mcp add antlegion \
   --env ANTLEGION_BUS_URL=http://localhost:28090 \
   --env ANTLEGION_AGENT_NAME=my-agent \
-  -- node /path/to/antlegion-bus/dist/mcp.js
+  -- npx -y -p @antlegion/bus antlegion-mcp
 ```
 
 or via `.mcp.json`:
@@ -270,8 +275,8 @@ or via `.mcp.json`:
 {
   "mcpServers": {
     "antlegion": {
-      "command": "node",
-      "args": ["/path/to/antlegion-bus/dist/mcp.js"],
+      "command": "npx",
+      "args": ["-y", "-p", "@antlegion/bus", "antlegion-mcp"],
       "env": {
         "ANTLEGION_BUS_URL": "http://localhost:28090",
         "ANTLEGION_AGENT_NAME": "my-agent"
@@ -445,7 +450,8 @@ antlegion-platform/
 
 ### Roadmap
 
-- [ ] Published npm package / prebuilt binary (currently: build from source)
+- [x] Published npm package — [`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus) (`npx @antlegion/bus` boots a bus)
+- [ ] [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — resident autonomous worker units (`ant init` / `ant start`); name reserved, runtime being packaged from [`ecu/`](ecu)
 - [ ] Multi-language client SDKs — Go, Python, Rust (conformance vectors are ready to test against)
 - [ ] Auth + per-author rate limiting for public-facing deployments
 - [ ] Replication / HA (protocol design: single-writer + failover; see PROTOCOL.md §7)

@@ -6,6 +6,7 @@
 
 **面向自治 Agent 的事实总线** — 本地、可内嵌的基础设施，让多个 Agent 通过共享不可变的事实来协作，而非互相下达命令。
 
+[![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![Tests](https://img.shields.io/badge/测试-147%20通过-brightgreen?style=flat-square)](antlegion-bus/test/)
@@ -63,21 +64,34 @@
 
 ## 快速上手
 
-**前置要求：Node.js ≥ 18**
+**前置要求：Node.js ≥ 20**
+
+**第一级 —— 起一条总线**（五秒钟，零配置）：
+
+```bash
+npx @antlegion/bus
+# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
+
+curl http://localhost:28090/health
+# {"status":"ok","protocol":"2.0","head_seq":0}
+```
+
+**第二级 —— 给你的 agent 装上事实总线工具**（Claude Code、Cursor、Cline…… 任何支持 MCP 的都行）：
+
+```bash
+claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp
+```
+
+两个这样接入的 agent 仅通过事实流即可协作：一个发布 `task.todo` 事实，另一个认领并解决——恰好一次，没有编排器。参见[通过 MCP 接入](#通过-mcp-接入)。
+
+**第三级 —— 常驻自治工作单元**：[`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) —— 装一只工蚁，告诉它监听哪些事实，它就会自己醒来、认领、干活、解决。*（预发布——运行时正从 [`ecu/`](ecu) 打包中）*
+
+**从源码运行**（开发用）：
 
 ```bash
 git clone https://github.com/YangKGcsdms/antlegion-platform.git
 cd antlegion-platform/antlegion-bus
-npm install
-npm run dev
-# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
-```
-
-验证服务是否就绪：
-
-```bash
-curl http://localhost:28090/health
-# {"status":"ok","protocol":"2.0","head_seq":0}
+npm install && npm run dev
 ```
 
 **或使用 Docker**（从仓库根目录构建）：
@@ -89,30 +103,31 @@ docker run -p 28090:28090 -e ANTLEGION_BUS_SECRET=your-stable-secret antlegion
 
 ### 用终端操作（`alctl` — redis-cli 的对应物）
 
-每条命令在 stdout 输出机器可读的 JSON；人类可读的错误走 stderr 并以非零码退出。
+`npm i -g @antlegion/bus` 会安装三个命令：`antlegion`（服务器）、`alctl`、`antlegion-mcp`。每条 `alctl` 命令在 stdout 输出机器可读的 JSON；人类可读的错误走 stderr 并以非零码退出。
 
 ```bash
-# 先 build，然后：
-node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
+alctl publish task.build '{"target":"todo-app"}' --author alice
 # → {"id":"b3f1…","seq":1,"deduped":false}
 
-node dist/bin.js claim <id> --author bob
+alctl claim <id> --author bob
 # → {"won":false,"winner":"alice"}        （退出码 1——你输掉了认领）
 
-node dist/bin.js state <id>
+alctl state <id>
 # → {"state":"claimed","owner":"alice"}
 
-node dist/bin.js resolve <id> --author alice   # 只有认领胜者可以 resolve
+alctl resolve <id> --author alice   # 只有认领胜者可以 resolve
 # → {"state":"resolved","owner":"alice"}
 # 非胜者的 resolve 会明确报错并以非零码退出：
 #   error: resolve ignored — fact <id> is owned by 'alice' (you are 'bob')
 
-node dist/bin.js tail            # 打印一次当前流即退出
-node dist/bin.js tail --follow   # 实时追尾：轮询 ?since= 直到 Ctrl-C
+alctl tail            # 打印一次当前流即退出
+alctl tail --follow   # 实时追尾：轮询 ?since= 直到 Ctrl-C
 
-node dist/bin.js info            # 完整 INFO 载荷
+alctl info            # 完整 INFO 载荷
 # → {"protocol":"2.0","head_seq":1,"facts":3,"fsync":"everysec","sig_failures":0,"secret_stable":true,…}
 ```
+
+*（不想全局安装的话：`npx -y -p @antlegion/bus alctl <命令>`）*
 
 `--author <名字>` 是全局旗标，对所有会写入事实的命令生效。身份解析顺序：
 
@@ -180,10 +195,10 @@ curl -s "http://localhost:28090/facts?since=0&type=task.*"
 
 ## 从代码接入
 
-折叠客户端 SDK 负责「发布→读回→折叠」的底层工作，让调用侧保持整洁：
+折叠客户端 SDK 负责「发布→读回→折叠」的底层工作，让调用侧保持整洁（`npm i @antlegion/bus`）：
 
 ```typescript
-import { ClientV2, httpTransport } from "antlegion-bus/client";
+import { ClientV2, httpTransport } from "@antlegion/bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
@@ -235,8 +250,8 @@ await alice.publish("deploy.status", { stage: "done" },
 **进程内嵌入模式**（测试或紧耦合集成）：
 
 ```typescript
-import { BusV2 } from "antlegion-bus/bus";
-import { ClientV2, localTransport } from "antlegion-bus/client";
+import { BusV2 } from "@antlegion/bus/bus";
+import { ClientV2, localTransport } from "@antlegion/bus/client";
 
 const bus = new BusV2({ secret: "my-secret", dataDir: "./data" });
 const client = new ClientV2(localTransport(bus), "my-agent");
@@ -248,20 +263,10 @@ const client = new ClientV2(localTransport(bus), "my-agent");
 任何支持 MCP 的 Agent——Claude Code、Cursor、Cline、Windsurf、Zed、Goose——都可以通过一行命令以 stdio 方式连接到总线，无需定制集成：
 
 ```bash
-npm run build   # 编译一次
-
-ANTLEGION_BUS_URL=http://localhost:28090 \
-ANTLEGION_AGENT_NAME=my-agent \
-node dist/mcp.js
-```
-
-或者直接注册到你的 MCP 客户端——以 Claude Code 为例：
-
-```bash
 claude mcp add antlegion \
   --env ANTLEGION_BUS_URL=http://localhost:28090 \
   --env ANTLEGION_AGENT_NAME=my-agent \
-  -- node /path/to/antlegion-bus/dist/mcp.js
+  -- npx -y -p @antlegion/bus antlegion-mcp
 ```
 
 或者通过 `.mcp.json`：
@@ -270,8 +275,8 @@ claude mcp add antlegion \
 {
   "mcpServers": {
     "antlegion": {
-      "command": "node",
-      "args": ["/path/to/antlegion-bus/dist/mcp.js"],
+      "command": "npx",
+      "args": ["-y", "-p", "@antlegion/bus", "antlegion-mcp"],
       "env": {
         "ANTLEGION_BUS_URL": "http://localhost:28090",
         "ANTLEGION_AGENT_NAME": "my-agent"
@@ -444,7 +449,8 @@ antlegion-platform/
 
 ### 路线图
 
-- [ ] 发布 npm 包 / 预编译二进制（目前需从源码构建）
+- [x] 发布 npm 包——[`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus)（`npx @antlegion/bus` 一行起总线）
+- [ ] [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant)——常驻自治工作单元（`ant init` / `ant start`）；包名已占位，运行时正从 [`ecu/`](ecu) 打包
 - [ ] 多语言客户端 SDK——Go、Python、Rust（一致性向量已就绪，可直接对齐）
 - [ ] 面向公网的鉴权 + 每作者速率限制
 - [ ] 复制 / 高可用（协议设计：单写者 + 故障切换，见 PROTOCOL.md §7）

@@ -6,7 +6,7 @@
 
 # Quickstart — AntLegion v2
 
-Five minutes from clone to two agents coordinating through immutable facts.
+Five minutes from `npx` to two agents coordinating through immutable facts.
 
 The bus only orders, verifies, stamps, and serves facts. All coordination —
 claim, resolve, trust, causation — is a **reader fold** in the client SDK.
@@ -15,13 +15,16 @@ See [PROTOCOL.md](../PROTOCOL.md) for the full spec.
 ## 1. Run the bus
 
 ```bash
+npx @antlegion/bus
+# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
+```
+
+From source instead:
+
+```bash
 cd antlegion-bus
 npm install
-npm run dev
-# [antlegion-v2] append-only fact bus on http://localhost:28090 (fsync=everysec)
-
-# or build once and run:
-npm run build && npm run start
+npm run dev            # or build once and run: npm run build && npm run start
 ```
 
 Verify it's up:
@@ -68,33 +71,34 @@ That is the entire bus API. `claim`, `resolve`, `vote`, `trust`, `state` are
 
 ## 3. Drive it from the terminal (`alctl`)
 
-`alctl` is the `redis-cli` analog. Build once, then — every command prints
+`alctl` is the `redis-cli` analog — `npm i -g @antlegion/bus` installs it
+(or prefix each command with `npx -y -p @antlegion/bus`). Every command prints
 machine-readable JSON on stdout; human errors go to stderr with a non-zero exit:
 
 ```bash
 # Publish
-node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
+alctl publish task.build '{"target":"todo-app"}' --author alice
 # {"id":"b3f1…","seq":1,"deduped":false}
 
 # Claim (exactly one wins; the loser exits 1)
-node dist/bin.js claim b3f1… --author bob
+alctl claim b3f1… --author bob
 # {"won":false,"winner":"alice"}
 
 # Check lifecycle state
-node dist/bin.js state b3f1…
+alctl state b3f1…
 # {"state":"claimed","owner":"alice"}
 
 # Resolve — only the claim winner can; anyone else exits non-zero:
 #   error: resolve ignored — fact <id> is owned by 'alice' (you are 'bob')
-node dist/bin.js resolve b3f1… --author alice
+alctl resolve b3f1… --author alice
 # {"state":"resolved","owner":"alice"}
 
 # Tail prints the stream once and exits; --follow keeps polling live
-node dist/bin.js tail
-node dist/bin.js tail --follow
+alctl tail
+alctl tail --follow
 
 # Full bus info (protocol, head_seq, facts, fsync, sig_failures, secret_stable, …)
-node dist/bin.js info
+alctl info
 ```
 
 `--author <name>` is a global flag on every command that writes facts. Identity
@@ -106,8 +110,10 @@ if no bus is listening you'll get
 
 ## 4. Coordinate from code (the folding SDK)
 
+`npm i @antlegion/bus`, then:
+
 ```typescript
-import { ClientV2, httpTransport } from "antlegion-bus/client";
+import { ClientV2, httpTransport } from "@antlegion/bus/client";
 
 const alice = new ClientV2(httpTransport("http://localhost:28090"), "alice");
 const bob   = new ClientV2(httpTransport("http://localhost:28090"), "bob");
@@ -160,20 +166,10 @@ Any MCP-capable agent (Claude Code, Cursor, Cline, Windsurf, Zed, …) can
 connect with a one-liner:
 
 ```bash
-npm run build   # compile once
-
-ANTLEGION_BUS_URL=http://localhost:28090 \
-ANTLEGION_AGENT_NAME=my-agent \
-node dist/mcp.js
-```
-
-Or register it with your MCP client — e.g. Claude Code:
-
-```bash
 claude mcp add antlegion \
   --env ANTLEGION_BUS_URL=http://localhost:28090 \
   --env ANTLEGION_AGENT_NAME=my-agent \
-  -- node /path/to/antlegion-bus/dist/mcp.js
+  -- npx -y -p @antlegion/bus antlegion-mcp
 ```
 
 or via `.mcp.json`:
@@ -182,8 +178,8 @@ or via `.mcp.json`:
 {
   "mcpServers": {
     "antlegion": {
-      "command": "node",
-      "args": ["/path/to/antlegion-bus/dist/mcp.js"],
+      "command": "npx",
+      "args": ["-y", "-p", "@antlegion/bus", "antlegion-mcp"],
       "env": {
         "ANTLEGION_BUS_URL": "http://localhost:28090",
         "ANTLEGION_AGENT_NAME": "my-agent"
