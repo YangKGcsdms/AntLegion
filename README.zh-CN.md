@@ -92,6 +92,15 @@ npx @antlegion/ant board      # 监督看板 → http://localhost:28091/devchain
 
 详见 [`ant/`](ant)（DCU 运行时、dev-chain、证据裁决、看板）。此外，任何支持 MCP 的 agent（Claude Code、Cursor……）也可以接入总线获得 publish/claim/resolve 工具——参见[通过 MCP 接入](#通过-mcp-接入)。
 
+**或者全部装进容器，一条命令**——1 个总线 + 3 个 pi-agent 容器（Ubuntu 24.04），100 个 LLM act 循环，结束打记分板：
+
+```bash
+cd deploy/mvp
+DEEPSEEK_API_KEY=sk-… docker compose up --build --exit-code-from mvp
+```
+
+详见 [`deploy/mvp/`](deploy/mvp)——act 经 pi-ai 走 DeepSeek 推理；`ANT_WORKER=simulated` 可在无 API key 时运行。
+
 **从源码运行**（开发用）：
 
 ```bash

@@ -30,11 +30,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function runMvp(args: string[]): Promise<void> {
   let reqs = 25;
+  let noFleet = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--reqs") reqs = parseInt(args[++i] ?? "", 10);
+    else if (args[i] === "--no-fleet") noFleet = true;
   }
   if (!Number.isFinite(reqs) || reqs < 1) {
-    console.error("usage: ant mvp [--reqs N]");
+    console.error("usage: ant mvp [--reqs N] [--no-fleet]");
     process.exit(2);
   }
 
@@ -53,12 +55,18 @@ export async function runMvp(args: string[]): Promise<void> {
   }
 
   const t0 = Date.now();
-  log(`worker=${workerMode()} reqs=${reqs} bus=${cfg.busUrl} workspace=${root}`);
+  log(`worker=${workerMode()} reqs=${reqs} bus=${cfg.busUrl} workspace=${root}${noFleet ? " (external fleet)" : ""}`);
 
-  // The fleet: 4 stage DCUs + adjudicator + watchdog + gate-approver (unattended).
-  const fleet = devchainFleet(cfg.busUrl, root, { autoGate: true });
-  log(`fleet: ${fleet.map((s) => s.name).join(", ")}`);
-  for (const spec of fleet) void runDCU(spec);
+  if (noFleet) {
+    // The fleet lives elsewhere (containers, other machines) — same bus,
+    // same folds. This process only feeds and keeps score.
+    log("expecting an external fleet on the bus (started with `ant chain [--dcus …]`)");
+  } else {
+    // The fleet: 4 stage DCUs + adjudicator + watchdog + gate-approver (unattended).
+    const fleet = devchainFleet(cfg.busUrl, root, { autoGate: true });
+    log(`fleet: ${fleet.map((s) => s.name).join(", ")}`);
+    for (const spec of fleet) void runDCU(spec);
+  }
 
   // Feed N requirements, staggered so the chain pipelines instead of bursting.
   const runId = new Date().toISOString().slice(11, 19).replace(/:/g, "");
@@ -95,13 +103,13 @@ export async function runMvp(args: string[]): Promise<void> {
     }
     if (rejected.length > 0) log(`REJECTED (halted): ${rejected.join(", ")}`);
     if (done === reqs) {
-      printScoreboard(facts, mine, reqs, Date.now() - t0);
+      printScoreboard(facts, mine, reqs, Date.now() - t0, noFleet);
       process.exit(0);
     }
   }
 }
 
-function printScoreboard(facts: Fact[], mine: Set<string>, reqs: number, elapsedMs: number): void {
+function printScoreboard(facts: Fact[], mine: Set<string>, reqs: number, elapsedMs: number, externalFleet = false): void {
   const ofRun = (f: Fact) => {
     const slug = (f.payload as Record<string, unknown> | undefined)?.reqSlug ?? (f.payload as Record<string, unknown> | undefined)?.slug;
     return typeof slug === "string" ? mine.has(slug) : false;
@@ -127,9 +135,11 @@ function printScoreboard(facts: Fact[], mine: Set<string>, reqs: number, elapsed
   console.log(`claims / resolves     ${claims} / ${resolves}`);
   console.log(`facts on the bus      ${facts.length}`);
   console.log(`elapsed               ${(elapsedMs / 1000).toFixed(1)}s`);
-  if (workerMode() === "llm") {
+  if (workerMode() === "llm" && !externalFleet) {
     // usage lives in the same process as the fleet's workers
     console.log(`llm calls             ${llmUsage.calls} (${llmUsage.errors} errors) · tokens in/out ${llmUsage.inputTokens}/${llmUsage.outputTokens}`);
+  } else if (externalFleet) {
+    console.log("llm usage             see the agent containers' logs (fleet ran externally)");
   }
   console.log("═════════════════════════════════════");
 }

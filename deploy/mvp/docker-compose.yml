@@ -1,0 +1,73 @@
+# AntLegion MVP — one command, four Ubuntu containers:
+#   bus           the fact bus core (@antlegion/bus)
+#   ant-builder   pi agent 1: dcu-plan + dcu-dev
+#   ant-tester    pi agent 2: dcu-unittest + dcu-e2e
+#   ant-governor  pi agent 3: adjudicator + watchdog + gate-approver
+# plus a one-shot `mvp` runner that feeds 25 requirements (→ 100 stage
+# cycles), keeps score, and exits with the scoreboard.
+#
+#   DEEPSEEK_API_KEY=sk-… docker compose up --build --exit-code-from mvp
+#
+# Acts route through DeepSeek (deepseek-v4-flash) by default; set
+# ANT_WORKER=simulated to run without an API key.
+
+name: antlegion-mvp
+
+x-image: &image
+  build: .
+  image: antlegion-mvp:local
+
+x-agent-env: &agent-env
+  ANTLEGION_BUS_URL: http://bus:28090
+  ANT_WORKER: ${ANT_WORKER:-llm}
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+  ANT_LLM_MODEL: ${ANT_LLM_MODEL:-deepseek-v4-flash}
+
+services:
+  bus:
+    <<: *image
+    command: ["antlegion"]
+    environment:
+      PORT: "28090"
+      ANTLEGION_BUS_SECRET: ${ANTLEGION_BUS_SECRET:-mvp-docker-secret}
+      ANTLEGION_DATA_DIR: /work/data
+    ports:
+      - "28090:28090"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:28090/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  ant-builder:
+    <<: *image
+    command: ["ant", "chain", "--dcus", "plan,dev"]
+    environment: *agent-env
+    depends_on:
+      bus: { condition: service_healthy }
+
+  ant-tester:
+    <<: *image
+    command: ["ant", "chain", "--dcus", "unittest,e2e"]
+    environment: *agent-env
+    depends_on:
+      bus: { condition: service_healthy }
+
+  ant-governor:
+    <<: *image
+    command: ["ant", "chain", "--dcus", "adjudicator,watchdog,gate"]
+    environment: *agent-env
+    depends_on:
+      bus: { condition: service_healthy }
+
+  mvp:
+    <<: *image
+    command: ["ant", "mvp", "--no-fleet", "--reqs", "${MVP_REQS:-25}"]
+    environment:
+      ANTLEGION_BUS_URL: http://bus:28090
+    depends_on:
+      bus: { condition: service_healthy }
+      ant-builder: { condition: service_started }
+      ant-tester: { condition: service_started }
+      ant-governor: { condition: service_started }
+    restart: "no"

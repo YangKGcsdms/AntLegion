@@ -54,12 +54,33 @@ async function runIngestor(): Promise<void> {
   });
 }
 
-/** Run the whole dev-chain fleet in one process (each DCU its own identity/loop). */
+/**
+ * Run the dev-chain fleet in one process (each DCU its own identity/loop).
+ * `--dcus plan,dev` runs a subset — that is how the fleet spreads across
+ * containers/machines while staying one fleet on one bus.
+ */
 async function runChain(): Promise<void> {
+  const args = process.argv.slice(3);
+  let dcus: string[] | null = null;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--dcus") dcus = (args[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  }
   const cfg = await loadConfig();
   const root = dcuWorkspaceRoot(cfg);
-  const autoGate = process.env.ANT_AUTO_GATE === "1";
-  await Promise.all(devchainFleet(cfg.busUrl, root, { autoGate }).map((spec) => runDCU(spec)));
+  const autoGate = process.env.ANT_AUTO_GATE === "1" || (dcus?.includes("gate") ?? false);
+  let fleet = devchainFleet(cfg.busUrl, root, { autoGate });
+  if (dcus) {
+    fleet = fleet.filter((spec) => {
+      const short = spec.name.split("@")[0]!; // e.g. dcu-plan
+      return dcus.some((k) => short.includes(k));
+    });
+    if (fleet.length === 0) {
+      console.error(`--dcus matched nothing (known: plan, dev, unittest, e2e, adjudicator, watchdog, gate)`);
+      process.exit(2);
+    }
+    console.error(`[chain] running subset: ${fleet.map((s) => s.name).join(", ")}`);
+  }
+  await Promise.all(fleet.map((spec) => runDCU(spec)));
 }
 
 async function runBoard(): Promise<void> {
@@ -120,15 +141,17 @@ const HELP = `ant — autonomous DCUs (Domain Control Units) on the AntLegion fa
 
 usage: ant <command>
 
-  chain                       run the dev-chain DCU fleet
-                              (4 stage DCUs + adjudicator + watchdog)
+  chain [--dcus a,b]          run the dev-chain DCU fleet (4 stage DCUs +
+                              adjudicator + watchdog); --dcus runs a subset —
+                              spread one fleet across containers/machines
   ingestor                    mirror configured workspace roots onto the bus
   board                       serve the supervision board (http://localhost:28091)
   req new "<名称>" [-s slug]  create a requirement in dcu-workspace and
                               publish req.registered
-  mvp [--reqs N]              unattended throughput run: fleet + auto-gate +
+  mvp [--reqs N] [--no-fleet] unattended throughput run: fleet + auto-gate +
                               N requirements (default 25 → 100 stage cycles);
-                              ANT_WORKER=llm routes acts through DeepSeek
+                              ANT_WORKER=llm routes acts through DeepSeek;
+                              --no-fleet feeds/scores an external fleet
 
   init / start                guided setup + resident daemon — coming in 0.2
 

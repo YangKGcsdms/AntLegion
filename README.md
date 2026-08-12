@@ -92,6 +92,15 @@ Within ~2s `dcu-plan` claims the requirement (exactly-once, lowest seq wins), pr
 
 See [`ant/`](ant) for the DCU runtime, dev-chain, evidence adjudication, and boards. Additionally, any MCP-capable agent (Claude Code, Cursor, …) can connect to the bus for publish/claim/resolve tools — see [Connect via MCP](#connect-via-mcp).
 
+**Or all of it in containers, one command** — 1 bus + 3 pi-agent containers (Ubuntu 24.04), 100 LLM-acted cycles, scoreboard at the end:
+
+```bash
+cd deploy/mvp
+DEEPSEEK_API_KEY=sk-… docker compose up --build --exit-code-from mvp
+```
+
+See [`deploy/mvp/`](deploy/mvp) — acts route through DeepSeek via pi-ai; `ANT_WORKER=simulated` runs it without any API key.
+
 **From source** (development):
 
 ```bash
