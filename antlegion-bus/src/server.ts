@@ -24,6 +24,9 @@ import type { FactInput } from "./types.js";
 const DASHBOARD_HTML = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)), "..", "demo", "dashboard.html",
 );
+const CONSOLE_HTML = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)), "..", "console", "console.html",
+);
 
 export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy; maxDepth?: number }) {
   const bus = new BusV2(opts);
@@ -39,6 +42,16 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
       return c.html(html);
     } catch {
       return c.json({ error: "dashboard not bundled in this install" }, 404);
+    }
+  });
+
+  // Ops console (read-only tail -f + INFO) — same pattern, same guarantees.
+  app.get("/console", async (c) => {
+    try {
+      const html = await fs.readFile(CONSOLE_HTML, "utf-8");
+      return c.html(html);
+    } catch {
+      return c.json({ error: "console not bundled in this install" }, 404);
     }
   });
 

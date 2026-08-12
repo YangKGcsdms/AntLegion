@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AntLegion · console</title>
+<!--
+  AntLegion bus console (P1a: stream + health) — a browser-shaped `tail -f` + INFO.
+
+  Read-only by design: this page only polls GET /facts (since cursor) and
+  GET /info. It never writes. Single file, zero dependencies, zero build.
+
+  URL is the whole state:
+    /console?bus=http://host:28090&poll=1000&type=task.*&author=ant-3&refkey=claim_of&refval=<id>
+-->
+<style>
+  :root{--bg:#0b0b10;--panel:#11111a;--row:#0e0e15;--ink:#e8e6df;--ink2:#a9a69c;--ink3:#8b887f;--line:#23232e;--acc:#f0a020;--grn:#4ade80;--red:#f87171;--yel:#fbbf24;--blu:#7dd3fc}
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  a{color:var(--acc);text-decoration:none}
+  button{font:inherit;background:none;border:1px solid var(--line);color:var(--ink2);border-radius:6px;padding:3px 10px;cursor:pointer}
+  button:hover{border-color:var(--acc);color:var(--ink)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  /* ── health bar (persistent) ── */
+  #bar{display:flex;gap:16px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap;flex-shrink:0}
+  #bar .logo{color:var(--acc);font-weight:700}
+  #bar .kv b{color:var(--ink)}
+  #bar .kv{color:var(--ink3)}
+  #dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink3);margin-right:4px;vertical-align:0}
+  #dot.live{background:var(--grn);box-shadow:0 0 6px var(--grn)}
+  #dot.down{background:var(--red);box-shadow:0 0 6px var(--red)}
+  #bar .warn{color:var(--yel)}
+  #bar .bad{color:var(--red)}
+  #bar .tabs{margin-left:auto;display:flex;gap:6px}
+  #bar .tabs button.on{border-color:var(--acc);color:var(--acc)}
+  /* ── disconnect banner ── */
+  #down{display:none;background:rgba(248,113,113,.12);color:var(--red);padding:5px 14px;border-bottom:1px solid rgba(248,113,113,.3);flex-shrink:0}
+  /* ── filters ── */
+  #filters{display:flex;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap;flex-shrink:0}
+  #filters input{background:var(--row);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:4px 8px;font:inherit;width:130px}
+  #filters input:focus{border-color:var(--acc);outline:none}
+  #filters label{color:var(--ink3);font-size:12px}
+  #filters .hint{color:var(--ink3);font-size:11.5px;margin-left:auto}
+  /* ── stream ── */
+  #stream{flex:1;overflow-y:auto;position:relative}
+  table{border-collapse:collapse;width:100%}
+  #stream thead th{position:sticky;top:0;background:var(--panel);color:var(--ink3);font-weight:600;text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);font-size:11.5px;z-index:2}
+  #stream td{padding:4px 10px;border-bottom:1px solid var(--row);vertical-align:top;white-space:nowrap}
+  #stream tbody tr.f{cursor:pointer}
+  #stream tbody tr.f:hover{background:var(--row)}
+  #stream tr.hl>td{animation:flash 2s}
+  @keyframes flash{0%,60%{background:rgba(240,160,32,.22)}100%{background:none}}
+  td.seq{color:var(--ink3);text-align:right}
+  td.recv{color:var(--ink3)}
+  td.id{color:var(--ink3)}
+  td.id:hover{color:var(--acc)}
+  td.payload{color:var(--ink2);max-width:340px;overflow:hidden;text-overflow:ellipsis}
+  .chip{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 6px;margin:0 3px 2px 0;color:var(--blu);font-size:11.5px;cursor:pointer}
+  .chip:hover{border-color:var(--blu)}
+  .chip i{font-style:normal;color:var(--ink3)}
+  tr.detail td{white-space:normal;background:var(--row);padding:10px 14px}
+  tr.detail pre{white-space:pre-wrap;word-break:break-all;color:var(--ink2);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;margin:6px 0}
+  tr.detail .k{color:var(--ink3)}
+  tr.detail .skew-bad{color:var(--yel)}
+  tr.detail .acts{margin-top:8px;display:flex;gap:8px}
+  #older{display:block;margin:8px auto;color:var(--ink3)}
+  /* ── follow pill ── */
+  #pill{display:none;position:fixed;top:86px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--acc);color:var(--acc);border-radius:99px;padding:5px 16px;cursor:pointer;z-index:5}
+  /* ── empty state ── */
+  #empty{display:none;color:var(--ink3);padding:40px;text-align:center}
+  #empty code{color:var(--acc)}
+  /* ── inspector (pinned side card) ── */
+  #inspect{display:none;position:fixed;right:12px;top:96px;width:min(440px,90vw);max-height:70vh;overflow-y:auto;background:var(--panel);border:1px solid var(--acc);border-radius:10px;padding:12px 14px;z-index:6;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+  #inspect h4{color:var(--acc);font-size:12px;margin-bottom:6px;display:flex;justify-content:space-between}
+  #inspect pre{white-space:pre-wrap;word-break:break-all;color:var(--ink2);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;margin:6px 0}
+  /* ── health tab ── */
+  #health{flex:1;overflow-y:auto;padding:18px 22px;display:none}
+  #health h3{color:var(--acc);font-size:12px;letter-spacing:1px;text-transform:uppercase;margin:18px 0 8px}
+  #health h3:first-child{margin-top:0}
+  #health .grid{display:grid;grid-template-columns:220px 1fr;gap:3px 16px;max-width:720px}
+  #health .grid .k{color:var(--ink3)}
+  #health .note{color:var(--yel);grid-column:1/3;font-size:12px}
+  #health .note.bad{color:var(--red)}
+  #health table{max-width:720px;margin-top:4px}
+  #health th{color:var(--ink3);text-align:left;font-weight:600;font-size:11.5px;padding:4px 10px;border-bottom:1px solid var(--line)}
+  #health td{padding:4px 10px;border-bottom:1px solid var(--row);color:var(--ink2)}
+  #health .src{color:var(--ink3);font-size:11.5px;margin-top:26px}
+  #spark{background:var(--row);border:1px solid var(--line);border-radius:8px}
+</style>
+</head>
+<body>
+  <div id="bar">
+    <span class="logo">🐜 console</span>
+    <span class="kv"><span id="dot"></span><span id="st">connecting…</span></span>
+    <span class="kv">head <b id="b-head">–</b></span>
+    <span class="kv"><b id="b-rate">–</b> facts/s</span>
+    <span class="kv">fsync <b id="b-fsync">–</b></span>
+    <span class="kv" id="b-sig">sig_failures <b>–</b></span>
+    <span class="tabs">
+      <button id="t-stream" class="on">stream</button>
+      <button id="t-health">health</button>
+    </span>
+  </div>
+  <div id="down"></div>
+
+  <div id="filters">
+    <label>type <input id="f-type" placeholder="task.*"></label>
+    <label>author <input id="f-author" placeholder="exact"></label>
+    <label>ref <input id="f-refkey" placeholder="claim_of" style="width:90px"><input id="f-refval" placeholder="fact id" style="width:150px"></label>
+    <label>payload <input id="f-q" placeholder="substring"></label>
+    <button id="f-clear">clear ↺</button>
+    <span class="hint" id="f-hint">payload search scans loaded facts only</span>
+  </div>
+
+  <div id="stream">
+    <button id="older">↑ load earlier</button>
+    <table>
+      <thead><tr><th>seq</th><th>recv</th><th>type</th><th>author</th><th>id</th><th>refs</th><th>payload</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty"></div>
+  </div>
+
+  <div id="health">
+    <h3>throughput</h3>
+    <svg id="spark" width="360" height="48" viewBox="0 0 360 48" aria-label="append rate, last 5 minutes"></svg>
+    <div class="grid" id="h-stream"></div>
+    <h3>log</h3>
+    <div class="grid" id="h-log"></div>
+    <h3>integrity</h3>
+    <div class="grid" id="h-int"></div>
+    <h3>process</h3>
+    <div class="grid" id="h-proc"></div>
+    <h3>author activity <span style="color:var(--ink3);text-transform:none;letter-spacing:0">(folded from the loaded stream)</span></h3>
+    <table><thead><tr><th>author</th><th>last seen</th><th>facts (loaded)</th><th>max clock skew</th></tr></thead><tbody id="h-authors"></tbody></table>
+    <p class="src">read-only: this page polls GET /facts (since cursor) and GET /info — it never writes. · rewrite hint: <span style="color:var(--ink2)">curl -X POST $BUS/admin/rewrite</span></p>
+  </div>
+
+  <div id="pill">⏸ paused · <b id="pill-n">0</b> new — jump to bottom</div>
+  <div id="inspect"><h4><span>pinned fact</span><button id="i-close">×</button></h4><div id="i-body"></div></div>
+
+<script>
+"use strict";
+/* ── state from URL ── */
+const Q = new URLSearchParams(location.search);
+const BUS = (Q.get("bus") || (location.protocol.startsWith("http") ? location.origin : "http://localhost:28090")).replace(/\/$/, "");
+const POLL = Math.max(250, parseInt(Q.get("poll") || "1000", 10) || 1000);
+const $ = (id) => document.getElementById(id);
+
+const filters = {
+  type: Q.get("type") || "",
+  author: Q.get("author") || "",
+  refkey: Q.get("refkey") || "",
+  refval: Q.get("refval") || "",
+  q: Q.get("q") || "",
+};
+$("f-type").value = filters.type; $("f-author").value = filters.author;
+$("f-refkey").value = filters.refkey; $("f-refval").value = filters.refval; $("f-q").value = filters.q;
+
+function syncURL() {
+  const u = new URLSearchParams();
+  if (Q.get("bus")) u.set("bus", Q.get("bus"));
+  if (POLL !== 1000) u.set("poll", String(POLL));
+  for (const [k, v] of Object.entries(filters)) if (v) u.set(k, v);
+  history.replaceState(null, "", location.pathname + (u.toString() ? "?" + u : ""));
+}
+
+/* ── buffer ── */
+const CAP = 2000;
+let facts = [];            // seq-ascending window
+const bySeq = new Map();   // seq -> fact
+const byId = new Map();    // id -> fact
+let cursor = 0;            // highest seq fetched (follow)
+let oldest = Infinity;     // lowest seq loaded (load-earlier)
+let following = true;
+let pendingNew = 0;
+let failures = 0;
+let lastOK = 0;
+
+function serverQuery(since, limit) {
+  const p = new URLSearchParams({ since: String(since), limit: String(limit) });
+  if (filters.type) p.set("type", filters.type);
+  if (filters.author) p.set("author", filters.author);
+  if (filters.refkey && filters.refval) p.set("refs." + filters.refkey, filters.refval);
+  return fetch(BUS + "/facts?" + p).then((r) => { if (!r.ok) throw new Error("facts " + r.status); return r.json(); });
+}
+
+function clientMatch(f) {
+  if (!filters.q) return true;
+  try { return JSON.stringify(f.payload).toLowerCase().includes(filters.q.toLowerCase()); } catch { return false; }
+}
+
+/* ── rendering ── */
+const rows = $("rows");
+const stream = $("stream");
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const rel = (t) => { const d = Date.now() / 1000 - t; return d < 2 ? "now" : d < 60 ? Math.floor(d) + "s" : d < 3600 ? Math.floor(d / 60) + "m" : d < 86400 ? Math.floor(d / 3600) + "h" : Math.floor(d / 86400) + "d"; };
+const hue = (s) => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const isFactId = (v) => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
+
+function chipHTML(k, v) {
+  const short = isFactId(v) ? v.slice(0, 8) : esc(String(v).slice(0, 14));
+  return `<span class="chip" data-ref="${isFactId(v) ? v : ""}"><i>${esc(k)}→</i>${short}</span>`;
+}
+
+function rowHTML(f) {
+  const refs = Object.entries(f.refs || {}).map(([k, v]) => chipHTML(k, v)).join("");
+  let pv = ""; try { pv = JSON.stringify(f.payload); } catch { pv = ""; }
+  return `<td class="seq">${f.seq}</td><td class="recv" title="${new Date(f.recv * 1000).toISOString()}">${rel(f.recv)}</td>` +
+    `<td style="color:hsl(${hue(f.type)},55%,70%)" class="ty" data-t="${esc(f.type)}">${esc(f.type)}</td>` +
+    `<td class="au" data-a="${esc(f.author)}">${esc(f.author)}</td>` +
+    `<td class="id" data-id="${f.id}" title="click to copy full id">${f.id.slice(0, 8)}</td>` +
+    `<td>${refs}</td><td class="payload">${esc(pv.slice(0, 100))}</td>`;
+}
+
+function makeRow(f) {
+  const tr = document.createElement("tr");
+  tr.className = "f"; tr.dataset.seq = f.seq;
+  if (!clientMatch(f)) tr.style.display = "none";
+  tr.innerHTML = rowHTML(f);
+  return tr;
+}
+
+function detailHTML(f) {
+  const skew = f.ts > 0 ? f.ts - f.recv : null;
+  const reflist = Object.entries(f.refs || {}).map(([k, v]) => `<div><span class="k">${esc(k)}</span> ${isFactId(v) ? `<span class="chip" data-ref="${v}">${v}</span>` : esc(String(v))}</div>`).join("") || '<span class="k">—</span>';
+  const backrefs = facts.filter((g) => g.refs && Object.values(g.refs).includes(f.id))
+    .map((g) => `<span class="chip" data-ref="${g.id}"><i>#${g.seq} ${esc(g.type)}</i></span>`).join("") || '<span class="k">none in loaded window</span>';
+  return `<pre>${esc(JSON.stringify(f.payload, null, 2))}</pre>` +
+    `<div><span class="k">refs</span></div>${reflist}` +
+    `<div style="margin-top:6px"><span class="k">referenced by (loaded window)</span><br>${backrefs}</div>` +
+    `<div style="margin-top:6px"><span class="k">ts</span> ${f.ts} · <span class="k">recv</span> ${f.recv} · <span class="k">skew</span> ${skew === null ? '<span class="k">n/a (ts:0, deterministic)</span>' : `<span class="${Math.abs(skew) > 5 ? "skew-bad" : ""}">${skew >= 0 ? "+" : ""}${skew.toFixed(2)}s</span>`}${f.nonce ? ` · <span class="k">nonce</span> ${esc(f.nonce)}` : ""}</div>` +
+    `<div><span class="k">sig</span> ${f.sig ? f.sig.slice(0, 24) + "…" : "—"}</div>` +
+    `<div class="acts"><button data-copy="${f.id}">copy id</button><button data-copy="curl ${BUS}/facts/${f.id}">copy curl</button></div>`;
+}
+
+function appendFacts(list, toTop) {
+  const frag = document.createDocumentFragment();
+  for (const f of list) {
+    if (bySeq.has(f.seq)) continue;
+    bySeq.set(f.seq, f); byId.set(f.id, f);
+    if (f.seq < oldest) oldest = f.seq;
+    if (f.seq > cursor) cursor = f.seq;
+    frag.appendChild(makeRow(f));
+  }
+  if (toTop) { facts = list.concat(facts); rows.prepend(frag); }
+  else { facts = facts.concat(list); rows.append(frag); }
+  while (facts.length > CAP && following) { // trim oldest while tailing
+    const dead = facts.shift();
+    bySeq.delete(dead.seq); byId.delete(dead.id);
+    const el = rows.querySelector(`tr[data-seq="${dead.seq}"]`);
+    if (el) { if (el.nextElementSibling?.classList.contains("detail")) el.nextElementSibling.remove(); el.remove(); }
+    oldest = facts.length ? facts[0].seq : Infinity;
+  }
+  updateEmpty();
+}
+
+function updateEmpty() {
+  const anyVisible = facts.some(clientMatch);
+  const e = $("empty");
+  if (facts.length === 0) {
+    e.style.display = "block";
+    e.innerHTML = cursor === 0
+      ? `bus is empty. publish the first fact:<br><code>npx -p @antlegion/bus alctl publish task.created '{"title":"…"}'</code>`
+      : `no facts match the server filters (scanned ≤ seq ${cursor}).`;
+  } else if (!anyVisible) {
+    e.style.display = "block";
+    e.innerHTML = `no loaded facts match the payload search (client-side, ${facts.length} loaded).`;
+  } else e.style.display = "none";
+}
+
+/* ── follow / scroll ── */
+function atBottom() { return stream.scrollHeight - stream.scrollTop - stream.clientHeight < 60; }
+stream.addEventListener("scroll", () => {
+  if (atBottom()) { if (!following) { following = true; pendingNew = 0; $("pill").style.display = "none"; } }
+  else if (following) { following = false; $("pill-n").textContent = "0"; $("pill").style.display = "block"; }
+});
+$("pill").onclick = () => { stream.scrollTop = stream.scrollHeight; };
+
+/* ── polling ── */
+async function pollFacts() {
+  try {
+    const page = await serverQuery(cursor, 500);
+    failures = 0; lastOK = Date.now(); setDown(false);
+    if (page.length) {
+      appendFacts(page, false);
+      if (following) stream.scrollTop = stream.scrollHeight;
+      else { pendingNew += page.length; $("pill-n").textContent = String(pendingNew); }
+    }
+  } catch { failures++; setDown(true); }
+  setTimeout(pollFacts, failures ? Math.min(5000, 1000 * 2 ** (failures - 1)) : POLL);
+}
+
+function setDown(down) {
+  $("dot").className = down ? "down" : "live";
+  $("st").textContent = down ? "unreachable" : "LIVE";
+  const d = $("down");
+  if (down) {
+    d.style.display = "block";
+    d.textContent = `bus unreachable · retrying (last success ${lastOK ? rel(lastOK / 1000) + " ago" : "never"}) — loaded facts are kept on screen`;
+  } else d.style.display = "none";
+}
+
+/* ── initial load ── */
+async function init() {
+  try {
+    const head = (await (await fetch(BUS + "/facts/head")).json()).head_seq;
+    cursor = Math.max(0, head - 500);
+    oldest = cursor + 1;
+    const page = await serverQuery(cursor, 500);
+    appendFacts(page, false);
+    stream.scrollTop = stream.scrollHeight;
+    lastOK = Date.now(); setDown(false);
+  } catch { setDown(true); }
+  pollFacts();
+}
+
+/* ── load earlier ── */
+$("older").onclick = async () => {
+  if (oldest <= 1 || oldest === Infinity) { $("older").textContent = "— beginning of log —"; return; }
+  const since = Math.max(0, oldest - 1 - 500);
+  try {
+    const page = (await serverQuery(since, 500)).filter((f) => f.seq < oldest);
+    const keepY = stream.scrollHeight - stream.scrollTop;
+    appendFacts(page, true);
+    stream.scrollTop = stream.scrollHeight - keepY;
+    if (since === 0) $("older").textContent = "— beginning of log —";
+  } catch { /* banner already shows */ }
+};
+
+/* ── filters ── */
+function applyFilters() {
+  filters.type = $("f-type").value.trim(); filters.author = $("f-author").value.trim();
+  filters.refkey = $("f-refkey").value.trim(); filters.refval = $("f-refval").value.trim();
+  filters.q = $("f-q").value.trim();
+  syncURL();
+  facts = []; bySeq.clear(); byId.clear(); cursor = 0; oldest = Infinity; pendingNew = 0;
+  rows.innerHTML = ""; $("older").textContent = "↑ load earlier"; following = true; $("pill").style.display = "none";
+  init0 = false; initOnce();
+}
+let debounce;
+for (const id of ["f-type", "f-author", "f-refkey", "f-refval"]) {
+  $(id).addEventListener("change", applyFilters);
+  $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") applyFilters(); });
+}
+$("f-q").addEventListener("input", () => {  // client-only: no refetch, just re-show rows
+  clearTimeout(debounce);
+  debounce = setTimeout(() => {
+    filters.q = $("f-q").value.trim(); syncURL();
+    for (const tr of rows.querySelectorAll("tr.f")) {
+      const f = bySeq.get(parseInt(tr.dataset.seq, 10));
+      tr.style.display = f && clientMatch(f) ? "" : "none";
+      if (f && !clientMatch(f) && tr.nextElementSibling?.classList.contains("detail")) tr.nextElementSibling.remove();
+    }
+    updateEmpty();
+  }, 150);
+});
+$("f-clear").onclick = () => { for (const id of ["f-type", "f-author", "f-refkey", "f-refval", "f-q"]) $(id).value = ""; applyFilters(); };
+
+let init0 = false;
+function initOnce() { if (!init0) { init0 = true; init(); } }
+
+/* ── row interactions (delegated) ── */
+document.addEventListener("click", async (e) => {
+  const t = e.target;
+  if (t.dataset.copy !== undefined && t.dataset.copy) { navigator.clipboard.writeText(t.dataset.copy); t.textContent = "copied ✓"; setTimeout(() => (t.textContent = t.dataset.copy.startsWith("curl") ? "copy curl" : "copy id"), 1200); return; }
+  const chip = t.closest(".chip");
+  if (chip && chip.dataset.ref) { e.stopPropagation(); jump(chip.dataset.ref); return; }
+  if (t.classList.contains("ty")) { e.stopPropagation(); $("f-type").value = t.dataset.t; applyFilters(); return; }
+  if (t.classList.contains("au")) { e.stopPropagation(); $("f-author").value = t.dataset.a; applyFilters(); return; }
+  if (t.classList.contains("id")) { e.stopPropagation(); navigator.clipboard.writeText(t.dataset.id); t.textContent = "copied ✓"; setTimeout(() => (t.textContent = t.dataset.id.slice(0, 8)), 1200); return; }
+  const row = t.closest("tr.f");
+  if (row) {
+    const next = row.nextElementSibling;
+    if (next && next.classList.contains("detail")) { next.remove(); return; }
+    const f = bySeq.get(parseInt(row.dataset.seq, 10));
+    if (!f) return;
+    const tr = document.createElement("tr");
+    tr.className = "detail";
+    tr.innerHTML = `<td colspan="7">${detailHTML(f)}</td>`;
+    row.after(tr);
+  }
+});
+
+async function jump(id) {
+  const f = byId.get(id);
+  if (f) {
+    const el = rows.querySelector(`tr[data-seq="${f.seq}"]`);
+    if (el && el.style.display !== "none") {
+      following = false;
+      el.scrollIntoView({ block: "center" });
+      el.classList.remove("hl"); void el.offsetWidth; el.classList.add("hl");
+      return;
+    }
+  }
+  try {  // outside the buffer → pinned inspector (never spliced into the stream)
+    const r = await fetch(BUS + "/facts/" + id);
+    if (!r.ok) throw 0;
+    const g = await r.json();
+    $("i-body").innerHTML = `<div class="k">#${g.seq} · ${esc(g.type)} · ${esc(g.author)} · ${rel(g.recv)} ago</div>` + detailHTML(g);
+    $("inspect").style.display = "block";
+  } catch { $("i-body").innerHTML = `<span class="k">fact ${esc(id.slice(0, 12))}… not found on this bus</span>`; $("inspect").style.display = "block"; }
+}
+$("i-close").onclick = () => ($("inspect").style.display = "none");
+
+/* ── tabs ── */
+$("t-stream").onclick = () => { $("t-stream").classList.add("on"); $("t-health").classList.remove("on"); $("stream").style.display = "block"; $("filters").style.display = "flex"; $("health").style.display = "none"; };
+$("t-health").onclick = () => { $("t-health").classList.add("on"); $("t-stream").classList.remove("on"); $("stream").style.display = "none"; $("filters").style.display = "none"; $("health").style.display = "block"; renderAuthors(); };
+
+/* ── health ── */
+const samples = []; // [t, head]
+let lastInfo = null;
+const fmtBytes = (n) => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB";
+const fmtUp = (s) => s < 60 ? Math.floor(s) + "s" : s < 3600 ? Math.floor(s / 60) + "m " + Math.floor(s % 60) + "s" : Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
+
+async function pollInfo() {
+  try {
+    const info = await (await fetch(BUS + "/info")).json();
+    lastInfo = info;
+    samples.push([Date.now() / 1000, info.head_seq]);
+    while (samples.length > 61) samples.shift();
+    let rate = 0;
+    if (samples.length >= 2) {
+      const [t0, h0] = samples[samples.length - 2], [t1, h1] = samples[samples.length - 1];
+      rate = Math.max(0, (h1 - h0) / (t1 - t0));
+    }
+    $("b-head").textContent = info.head_seq;
+    $("b-rate").textContent = rate.toFixed(1);
+    $("b-fsync").textContent = info.fsync;
+    $("b-fsync").parentElement.className = "kv" + (info.fsync === "no" ? " warn" : "");
+    $("b-sig").innerHTML = `sig_failures <b>${info.sig_failures}</b>`;
+    $("b-sig").className = "kv" + (info.sig_failures > 0 ? " bad" : "");
+    renderHealth(info, rate);
+  } catch { /* bar dot handled by facts poll */ }
+  setTimeout(pollInfo, 5000);
+}
+
+function renderHealth(i, rate) {
+  const g = (id, pairs, notes = []) => {
+    $(id).innerHTML = pairs.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join("") +
+      notes.map((n) => `<div class="note${n.bad ? " bad" : ""}">${n.t}</div>`).join("");
+  };
+  g("h-stream", [["head_seq", i.head_seq], ["facts", i.facts], ["dedup_hits", i.dedup_hits], ["append rate", rate.toFixed(2) + " facts/s"]]);
+  g("h-log", [["log_entries", i.log_entries], ["log_bytes", fmtBytes(i.log_bytes)], ["fsync", i.fsync], ["entries − facts", i.log_entries - i.facts]],
+    i.fsync === "no" ? [{ t: "fsync=no — a crash may lose the last unflushed writes" }] : []);
+  const intNotes = [];
+  if (i.sig_failures > 0) intNotes.push({ bad: true, t: `${i.sig_failures} facts failed sig verification on recovery — changed secret? tampered log?` });
+  if (!i.secret_stable) intNotes.push({ t: "secret minted this boot — sigs written before a restart can't be verified. set a stable ANTLEGION_BUS_SECRET" });
+  g("h-int", [["sig_failures", i.sig_failures], ["secret_stable", i.secret_stable], ["max_depth", i.max_depth]], intNotes);
+  g("h-proc", [["protocol", i.protocol], ["uptime", fmtUp(i.uptime_seconds)], ["bus", BUS], ["poll", POLL + "ms (?poll=)"]]);
+  // sparkline
+  const pts = [];
+  for (let k = 1; k < samples.length; k++) {
+    const r = Math.max(0, (samples[k][1] - samples[k - 1][1]) / (samples[k][0] - samples[k - 1][0]));
+    pts.push(r);
+  }
+  const max = Math.max(1, ...pts);
+  const svg = pts.map((r, k) => `${(k / Math.max(1, pts.length - 1)) * 352 + 4},${44 - (r / max) * 38}`).join(" ");
+  $("spark").innerHTML = pts.length > 1
+    ? `<polyline points="${svg}" fill="none" stroke="var(--acc)" stroke-width="1.5"/><text x="6" y="12" fill="var(--ink3)" font-size="9">peak ${max.toFixed(1)}/s</text>`
+    : `<text x="6" y="26" fill="var(--ink3)" font-size="10">collecting samples…</text>`;
+}
+
+function renderAuthors() {
+  const m = new Map();
+  for (const f of facts) {
+    const a = m.get(f.author) || { n: 0, last: 0, skew: 0 };
+    a.n++; a.last = Math.max(a.last, f.recv);
+    if (f.ts > 0) a.skew = Math.max(a.skew, Math.abs(f.ts - f.recv)); // ts:0 = deterministic content, not a clock
+    m.set(f.author, a);
+  }
+  $("h-authors").innerHTML = [...m.entries()].sort((x, y) => y[1].last - x[1].last)
+    .map(([a, v]) => `<tr><td>${esc(a)}</td><td>${rel(v.last)} ago</td><td>${v.n}</td><td${v.skew > 5 ? ' style="color:var(--yel)"' : ""}>${v.skew.toFixed(1)}s</td></tr>`)
+    .join("") || `<tr><td colspan="4" style="color:var(--ink3)">no facts loaded</td></tr>`;
+}
+setInterval(() => { if ($("health").style.display === "block") renderAuthors(); }, 5000);
+
+/* ── go ── */
+syncURL();
+initOnce();
+pollInfo();
+</script>
+</body>
+</html>

@@ -38,6 +38,13 @@ npx -p @antlegion/bus alctl tail --follow
 npx -p @antlegion/bus alctl info
 ```
 
+**4. 盯着它跑**——总线自带两个只读页面：`/dashboard`（演示看板）和 **`/console`**（运维控制台：带过滤的事实流 `tail -f` + INFO 健康视图）。
+
+```bash
+# 启动时会打印：
+# dashboard → http://127.0.0.1:28090/dashboard · console → http://127.0.0.1:28090/console
+```
+
 ## 从源码运行
 
 ```bash

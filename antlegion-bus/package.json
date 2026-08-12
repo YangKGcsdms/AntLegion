@@ -1,6 +1,6 @@
 {
   "name": "@antlegion/bus",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Append-only fact bus for autonomous agents — facts, not commands. Stateless trusted core, single total order, coordination as reader-side folds; SDK, alctl CLI, and MCP adapter included.",
   "type": "module",
   "main": "dist/index.js",
@@ -22,6 +22,7 @@
   "files": [
     "dist",
     "demo",
+    "console",
     "README.md",
     "README.zh-CN.md"
   ],

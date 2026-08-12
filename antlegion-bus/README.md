@@ -41,6 +41,13 @@ npx -p @antlegion/bus alctl tail --follow
 npx -p @antlegion/bus alctl info
 ```
 
+**4. Watch it live** — the bus serves two read-only pages: `/dashboard` (demo board) and **`/console`** (ops console: `tail -f` the fact stream with filters + INFO health view).
+
+```bash
+# they're printed at startup:
+# dashboard → http://127.0.0.1:28090/dashboard · console → http://127.0.0.1:28090/console
+```
+
 ## From source
 
 ```bash
