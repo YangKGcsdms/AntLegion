@@ -67,14 +67,15 @@ curl -s http://localhost:28090/info | jq
 
 ## 3. 用终端操作（`alctl`）
 
-`alctl` 是 `redis-cli` 的对应物。先 build 一次，然后：
+`alctl` 是 `redis-cli` 的对应物。先 build 一次——每条命令在 stdout 输出机器可读的
+JSON；人类可读的错误走 stderr 并以非零码退出：
 
 ```bash
 # 发布
 node dist/bin.js publish task.build '{"target":"todo-app"}' --author alice
 # {"id":"b3f1…","seq":1,"deduped":false}
 
-# 认领（恰好一个赢）
+# 认领（恰好一个赢；输家退出码为 1）
 node dist/bin.js claim b3f1… --author bob
 # {"won":false,"winner":"alice"}
 
@@ -82,12 +83,24 @@ node dist/bin.js claim b3f1… --author bob
 node dist/bin.js state b3f1…
 # {"state":"claimed","owner":"alice"}
 
-# 实时追尾流
-node dist/bin.js tail
+# 解决——只有认领胜者可以；其他人会以非零码退出：
+#   error: resolve ignored — fact <id> is owned by 'alice' (you are 'bob')
+node dist/bin.js resolve b3f1… --author alice
+# {"state":"resolved","owner":"alice"}
 
-# 总线信息
+# tail 打印一次当前流即退出；--follow 持续轮询实时输出
+node dist/bin.js tail
+node dist/bin.js tail --follow
+
+# 完整总线信息（protocol、head_seq、facts、fsync、sig_failures、secret_stable……）
 node dist/bin.js info
 ```
+
+`--author <名字>` 是全局旗标，对所有会写入事实的命令生效。身份解析顺序：
+`--author` > `ANTLEGION_AUTHOR` > `<系统用户名>@<主机名>`（稳定的按用户默认值，
+因此前一条命令里的 `claim` 可以在后一条命令里 `resolve`）。`ANTLEGION_BUS_URL`
+指定总线地址（默认 `http://localhost:28090`）；如果没有总线在监听，你会看到
+`error: cannot reach bus at <url> — start one with: npm run dev`。
 
 ## 4. 从代码接入（折叠 SDK）
 
@@ -151,6 +164,35 @@ ANTLEGION_AGENT_NAME=my-agent \
 node dist/mcp.js
 ```
 
+或者直接注册到你的 MCP 客户端——以 Claude Code 为例：
+
+```bash
+claude mcp add antlegion \
+  --env ANTLEGION_BUS_URL=http://localhost:28090 \
+  --env ANTLEGION_AGENT_NAME=my-agent \
+  -- node /path/to/antlegion-bus/dist/mcp.js
+```
+
+或者通过 `.mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "antlegion": {
+      "command": "node",
+      "args": ["/path/to/antlegion-bus/dist/mcp.js"],
+      "env": {
+        "ANTLEGION_BUS_URL": "http://localhost:28090",
+        "ANTLEGION_AGENT_NAME": "my-agent"
+      }
+    }
+  }
+}
+```
+
+`ANTLEGION_AGENT_NAME` 默认是 `<系统用户名>@<主机名>`，启动时会把解析出的身份打印到
+stderr。总线服务端本身用 `ANTLEGION_DATA_DIR` 和 `ANTLEGION_BUS_SECRET` 配置（见 §8）。
+
 7 个工具：`antlegion_publish`、`antlegion_query`、`antlegion_claim`、
 `antlegion_resolve`、`antlegion_observe`、`antlegion_causation`、`antlegion_state`。
 
@@ -171,6 +213,8 @@ npx tsx examples/scenario-consensus.ts
 # 因果流水线 build→test→deploy + 取代
 npx tsx examples/scenario-pipeline.ts
 ```
+
+每个示例都会在临时端口上自启自己的总线——无需提前启动任何总线。
 
 ## 8. 持久化与恢复
 
@@ -205,4 +249,4 @@ curl -sX POST http://localhost:28090/admin/rewrite | jq
 - [EVOLUTION.md](EVOLUTION.md) —— 项目为何如此。
 - `antlegion-bus/src/` —— 内核（`bus.ts`）、线面（`server.ts`）、折叠（`fold.ts`）、SDK（`client.ts`）。
 - `antlegion-bus/conformance/` —— 跨语言互操作向量 + Python 校验器。
-- `antlegion-bus/test/` —— 136 个测试（vitest）。
+- `antlegion-bus/test/` —— 147 个测试（vitest）。

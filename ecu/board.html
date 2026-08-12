@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<!--
+  AntLegion ECU — requirement chain board.
+  Zero dependencies, no build step. Served by `tsx src/main.ts board`, or open
+  the file directly:
+
+    board.html?bus=http://localhost:28090
+
+  Polls GET /facts?since=<cursor> every 1s and /info every 2s, then folds the
+  requirement chain locally (same semantics as src/folds/chain.ts):
+  req.registered → one card per requirement; doc.updated → latest-wins per
+  (reqSlug, doc) with the parsed 状态 header shown prominently.
+-->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AntLegion ECU · requirement chain</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #10161e; --panel2: #0d131a; --line: #1e2a38;
+    --fg: #c9d4e0; --dim: #5d7186; --green: #34d399; --amber: #fbbf24;
+    --red: #f87171; --cyan: #22d3ee; --blue: #60a5fa; --magenta: #e879f9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.5 "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    padding: 14px 18px 40px;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+    border: 1px solid var(--line); background: var(--panel);
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 12px;
+  }
+  header h1 { font-size: 15px; letter-spacing: 1px; }
+  header h1 .ant { color: var(--green); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 2px 10px; font-size: 11px; letter-spacing: .5px;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .live .dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.4s infinite; }
+  .down .dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .live { color: var(--green); } .down { color: var(--red); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .kv { color: var(--dim); font-size: 11px; }
+  .kv b { color: var(--fg); font-weight: 600; }
+
+  .panel {
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 8px; padding: 12px 14px; min-width: 0; margin-bottom: 12px;
+  }
+  .panel h2 {
+    font-size: 11px; letter-spacing: 1.5px; color: var(--dim);
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+  .panel h2 .n { color: var(--cyan); }
+
+  /* requirement chain */
+  #reqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 10px; }
+  .req {
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel2); padding: 10px 12px;
+  }
+  .req .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .req .nm { font-weight: 700; font-size: 13px; color: var(--fg); }
+  .req .slot {
+    font-size: 10px; color: var(--bg); background: var(--cyan);
+    border-radius: 4px; padding: 0 6px; font-weight: 700;
+  }
+  .req .origin {
+    font-size: 10px; color: var(--bg); background: var(--green);
+    border-radius: 4px; padding: 0 6px; font-weight: 700;
+  }
+  .req .age { margin-left: auto; font-size: 10px; color: var(--dim); }
+  .req .meta { color: var(--dim); font-size: 11px; margin-top: 4px; }
+  .req .meta b { color: var(--blue); font-weight: 600; }
+  .req .meta .proj { color: var(--magenta); }
+  .req .ports { color: var(--dim); font-size: 10px; margin-top: 2px; }
+  .req .ports b { color: var(--amber); font-weight: 600; }
+  .req .docs { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
+  .doc { padding: 3px 0; font-size: 11px; }
+  .doc .dn { color: var(--dim); }
+  .doc .st { color: var(--green); font-weight: 600; font-size: 12px; }
+  .doc .st.none { color: var(--dim); font-weight: 400; font-style: italic; }
+  .doc .mt { color: var(--dim); font-size: 10px; float: right; }
+  .empty { color: var(--dim); padding: 18px; text-align: center; font-size: 12px; }
+
+  /* ticker */
+  #ticker { max-height: 260px; overflow: hidden; border-top: 1px solid var(--line); padding-top: 8px; }
+  #ticker .f { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; padding: 1px 0; }
+  .t-req { color: var(--cyan); } .t-doc { color: var(--green); } .t-other { color: var(--dim); }
+  .seq { color: var(--dim); display: inline-block; min-width: 52px; }
+  .ts { color: var(--dim); }
+
+  footer { margin-top: 4px; color: var(--dim); font-size: 11px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="ant">⣿</span> ANTLEGION ECU · REQUIREMENT CHAIN</h1>
+  <span id="conn" class="pill down"><span class="dot"></span><span id="conntext">CONNECTING</span></span>
+  <span class="kv">bus <b id="h-bus">…</b></span>
+  <span class="kv">head_seq <b id="h-head">–</b></span>
+  <span class="kv">facts <b id="h-facts">–</b></span>
+  <span class="kv">dedup_hits <b id="h-dedup">–</b></span>
+  <span class="kv">uptime <b id="h-uptime">–</b></span>
+</header>
+
+<section class="panel">
+  <h2><span class="n">◆</span> requirement chain · 需求链 <span id="req-count" class="n"></span></h2>
+  <div id="reqs"><div class="empty">waiting for req.registered facts — start the ingestor (scripts/up.sh)</div></div>
+</section>
+
+<section class="panel">
+  <h2>fact stream · tail of the total order</h2>
+  <div id="ticker"><div class="empty">no facts yet</div></div>
+</section>
+
+<footer>
+  <span id="f-cursor">cursor: 0 · mirrored facts: 0</span>
+  <span>override: ?bus=http://host:port · polls /facts?since=cursor every 1s, /info every 2s</span>
+</footer>
+
+<script>
+"use strict";
+const Q = new URLSearchParams(location.search);
+const BUS = (Q.get("bus") || "http://localhost:28090").replace(/\/$/, "");
+
+let facts = [];       // mirrored stream, seq-ordered
+let cursor = 0;
+let connected = false, everConnected = false;
+
+const $ = (id) => document.getElementById(id);
+$("h-bus").textContent = BUS;
+
+function esc(s) { return String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
+function fmtTime(unix) {
+  if (!unix) return "–";
+  const d = new Date(unix * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fmtAge(sec) {
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h${Math.floor((sec % 3600) / 60)}m`;
+  return `${Math.floor(sec / 86400)}d${Math.floor((sec % 86400) / 3600)}h`;
+}
+
+// ── fold: mirrors src/folds/chain.ts ──
+function foldChain() {
+  const reqs = new Map();   // slug -> view
+  const docs = new Map();   // reqSlug + "" + doc -> latest
+  for (const f of facts) {
+    const p = f.payload || {};
+    if (f.type === "req.registered" && p.slug) {
+      const prev = reqs.get(p.slug);
+      reqs.set(p.slug, {
+        slug: p.slug, name: p.name || "", created: p.created || "",
+        slot: (typeof p.slot === "number") ? p.slot : null,
+        origin: (typeof p.origin === "string") ? p.origin : "",
+        branch: p.branch || "", projects: Array.isArray(p.projects) ? p.projects : [],
+        ports: (p.ports && typeof p.ports === "object") ? p.ports : {},
+        registeredSeq: prev ? prev.registeredSeq : f.seq,
+        registeredRecv: prev ? prev.registeredRecv : f.recv,
+      });
+    } else if (f.type === "doc.updated" && p.reqSlug && p.doc) {
+      const key = p.reqSlug + "" + p.doc;
+      const prev = docs.get(key);
+      if (!prev || f.seq > prev.seq) {
+        docs.set(key, {
+          reqSlug: p.reqSlug, doc: p.doc,
+          status: (typeof p.status === "string" && p.status !== "") ? p.status : null,
+          mtime: typeof p.mtime === "number" ? p.mtime : 0,
+          path: p.path || "", seq: f.seq, recv: f.recv,
+        });
+      }
+    }
+  }
+  const requirements = [...reqs.values()].sort((a, b) => a.registeredSeq - b.registeredSeq);
+  const docsByReq = new Map();
+  for (const d of docs.values()) {
+    if (!reqs.has(d.reqSlug)) continue;
+    if (!docsByReq.has(d.reqSlug)) docsByReq.set(d.reqSlug, []);
+    docsByReq.get(d.reqSlug).push(d);
+  }
+  for (const list of docsByReq.values()) list.sort((a, b) => (a.doc < b.doc ? -1 : 1));
+  return { requirements, docsByReq };
+}
+
+// ── render ──
+function render() {
+  const { requirements, docsByReq } = foldChain();
+  const now = Date.now() / 1000;
+  const box = $("reqs");
+  $("req-count").textContent = requirements.length ? `(${requirements.length})` : "";
+  if (!requirements.length) {
+    box.innerHTML = '<div class="empty">waiting for req.registered facts — start the ingestor (scripts/up.sh)</div>';
+    return;
+  }
+  box.innerHTML = "";
+  for (const r of requirements) {
+    const docs = docsByReq.get(r.slug) || [];
+    const ports = Object.entries(r.ports).map(([k, v]) => `${k}:<b>${v}</b>`).join(" ");
+    const div = document.createElement("div");
+    div.className = "req";
+    div.innerHTML =
+      `<div class="head">` +
+        (r.slot != null ? `<span class="slot">S${r.slot}</span>` : "") +
+        (r.origin ? `<span class="origin">${esc(r.origin)}</span>` : "") +
+        `<span class="nm">${esc(r.name)}</span>` +
+        `<span class="age" title="registered ${esc(fmtTime(r.registeredRecv))}">age ${fmtAge(now - r.registeredRecv)}</span>` +
+      `</div>` +
+      `<div class="meta">${esc(r.slug)}` +
+        (r.branch ? ` · <b>${esc(r.branch)}</b>` : "") +
+        (r.projects.length ? ` · ` + r.projects.map((p) => `<span class="proj">${esc(p)}</span>`).join(" ") : "") +
+        ` · created ${esc(r.created)}</div>` +
+      (ports ? `<div class="ports">${ports}</div>` : "") +
+      `<div class="docs">` +
+        (docs.length ? docs.map((d) =>
+          `<div class="doc"><span class="mt">${esc(fmtTime(d.mtime / 1000))}</span>` +
+          `<span class="dn">${esc(d.doc)}</span><br>` +
+          (d.status ? `<span class="st">状态：${esc(d.status)}</span>` : `<span class="st none">状态：—（无状态头）</span>`) +
+          `</div>`
+        ).join("") : `<div class="doc"><span class="st none">no docs mirrored</span></div>`) +
+      `</div>`;
+    box.appendChild(div);
+  }
+}
+
+// ── ticker ──
+const tickerRows = [];
+function tickClass(t) {
+  if (t === "req.registered") return "t-req";
+  if (t === "doc.updated") return "t-doc";
+  return "t-other";
+}
+function pushTicker(batch) {
+  const box = $("ticker");
+  for (const f of batch) {
+    tickerRows.push(
+      `<div class="f ${tickClass(f.type)}"><span class="seq">#${f.seq}</span>` +
+      `${esc(f.type.padEnd(15))} ${esc(f.author)} <span class="ts">${esc(fmtTime(f.recv))}</span></div>`
+    );
+  }
+  while (tickerRows.length > 40) tickerRows.shift();
+  box.innerHTML = tickerRows.length ? tickerRows.join("") : '<div class="empty">no facts yet</div>';
+}
+
+// ── connectivity ──
+function setConnected(ok, info) {
+  const pill = $("conn");
+  if (ok) {
+    connected = true; everConnected = true;
+    pill.className = "pill live";
+    $("conntext").textContent = "LIVE";
+    if (info) {
+      $("h-head").textContent = info.head_seq;
+      $("h-facts").textContent = info.facts;
+      $("h-dedup").textContent = info.dedup_hits;
+      $("h-uptime").textContent = info.uptime_seconds + "s";
+      if (info.head_seq < cursor) { facts = []; cursor = 0; } // bus restarted empty
+    }
+  } else {
+    connected = false;
+    pill.className = "pill down";
+    $("conntext").textContent = everConnected ? "RECONNECTING" : "CONNECTING";
+  }
+}
+
+async function tick() {
+  try {
+    const r = await fetch(`${BUS}/facts?since=${cursor}&limit=1000`);
+    if (!r.ok) throw new Error("read " + r.status);
+    const batch = await r.json();
+    if (batch.length) {
+      for (const f of batch) { facts.push(f); if (f.seq > cursor) cursor = f.seq; }
+      pushTicker(batch);
+    }
+    setConnected(true, null);
+  } catch (e) {
+    setConnected(false);
+  }
+  render();
+  $("f-cursor").textContent = `cursor: ${cursor} · mirrored facts: ${facts.length}`;
+}
+async function infoTick() {
+  try {
+    const r = await fetch(`${BUS}/info`);
+    if (!r.ok) throw new Error("info " + r.status);
+    setConnected(true, await r.json());
+  } catch (e) {
+    setConnected(false);
+  }
+}
+setInterval(tick, 1000);
+setInterval(infoTick, 2000);
+tick(); infoTick();
+</script>
+</body>
+</html>
