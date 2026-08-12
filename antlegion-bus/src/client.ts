@@ -79,12 +79,12 @@ export function httpTransport(baseUrl: string): Transport {
       if (q.author) p.set("author", q.author);
       if (q.ref) p.set(`refs.${q.ref.key}`, q.ref.value);
       const res = await call(() => fetch(`${base}/facts?${p.toString()}`));
-      if (!res.ok) throw new Error(`read → ${res.status}`);
+      if (!res.ok) throw new Error(`read → ${res.status}: ${await res.text()}`); // include body, like append (review L6)
       return (await res.json()) as Fact[];
     },
     info: async () => {
       const res = await call(() => fetch(`${base}/info`));
-      if (!res.ok) throw new Error(`info → ${res.status}`);
+      if (!res.ok) throw new Error(`info → ${res.status}: ${await res.text()}`);
       return (await res.json()) as Record<string, unknown>;
     },
   };

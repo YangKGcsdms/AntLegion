@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   loadConfig, resolveWatchRoot, dcuWorkspaceRoot,
   DEFAULT_WATCH_ROOTS, DEFAULT_BUS_URL,
@@ -74,7 +75,10 @@ describe("loadConfig defaults and env", () => {
   });
 
   it("the committed ant.config.json points at the repo dcu-workspace", async () => {
-    const cfg = await loadConfig(new URL("../ant.config.json", import.meta.url).pathname);
+    // fileURLToPath (not .pathname) so a checkout path with non-ASCII chars
+    // (e.g. 工作区) decodes correctly instead of staying percent-encoded and
+    // silently ENOENT-ing back to defaults.
+    const cfg = await loadConfig(fileURLToPath(new URL("../ant.config.json", import.meta.url)));
     expect(cfg.watchRoots).toEqual([{ root: "../dcu-workspace", origin: "dcu" }]);
   });
 });

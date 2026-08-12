@@ -47,12 +47,19 @@ export function gateApproverDCU(busUrl: string): DCUSpec {
       for (const req of foldDevchain(ctx.mirror, foldOpts())) {
         for (const stage of req.stages) {
           if (stage.state !== "gated" || !stage.inputId || approved.has(stage.inputId)) continue;
-          approved.add(stage.inputId);
+          // Publish FIRST, mark the in-session dedup Set only on success. Marking
+          // before the await (the original bug, review M1) meant a transient bus
+          // error left the id in `approved` forever: the fold stays `gated`, but
+          // `approved.has()` short-circuits every future retry → the gate wedges.
+          // The fold is the real dedup (an approved stage is no longer `gated`);
+          // this Set is only an in-session fast-path, so it must never persist an
+          // approval that did not actually land on the bus.
           await ctx.client.publish(GATE_APPROVED, {
             gate: stage.gate?.name ?? "H1",
             reqSlug: req.slug,
             note: "auto-approved (unattended run)",
           }, { refs: { gate_of: stage.inputId } });
+          approved.add(stage.inputId);
           ctx.log(`auto-approved ${stage.gate?.name ?? "H1"} of ${req.slug}`);
         }
       }
