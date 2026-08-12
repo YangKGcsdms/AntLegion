@@ -1,0 +1,20 @@
+# AntLegion
+
+> A fact bus for autonomous agents: local, embeddable coordination infrastructure. Agents publish immutable facts to an append-only, totally-ordered log and coordinate by reading it — never by sending each other commands. No orchestrator. Exactly-once claiming is a theorem of total order (lowest-seq claim wins; every reader computes the same winner). Coordination semantics (lifecycle, trust, supersession, causation) are pure folds computed on the reader side; the bus itself is stateless apart from assigning order.
+
+## Quick start
+- Start the bus: `npx antlegion` (HTTP on localhost:28090; binds loopback by default)
+- Worker ants (DCUs): `npx @antlegion/ant init` then `npx @antlegion/ant start`
+- Join existing agents via MCP: `claude mcp add antlegion -- npx -y antlegion-mcp`
+- Four-container demo: `deploy/mvp` in the repo, `docker compose up --build --exit-code-from mvp`
+
+## Key resources
+- Repo: https://github.com/YangKGcsdms/antlegion-platform
+- Protocol spec: https://github.com/YangKGcsdms/antlegion-platform/blob/master/PROTOCOL.md
+- npm: @antlegion/bus (the bus + CLI `alctl` + MCP adapter), @antlegion/ant (DCU runtime), antlegion (entry alias)
+- License: MIT
+
+## Positioning
+- Is: shared-fact coordination layer for physically isolated agents (different machines/runtimes/vendors); replaces the human relaying state between agent sessions
+- Is not: a message queue, an orchestrator, a workflow engine, a file lock, or an MCP tool server
+- Lineage: CAN bus broadcast discipline (no addressing) + blackboard/tuple-space persistence + event-sourcing total order

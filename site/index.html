@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AntLegion — a fact bus for autonomous agents</title>
+<meta name="description" content="Local, embeddable coordination infrastructure: agents share immutable facts on an append-only bus — never commands. Exactly-once claiming, causal chains, reader-side folds.">
+<style>
+  :root{color-scheme:light dark;--bg:#f9f9f7;--card:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--ink3:#898781;--line:#e1e0d9;--acc:#2a78d6;--code:#f0efec}
+  @media (prefers-color-scheme:dark){:root{--bg:#0d0d0d;--card:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--ink3:#898781;--line:#2c2c2a;--acc:#3987e5;--code:#232322}}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65}
+  .wrap{max-width:880px;margin:0 auto;padding:64px 24px 80px}
+  h1{font-size:40px;letter-spacing:-.5px}
+  .tag{font-size:20px;color:var(--ink2);margin-top:14px;max-width:640px}
+  .tag b{color:var(--ink)}
+  .cta{margin-top:28px;display:flex;gap:12px;flex-wrap:wrap}
+  .btn{display:inline-block;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14.5px;font-weight:600}
+  .btn.p{background:var(--acc);color:#fff}
+  .btn.s{border:1px solid var(--line);color:var(--ink)}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:16px 18px;overflow-x:auto;font-size:13.5px;line-height:1.7;margin-top:14px}
+  pre b{color:var(--acc);font-weight:600}
+  .sec{margin-top:56px}
+  .sec h2{font-size:22px}
+  .sec p{color:var(--ink2);margin-top:10px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card h3{font-size:15px}
+  .card p{font-size:13.5px;color:var(--ink2);margin-top:8px}
+  .not{margin-top:18px;font-size:14px;color:var(--ink3)}
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--ink3);display:flex;gap:18px;flex-wrap:wrap}
+  footer a{color:var(--ink2)}
+  a{color:var(--acc)}
+  @media(max-width:700px){.grid{grid-template-columns:1fr}h1{font-size:32px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AntLegion</h1>
+  <p class="tag"><b>A fact bus for autonomous agents.</b> Local, embeddable infrastructure where agents coordinate by sharing immutable facts — never by sending each other commands. No orchestrator. Work doesn't duplicate, doesn't drop, and every outcome traces back to its origin.</p>
+  <div class="cta">
+    <a class="btn p" href="https://github.com/YangKGcsdms/antlegion-platform">GitHub</a>
+    <a class="btn s" href="https://www.npmjs.com/package/@antlegion/bus">@antlegion/bus</a>
+    <a class="btn s" href="https://www.npmjs.com/package/@antlegion/ant">@antlegion/ant</a>
+  </div>
+
+  <div class="sec">
+    <h2>Run it in 60 seconds</h2>
+<pre><b>npx antlegion</b>                     <span style="color:var(--ink3)"># start the bus (localhost:28090)</span>
+<b>npx @antlegion/ant init</b>           <span style="color:var(--ink3)"># guided setup for a worker ant (DCU)</span>
+<b>npx @antlegion/ant start</b>          <span style="color:var(--ink3)"># it wakes up when facts it cares about appear</span></pre>
+    <p>Or watch four containers coordinate a full dev pipeline with one command — 25 requirements, 100 stage loops, no orchestrator:</p>
+<pre><b>git clone</b> https://github.com/YangKGcsdms/antlegion-platform && cd antlegion-platform/deploy/mvp
+<b>docker compose up</b> --build --exit-code-from mvp</pre>
+    <p>Already running Claude Code or Cursor? They can join the same bus as immigrants, via MCP:</p>
+<pre><b>claude mcp add</b> antlegion -- npx -y antlegion-mcp</pre>
+  </div>
+
+  <div class="sec">
+    <h2>Three mechanisms, one theorem</h2>
+    <div class="grid">
+      <div class="card"><h3>Persistence → shared reality</h3><p>An append-only log of immutable facts. Any agent, joining at any time, folds the log and sees the same world.</p></div>
+      <div class="card"><h3>Claiming → division of labor</h3><p>The bus enforces exactly one thing: total order. Exactly-once claiming falls out as a theorem — lowest seq wins, every reader computes the same winner.</p></div>
+      <div class="card"><h3>Causation → emergent workflow</h3><p>Every fact records its parents. Pipelines aren't designed top-down — they're folded out of the causal chain afterwards.</p></div>
+    </div>
+    <p class="not">Not a message queue · not an orchestrator · not a workflow engine — and it doesn't lock files: conflicts are eliminated at the division-of-labor layer, before anyone edits anything.</p>
+  </div>
+
+  <div class="sec">
+    <h2>Born on a CAN bus</h2>
+    <p>On a car's CAN bus (1986), no central computer commands the control units — each one listens for the messages it cares about and acts when its local condition holds. AntLegion keeps that broadcast discipline and adds the two things CAN never had: <b style="color:var(--ink)">memory</b> (the append-only log) and <b style="color:var(--ink)">causality</b> (the fact lineage). Worker units are called DCUs, in honor of ECUs.</p>
+  </div>
+
+  <footer>
+    <a href="https://github.com/YangKGcsdms/antlegion-platform">GitHub</a>
+    <a href="https://github.com/YangKGcsdms/antlegion-platform/blob/master/PROTOCOL.md">Protocol spec</a>
+    <a href="https://github.com/YangKGcsdms/antlegion-platform/blob/master/README.zh-CN.md">中文</a>
+    <a href="/llms.txt">llms.txt</a>
+    <span>MIT · built by Carter.Yang</span>
+  </footer>
+</div>
+</body>
+</html>
