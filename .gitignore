@@ -43,3 +43,6 @@ docker-compose.override.yml
 # ecu/ runtime artifacts (dogfooding run dir — never commit; review H1)
 ecu/.data/
 ecu/.run/
+
+# verify-cli-eventflow self-booted bus data
+deploy/.verify-data-*/

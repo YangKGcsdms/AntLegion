@@ -1,10 +1,12 @@
 /**
  * v2 folding client SDK (PROTOCOL.md §3 "Where the elegance goes").
  *
- * This is the layer that keeps the client surface as simple as v1's MCP tools
- * while the bus stays trivial: it appends, maintains a cursor-synced local
- * mirror, and runs the reader folds so callers see "claim / resolve / state"
- * instead of "append a _.claim fact then read back and fold".
+ * This is the layer that keeps the client surface small (publish / query /
+ * claim / resolve / observe / state) while the bus stays trivial: it appends,
+ * maintains a cursor-synced local mirror, and runs the reader folds so callers
+ * see "claim / resolve / state" instead of "append a _.claim fact then read
+ * back and fold". The alctl CLI (cli.ts) is a thin shell over this SDK and is
+ * the sanctioned interface for external/headless agents.
  */
 
 import { randomBytes } from "node:crypto";
@@ -14,14 +16,15 @@ import { RESERVED } from "./types.js";
 import type { BusV2, ReadQuery } from "./bus.js";
 import {
   lifecycle, claimWinner, didIWin, trust, causationChain,
-  type Lifecycle, type TrustState,
+  colony, orphanReport, contextGaps,
+  type Lifecycle, type TrustState, type AgentRegistration, type OrphanReport, type ContextGap,
 } from "./fold.js";
 
 /**
  * Stable per-user identity: `<os-username>@<hostname>` (e.g. `carter@CartersMacAir`).
  * Unlike a per-process default, it survives across CLI invocations, so the
  * documented claim → resolve flow works out of the box. Override with
- * ANTLEGION_AUTHOR (CLI) or ANTLEGION_AGENT_NAME (MCP).
+ * ANTLEGION_AUTHOR (the alctl `--author` flag / env).
  */
 export function defaultAuthor(): string {
   try {
@@ -207,6 +210,24 @@ export class ClientV2 {
   async causation(F: string): Promise<Fact[]> {
     await this.sync();
     return causationChain(this.mirror, F);
+  }
+
+  /** §7 colony roster — latest sys.registry per agent (interests/publishes). */
+  async colony(): Promise<AgentRegistration[]> {
+    await this.sync();
+    return colony(this.mirror);
+  }
+
+  /** §7 orphan report — fact types nobody is interested in + declaration gaps. */
+  async orphans(): Promise<OrphanReport> {
+    await this.sync();
+    return orphanReport(this.mirror);
+  }
+
+  /** §8 open context requests — facts an agent found too thin to act on. */
+  async contextGaps(includeAnswered = false): Promise<ContextGap[]> {
+    await this.sync();
+    return contextGaps(this.mirror, { includeAnswered });
   }
 
   async query(q: ReadQuery = {}): Promise<Fact[]> {

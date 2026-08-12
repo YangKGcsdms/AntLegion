@@ -35,11 +35,15 @@ export function gateApproverDCU(busUrl: string): DCUSpec {
           dcu: GATE_APPROVER_AUTHOR,
           role: "gate-approver",
           worker: "deterministic",
+          // interests here is a human note (gates aren't a single fact type);
+          // publishes is the real declared output (fold.ts §7 colony/orphan).
+          interests: [],
+          publishes: [GATE_APPROVED],
           listens: ["*gated stages*"],
           produces: [GATE_APPROVED],
           note: "auto-approves human gates — unattended runs only",
         },
-        nonce: `registry:devchain:${GATE_APPROVER_AUTHOR}:v1`,
+        nonce: `registry:devchain:${GATE_APPROVER_AUTHOR}:v2`,
       });
       ctx.log(`registry ${r.deduped ? "deduped" : "published"} (seq ${r.seq})`);
     },

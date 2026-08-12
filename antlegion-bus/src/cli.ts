@@ -7,16 +7,22 @@
  * Output contract: machine-readable JSON on stdout (one value or JSONL stream),
  * human-grade errors on stderr, non-zero exit on failure.
  *
- *   alctl publish <type> [json-payload]   [--author a]
+ *   alctl publish <type> [json-payload]   [--author a] [--parent id] [--subject key] [--ref k=v]
  *   alctl read   [--since N] [--type glob] [--author a] [--limit n]
  *   alctl tail   [--type glob] [--since N] [--follow]
  *   alctl claim  <id>                     [--author a]
  *   alctl resolve <id>                    [--author a]
  *   alctl release <id>                    [--author a]
+ *   alctl observe <id> <corroborate|contradict>  [--author a]
  *   alctl state  <id>
  *   alctl trust  <id>
  *   alctl causation <id>
  *   alctl info
+ *
+ * This CLI is the sanctioned agent↔bus interface (it replaced the removed MCP
+ * adapter): a PI/headless agent shells out to `alctl` — every op below maps to
+ * one ClientV2 fold call, so exactly-once / trust / causation come from one
+ * place. See docs/AGENT-CLI.md.
  *
  * `--author` is the global identity flag: it sets who you are for every command
  * that writes facts (on `read`/`tail`, which append nothing, it stays an author
@@ -25,6 +31,7 @@
 
 import type { ClientV2 } from "./client.js";
 import type { ReadQuery } from "./bus.js";
+import { CONTEXT_REQUESTED, CONTEXT_PROVIDED } from "./fold.js";
 
 type Writer = (line: string) => void;
 
@@ -46,15 +53,21 @@ function parseArgs(argv: string[]): { positionals: string[]; flags: Record<strin
 
 const USAGE = [
   "alctl — AntLegion CLI",
-  "  publish <type> [json]   append a fact                     [--author a]",
+  "  publish <type> [json]   append a fact   [--author a --parent id --subject key --ref k=v]",
   "  read [--since N --type glob --author a --limit n]",
   "  tail [--type glob --since N --follow]  print facts (--follow keeps polling)",
   "  claim <id>              claim an exclusive fact           [--author a]",
   "  resolve <id>            resolve a claimed fact (winner only) [--author a]",
   "  release <id>            abandon your claim                [--author a]",
+  "  observe <id> <corroborate|contradict>  vote on a fact     [--author a]",
   "  state <id>              lifecycle state of a fact",
   "  trust <id>              trust state of a fact",
   "  causation <id>          causation chain root→fact",
+  "  colony                  registered agents (interests/publishes)",
+  "  orphans                 fact types nobody is interested in + declaration gaps",
+  "  ask-context <id> <q>    request more context on a too-thin fact   [--author a]",
+  "  provide-context <req-id> [json]  answer a context request         [--author a]",
+  "  context-gaps [--all]    open (unanswered) context requests",
   "  info                    bus summary (INFO)",
 ].join("\n");
 
@@ -92,7 +105,18 @@ export async function runCli(
             return 1;
           }
         }
-        const r = await client.publish(type, payload);
+        // refs: --parent / --subject shortcuts + generic --ref key=value
+        // (parity with the removed MCP adapter's parent_fact_id/subject_key,
+        // plus arbitrary relational keys for context/vote conventions).
+        const refs: Record<string, string> = {};
+        if (flags.parent) refs.parent = flags.parent;
+        if (flags.subject) refs.subject = flags.subject;
+        if (flags.ref) {
+          const eq = flags.ref.indexOf("=");
+          if (eq < 1) { writeErr("error: --ref must be key=value"); return 1; }
+          refs[flags.ref.slice(0, eq)] = flags.ref.slice(eq + 1);
+        }
+        const r = await client.publish(type, payload, Object.keys(refs).length ? { refs } : {});
         write(JSON.stringify({ id: r.id, seq: r.seq, deduped: r.deduped }));
         return 0;
       }
@@ -142,6 +166,18 @@ export async function runCli(
         return 0;
       }
 
+      case "observe": {
+        if (!rest[0]) { writeErr("error: observe needs an <id>"); return 1; }
+        const verdict = rest[1];
+        if (verdict !== "corroborate" && verdict !== "contradict") {
+          writeErr("error: observe needs a verdict: corroborate | contradict");
+          return 1;
+        }
+        await client.observe(rest[0], verdict);
+        write(JSON.stringify({ ok: true, verdict }));
+        return 0;
+      }
+
       case "state": {
         if (!rest[0]) { writeErr("error: state needs an <id>"); return 1; }
         write(JSON.stringify(await client.state(rest[0])));
@@ -158,6 +194,47 @@ export async function runCli(
         if (!rest[0]) { writeErr("error: causation needs an <id>"); return 1; }
         const chain = await client.causation(rest[0]);
         write(JSON.stringify({ chain: chain.map((f) => f.id) }));
+        return 0;
+      }
+
+      case "colony": {
+        write(JSON.stringify((await client.colony()).map((r) => ({
+          author: r.author, interests: r.interests, publishes: r.publishes,
+        }))));
+        return 0;
+      }
+
+      case "orphans": {
+        write(JSON.stringify(await client.orphans()));
+        return 0;
+      }
+
+      case "ask-context": {
+        if (!rest[0]) { writeErr("error: ask-context needs the <fact-id> to ask about"); return 1; }
+        const question = rest.slice(1).join(" ");
+        if (!question) { writeErr("error: ask-context needs a <question>"); return 1; }
+        const r = await client.publish(CONTEXT_REQUESTED, { question }, { refs: { about: rest[0] } });
+        write(JSON.stringify({ id: r.id, seq: r.seq, about: rest[0] }));
+        return 0;
+      }
+
+      case "provide-context": {
+        if (!rest[0]) { writeErr("error: provide-context needs the <request-id> it answers"); return 1; }
+        let payload: Record<string, unknown> = {};
+        if (rest[1]) {
+          try { payload = JSON.parse(rest[1]) as Record<string, unknown>; }
+          catch (err) { writeErr(`error: invalid JSON: ${err instanceof Error ? err.message : String(err)}`); return 1; }
+        }
+        const r = await client.publish(CONTEXT_PROVIDED, payload, { refs: { parent: rest[0], answers: rest[0] } });
+        write(JSON.stringify({ id: r.id, seq: r.seq, answers: rest[0] }));
+        return 0;
+      }
+
+      case "context-gaps": {
+        write(JSON.stringify((await client.contextGaps(!!flags.all)).map((g) => ({
+          request: g.request.id, about: g.about, question: g.question,
+          answered: g.answered, author: g.request.author,
+        }))));
         return 0;
       }
 

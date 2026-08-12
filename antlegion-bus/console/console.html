@@ -116,6 +116,25 @@
   #health td{padding:4px 10px;border-bottom:1px solid var(--row);color:var(--ink2)}
   #health .src{color:var(--ink3);font-size:11.5px;margin-top:26px}
   #spark{background:var(--panel2);border:1px solid var(--line);border-radius:10px}
+  /* ── 舰群 / 孤儿告警 ── */
+  #colony{flex:1;overflow-y:auto;padding:18px 22px;display:none}
+  #colony h3{color:var(--acc);font-size:12px;letter-spacing:1.5px;margin:20px 0 8px}
+  #colony h3:first-of-type{margin-top:0}
+  #colony table{max-width:760px;margin-top:4px}
+  #colony th{color:var(--ink3);text-align:left;font-weight:600;font-size:11.5px;padding:4px 10px;border-bottom:1px solid var(--line)}
+  #colony td{padding:4px 10px;border-bottom:1px solid var(--row);color:var(--ink2);vertical-align:top}
+  #colony .src{color:var(--ink3);font-size:11.5px;margin-top:26px}
+  #colony .empty-ok{color:var(--grn);font-size:12px}
+  .alert{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.5);color:var(--yel);border-radius:10px;padding:10px 14px;margin-bottom:6px;font-size:12.5px}
+  .alert.none{background:rgba(74,222,128,.08);border-color:rgba(74,222,128,.4);color:var(--grn)}
+  .otype{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.08);color:var(--yel);border-radius:7px;padding:2px 10px;margin:0 6px 6px 0;font-size:12px;cursor:pointer}
+  .otype b{color:var(--ink)}
+  .gapline{color:var(--ink2);font-size:12px;padding:2px 0}
+  .gapline .who{color:var(--blu)}
+  .gapline .what{color:var(--vio)}
+  .ctxgap{border:1px solid var(--line2);border-radius:8px;padding:8px 10px;margin:0 0 6px;background:var(--panel2);font-size:12px}
+  .ctxgap .q{color:var(--ink);margin:3px 0}
+  .ctxgap .lnk{color:var(--acc);cursor:pointer}
 
   /* ── 设置抽屉 ── */
   #shade{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:8}
@@ -155,6 +174,7 @@
     <span class="kv" id="b-sig">sig_failures <b>–</b></span>
     <span class="tabs">
       <button id="t-stream" class="on">事实流</button>
+      <button id="t-colony">舰群</button>
       <button id="t-health">健康</button>
       <button id="t-gear" title="设置">⚙</button>
     </span>
@@ -192,6 +212,19 @@
     <h3 id="s-authors">作者活跃 <span class="tiny" id="s-authors-sub" style="letter-spacing:0">（基于已加载的事实流折叠）</span></h3>
     <table><thead><tr><th id="a-author">作者</th><th id="a-last">最近活跃</th><th id="a-n">事实数（已加载）</th><th id="a-skew">最大时钟偏差</th></tr></thead><tbody id="h-authors"></tbody></table>
     <p class="src" id="l-readonly">只读页面：只轮询 GET /facts（游标增量）与 GET /info，从不写入。 · 压缩提示：<span style="color:var(--ink2)">curl -X POST $BUS/admin/rewrite</span></p>
+  </div>
+
+  <div id="colony">
+    <div id="orphan-alert" class="alert" style="display:none"></div>
+    <h3 id="s-roster">舰群成员 <span class="tiny" id="s-roster-sub" style="letter-spacing:0">（各 Agent 声明的关心/发布事实）</span></h3>
+    <table><thead><tr><th id="c-agent">Agent</th><th id="c-interests">关心（interests）</th><th id="c-publishes">发布（publishes）</th></tr></thead><tbody id="c-roster"></tbody></table>
+    <h3 id="s-orphans">孤儿事实 <span class="tiny" id="s-orphans-sub" style="letter-spacing:0">（无人声明关心的事实类型）</span></h3>
+    <div id="c-orphans"></div>
+    <h3 id="s-gaps2">声明缺口 <span class="tiny" id="s-gaps2-sub" style="letter-spacing:0">（关心却无匹配 / 声明发布却从未产出）</span></h3>
+    <div id="c-decl-gaps"></div>
+    <h3 id="s-ctxgaps">待补充上下文 <span class="tiny" id="s-ctxgaps-sub" style="letter-spacing:0">（事实太薄、有 Agent 请求澄清但未获回应）</span></h3>
+    <div id="c-ctxgaps"></div>
+    <p class="src" id="l-colony-src">基于已加载的事实流折叠（与 fold.ts §7/§8 同源）。声明缺口/孤儿仅在已加载窗口内判断。</p>
   </div>
 
   <div id="pill">⏸ <span id="l-paused">已暂停</span> · <b id="pill-n">0</b> <span id="l-newf">条新事实 — 回到底部</span></div>
@@ -302,6 +335,21 @@ const STR = {
     poll_lbl: "轮询间隔（毫秒）", poll_sub: "拉取新事实的频率，最低 250ms。",
     tfmt_lbl: "时间显示", tfmt_rel: "相对", tfmt_abs: "绝对",
     settings_note: "所有设置即时生效并写入 URL——分享链接即分享视图。",
+    tab_colony: "舰群",
+    s_roster: "舰群成员", s_roster_sub: "（各 Agent 声明的关心/发布事实）",
+    c_agent: "Agent", c_interests: "关心（interests）", c_publishes: "发布（publishes）",
+    s_orphans: "孤儿事实", s_orphans_sub: "（无人声明关心的事实类型）",
+    s_gaps2: "声明缺口", s_gaps2_sub: "（关心却无匹配 / 声明发布却从未产出）",
+    s_ctxgaps: "待补充上下文", s_ctxgaps_sub: "（事实太薄、有 Agent 请求澄清但未获回应）",
+    colony_src: "基于已加载的事实流折叠（与 fold.ts §7/§8 同源）。声明缺口/孤儿仅在已加载窗口内判断。",
+    no_agents: "尚无 Agent 注册（无 sys.registry 事实）——无法判断孤儿，先让 Agent 声明 interests/publishes。",
+    orphan_alert: "⚠ {n} 个事实类型无人声明关心（孤儿）——可能有产出无人消费。",
+    orphan_none: "✓ 没有孤儿事实：已加载窗口内每个事实类型都有 Agent 关心。",
+    gap_unmatched: "{who} 关心 {what}，但流里没有匹配的事实（在等一个没人产出的事实）。",
+    gap_silent: "{who} 声明会发布 {what}，但从未产出。",
+    gap_none: "✓ 无声明缺口。", ctxgap_none: "✓ 没有待补充上下文的请求。",
+    ctx_about: "针对事实", ctx_asked_by: "请求者", ctx_open: "未回应",
+    n_facts: "{n} 条",
   },
   en: {
     title: "AntLegion · console", logo: "AntLegion console",
@@ -341,6 +389,21 @@ const STR = {
     poll_lbl: "poll interval (ms)", poll_sub: "How often new facts are fetched, min 250ms.",
     tfmt_lbl: "time display", tfmt_rel: "relative", tfmt_abs: "absolute",
     settings_note: "Every setting applies instantly and is written to the URL — share the link, share the view.",
+    tab_colony: "colony",
+    s_roster: "colony roster", s_roster_sub: "(each agent's declared interests / publishes)",
+    c_agent: "agent", c_interests: "interests", c_publishes: "publishes",
+    s_orphans: "orphan facts", s_orphans_sub: "(fact types no agent is interested in)",
+    s_gaps2: "declaration gaps", s_gaps2_sub: "(interest matching nothing / declared output never produced)",
+    s_ctxgaps: "context needed", s_ctxgaps_sub: "(too-thin facts an agent asked to clarify, still unanswered)",
+    colony_src: "folded from the loaded stream (same logic as fold.ts §7/§8). Orphan/gap judgments are within the loaded window.",
+    no_agents: "no agents registered yet (no sys.registry facts) — can't judge orphans; have agents declare interests/publishes.",
+    orphan_alert: "⚠ {n} fact type(s) with no interested agent (orphans) — output nothing consumes.",
+    orphan_none: "✓ no orphans: every fact type in the loaded window has an interested agent.",
+    gap_unmatched: "{who} is interested in {what}, but no fact in the stream matches (waiting on silence).",
+    gap_silent: "{who} declares it publishes {what}, but never produced it.",
+    gap_none: "✓ no declaration gaps.", ctxgap_none: "✓ no open context requests.",
+    ctx_about: "about fact", ctx_asked_by: "asked by", ctx_open: "open",
+    n_facts: "{n}",
   },
 };
 const T = (k) => (STR[cfg.lang] && STR[cfg.lang][k]) || STR.en[k] || k;
@@ -352,6 +415,13 @@ function applyLang() {
   $("l-logo").textContent = T("logo");
   $("l-head").textContent = T("head"); $("l-rate").textContent = T("rate");
   $("t-stream").textContent = T("tab_stream"); $("t-health").textContent = T("tab_health");
+  $("t-colony").textContent = T("tab_colony");
+  $("s-roster").firstChild.textContent = T("s_roster") + " "; $("s-roster-sub").textContent = T("s_roster_sub");
+  $("c-agent").textContent = T("c_agent"); $("c-interests").textContent = T("c_interests"); $("c-publishes").textContent = T("c_publishes");
+  $("s-orphans").firstChild.textContent = T("s_orphans") + " "; $("s-orphans-sub").textContent = T("s_orphans_sub");
+  $("s-gaps2").firstChild.textContent = T("s_gaps2") + " "; $("s-gaps2-sub").textContent = T("s_gaps2_sub");
+  $("s-ctxgaps").firstChild.textContent = T("s_ctxgaps") + " "; $("s-ctxgaps-sub").textContent = T("s_ctxgaps_sub");
+  $("l-colony-src").textContent = T("colony_src");
   $("l-ftype").textContent = T("ftype"); $("l-fauthor").textContent = T("fauthor");
   $("l-fref").textContent = T("fref"); $("l-fq").textContent = T("fq");
   $("f-author").placeholder = T("fauthor_ph"); $("f-refval").placeholder = T("frefval_ph"); $("f-q").placeholder = T("fq_ph");
@@ -639,6 +709,10 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.tree) { e.stopPropagation(); openTree(t.dataset.tree); return; }
   const tn = t.closest(".tnode");
   if (tn && tn.dataset.ref) { closeTree(); jump(tn.dataset.ref); return; }
+  const otype = t.closest(".otype");
+  if (otype && otype.dataset.t) { $("f-type").value = otype.dataset.t; showTab("stream"); applyFilters(); return; }
+  const lnk = t.closest(".lnk");
+  if (lnk && lnk.dataset.ref) { showTab("stream"); jump(lnk.dataset.ref); return; }
   const chip = t.closest(".chip");
   if (chip && chip.dataset.ref) { e.stopPropagation(); jump(chip.dataset.ref); return; }
   if (t.classList.contains("ty")) { e.stopPropagation(); $("f-type").value = t.dataset.t; applyFilters(); return; }
@@ -745,9 +819,19 @@ function closeTree() { $("treewrap").style.display = "none"; }
 $("tr-close").onclick = closeTree;
 $("treewrap").addEventListener("click", (e) => { if (e.target === $("treewrap")) closeTree(); });
 
-/* ── 页签 ── */
-$("t-stream").onclick = () => { $("t-stream").classList.add("on"); $("t-health").classList.remove("on"); $("stream").style.display = "block"; $("filters").style.display = "flex"; $("health").style.display = "none"; };
-$("t-health").onclick = () => { $("t-health").classList.add("on"); $("t-stream").classList.remove("on"); $("stream").style.display = "none"; $("filters").style.display = "none"; $("health").style.display = "block"; renderAuthors(); if (lastInfo) renderHealth(lastInfo, lastRate); };
+/* ── 页签（stream / colony / health 三选一） ── */
+function showTab(name) {
+  for (const t of ["stream", "colony", "health"]) {
+    $("t-" + t).classList.toggle("on", t === name);
+    $(t).style.display = t === name ? "block" : "none";
+  }
+  $("filters").style.display = name === "stream" ? "flex" : "none";
+  if (name === "health") { renderAuthors(); if (lastInfo) renderHealth(lastInfo, lastRate); }
+  if (name === "colony") renderColony();
+}
+$("t-stream").onclick = () => showTab("stream");
+$("t-colony").onclick = () => showTab("colony");
+$("t-health").onclick = () => showTab("health");
 
 /* ── 设置抽屉 ── */
 function openSettings() {
@@ -759,7 +843,7 @@ $("t-gear").onclick = openSettings;
 $("g-close").onclick = closeSettings;
 $("shade").onclick = closeSettings;
 
-function setLang(l) { if (cfg.lang === l) return; cfg.lang = l; syncURL(); applyLang(); rerenderAll(); if (lastInfo) renderHealth(lastInfo, lastRate); renderAuthors(); updateEmpty(); }
+function setLang(l) { if (cfg.lang === l) return; cfg.lang = l; syncURL(); applyLang(); rerenderAll(); if (lastInfo) renderHealth(lastInfo, lastRate); renderAuthors(); if ($("colony").style.display === "block") renderColony(); updateEmpty(); }
 $("lang-zh").onclick = () => setLang("zh");
 $("lang-en").onclick = () => setLang("en");
 function setTfmt(m) { if (cfg.tfmt === m) return; cfg.tfmt = m; syncURL(); applyLang(); rerenderAll(); }
@@ -842,6 +926,103 @@ function renderAuthors() {
     .join("") || `<tr><td colspan="4" style="color:var(--ink3)">${T("no_facts")}</td></tr>`;
 }
 setInterval(() => { if ($("health").style.display === "block") renderAuthors(); }, 5000);
+
+/* ── 舰群 / 孤儿告警（fold.ts §7/§8 的内联折叠，基于已加载窗口 facts） ── */
+// 与 canonical.ts globMatch 同语义：* → .*，? → .，其余转义。
+function globMatchInline(pattern, text) {
+  const re = new RegExp("^" + pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+  return re.test(text);
+}
+const asArr = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string") : typeof v === "string" ? [v] : [];
+const isMechType = (t) => t.startsWith("_.") || t === "sys.registry" || t.startsWith("sys.");
+
+function colonyInline() {
+  const latest = new Map();
+  for (const f of facts) {
+    if (f.type !== "sys.registry") continue;
+    const prev = latest.get(f.author);
+    if (!prev || f.seq > prev.seq) latest.set(f.author, f);
+  }
+  return [...latest.values()].map((f) => {
+    const p = f.payload || {};
+    return {
+      author: f.author,
+      interests: [...new Set(asArr(p.interests).concat(asArr(p.listens)))],
+      publishes: [...new Set(asArr(p.publishes).concat(asArr(p.produces)))],
+    };
+  }).sort((a, b) => a.author.localeCompare(b.author));
+}
+
+function orphanInline(regs) {
+  const interestGlobs = regs.flatMap((r) => r.interests);
+  const byType = new Map();
+  for (const f of facts) {
+    if (isMechType(f.type)) continue;
+    const e = byType.get(f.type) || { count: 0, ids: [] };
+    e.count++; if (e.ids.length < 3) e.ids.push(f.id);
+    byType.set(f.type, e);
+  }
+  const orphanTypes = [];
+  for (const [type, e] of byType) {
+    if (!interestGlobs.some((g) => globMatchInline(g, type))) orphanTypes.push({ type, count: e.count, ids: e.ids });
+  }
+  orphanTypes.sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+  const streamTypes = [...new Set(facts.map((f) => f.type))];
+  const unmatched = [], silent = [];
+  for (const r of regs) {
+    for (const it of r.interests) if (!streamTypes.some((t) => globMatchInline(it, t))) unmatched.push({ author: r.author, interest: it });
+    for (const pt of r.publishes) if (!facts.some((f) => f.author === r.author && globMatchInline(pt, f.type))) silent.push({ author: r.author, type: pt });
+  }
+  return { orphanTypes, unmatched, silent, agents: regs.length };
+}
+
+function contextGapsInline() {
+  const provided = facts.filter((f) => f.type === "context.provided");
+  const gaps = [];
+  for (const req of facts) {
+    if (req.type !== "context.requested") continue;
+    const answered = provided.some((p) => p.refs && (p.refs.parent === req.id || p.refs.answers === req.id));
+    if (!answered) gaps.push({ req, about: req.refs && req.refs.about, question: (req.payload || {}).question });
+  }
+  return gaps;
+}
+
+function renderColony() {
+  const regs = colonyInline();
+  $("c-roster").innerHTML = regs.length
+    ? regs.map((r) => `<tr><td class="au" data-a="${esc(r.author)}">${esc(r.author)}</td>` +
+        `<td>${r.interests.map((i) => `<span class="chip">${esc(i)}</span>`).join("") || '<span class="k">—</span>'}</td>` +
+        `<td>${r.publishes.map((i) => `<span class="chip">${esc(i)}</span>`).join("") || '<span class="k">—</span>'}</td></tr>`).join("")
+    : `<tr><td colspan="3" class="tiny">${T("no_agents")}</td></tr>`;
+
+  const rep = orphanInline(regs);
+  const alert = $("orphan-alert");
+  if (regs.length === 0) {
+    alert.style.display = "block"; alert.className = "alert"; alert.textContent = T("no_agents");
+  } else if (rep.orphanTypes.length) {
+    alert.style.display = "block"; alert.className = "alert"; alert.textContent = TF("orphan_alert", { n: rep.orphanTypes.length });
+  } else {
+    alert.style.display = "block"; alert.className = "alert none"; alert.textContent = T("orphan_none");
+  }
+
+  $("c-orphans").innerHTML = rep.orphanTypes.length
+    ? rep.orphanTypes.map((o) => `<span class="otype" data-t="${esc(o.type)}"><b>${esc(o.type)}</b> · ${TF("n_facts", { n: o.count })}</span>`).join("")
+    : `<span class="empty-ok">${T("orphan_none")}</span>`;
+
+  const gapHtml = rep.unmatched.map((u) => `<div class="gapline">${TF("gap_unmatched", { who: `<span class="who">${esc(u.author)}</span>`, what: `<span class="what">${esc(u.interest)}</span>` })}</div>`)
+    .concat(rep.silent.map((s) => `<div class="gapline">${TF("gap_silent", { who: `<span class="who">${esc(s.author)}</span>`, what: `<span class="what">${esc(s.type)}</span>` })}</div>`))
+    .join("");
+  $("c-decl-gaps").innerHTML = gapHtml || `<span class="empty-ok">${T("gap_none")}</span>`;
+
+  const gaps = contextGapsInline();
+  $("c-ctxgaps").innerHTML = gaps.length
+    ? gaps.map((g) => `<div class="ctxgap"><div class="q">“${esc(g.question || "")}”</div>` +
+        `<div class="tiny">${T("ctx_asked_by")} <span class="au" data-a="${esc(g.req.author)}">${esc(g.req.author)}</span> · ${T("ctx_about")} ` +
+        `${g.about ? `<span class="lnk" data-ref="${esc(g.about)}">${esc(String(g.about).slice(0, 8))}</span>` : "—"} · <span style="color:var(--yel)">${T("ctx_open")}</span></div></div>`).join("")
+    : `<span class="empty-ok">${T("ctxgap_none")}</span>`;
+}
+// 舰群页可见时随轮询刷新
+setInterval(() => { if ($("colony").style.display === "block") renderColony(); }, 3000);
 
 /* ── 启动 ── */
 syncURL();
