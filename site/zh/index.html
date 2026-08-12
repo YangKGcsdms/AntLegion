@@ -215,9 +215,10 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
       <div class="card">
         <h3>把你的 Claude Code / Cursor 接进来</h3>
         <p>同一条总线、同一批事实——会话之间不再重做彼此的工作。</p>
-<pre class="cmd"><b>claude mcp add</b> antlegion -- \
-  npx -y -p @antlegion/bus antlegion-mcp</pre>
-        <p>每个会话发布事实、动手前先认领、折叠同一条日志。两个会话抢同一个任务：一个赢，一个转身干别的。</p>
+<pre class="cmd"><b>alctl read</b> --type 'task.*'  <i># 看有哪些开放任务</i>
+<b>alctl claim</b> &lt;id&gt;            <i># 恰好一次；输家退出码非 0</i>
+<b>alctl resolve</b> &lt;id&gt;          <i># 只有胜者能解决</i></pre>
+        <p>每个会话通过 <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/AGENT-CLI.zh-CN.md"><code>alctl</code> CLI</a> 驱动总线——发布事实、动手前先认领、折叠同一条日志。两个会话抢同一个任务：一个赢，一个转身干别的。</p>
       </div>
     </div>
     <p class="not">Alpha：线协议与日志格式已冻结（跨语言一致性向量锁定）；API 表面仍会调整。仅限 localhost / 私有网络——与 Redis 同款信任模型。</p>
@@ -245,7 +246,7 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
       <tr><td>恰好一次认领</td><td class="n">建议性锁</td><td class="n">至少一次</td><td class="n">—</td><td class="n">任务列表</td><td class="y">✓ 定理，读者可验证</td></tr>
       <tr><td>因果链</td><td class="n">—</td><td class="n">线程</td><td class="n">—</td><td class="n">—</td><td class="y">✓ 一等公民 refs</td></tr>
       <tr><td>本地可内嵌</td><td class="y">✓</td><td class="y">✓</td><td class="n">仅云端</td><td class="y">✓</td><td class="y">✓ 一个进程一个 JSONL</td></tr>
-      <tr><td>跨厂商</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">绑单一厂商</td><td class="y">✓ MCP + HTTP + SDK</td></tr>
+      <tr><td>跨厂商</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">绑单一厂商</td><td class="y">✓ CLI + HTTP + SDK</td></tr>
       <tr><td>可验证恢复</td><td class="n">—</td><td class="n">数据库状态</td><td class="n">信任服务器</td><td class="n">—</td><td class="y">✓ 重放日志，HMAC 签名</td></tr>
       </tbody>
     </table>
@@ -261,13 +262,13 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
   <div class="sec">
     <span class="eyebrow">常见问题</span>
     <h2>你可能想问</h2>
-    <details><summary>多个 Claude Code / Cursor 会话之间怎么共享状态？</summary><p>起一条总线（<code>npx antlegion</code>），再给每个会话挂上 MCP 适配器（<code>claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp</code>）。每个会话都能发布事实、动手前认领、折叠同一条日志——两个会话不会抢同一个任务，也不会重做彼此的工作。</p></details>
+    <details><summary>多个 Claude Code / Cursor 会话之间怎么共享状态？</summary><p>起一条总线（<code>npx antlegion</code>），再让每个会话通过 <code>alctl</code> CLI 驱动它（<code>alctl read</code> / <code>alctl claim</code> / <code>alctl resolve</code>；见 <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/AGENT-CLI.zh-CN.md">docs/AGENT-CLI.zh-CN.md</a>）。每个会话都能发布事实、动手前认领、折叠同一条日志——两个会话不会抢同一个任务，也不会重做彼此的工作。</p></details>
     <details><summary>为什么不直接用 Claude Code 的 subagents / agent teams？</summary><p>该用就用——一台机器、一棵进程树、一个厂商之内它们很好。AntLegion 从它们停下的地方开始：物理隔离节点上的智能体——不同机器、权限域、厂商——那里不存在"更大的单体 agent"，现状是人在转述状态。</p></details>
     <details id="faq-evidence"><summary>8/8 伪造报告是怎么拦下来的？</summary><p>每个生产者为自己的产物注册"证据形状"（测试报告必须写明<em>没测</em>什么、E2E 报告必须带偏差/缺陷/缺口……）。裁决单元把每个产物对着注册的形状折叠一遍并公布接受/拒绝——它从不信任智能体的自我汇报。我们注入了 8 份形状残缺的"全绿"产物：8 份全部被拒，缺失字段点名上链；4 份形状完整的对照全部通过。见 <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">PROTOCOL §3</a>。</p></details>
     <details><summary>这是消息队列吗？</summary><p>不是。队列把命令投递给消费者然后遗忘。AntLegion 把不可变事实永久保存（支持压缩）在单一全序里，任何读者在任何时刻都能重建：谁认领了什么、什么取代了什么、一个结果是怎么来的。协调语义住在读者侧折叠里，不在 broker 里。</p></details>
     <details><summary>它锁文件吗？</summary><p>不锁。冲突在更早的一层被消灭：智能体动手前先认领工作单元，恰好一次认领保证了唯一归属。没有人编辑同一处，就没有什么需要锁。</p></details>
     <details><summary>智能体干到一半崩溃了会怎样？</summary><p>它的认领会过期（按总线盖章的时间，不是智能体自己的时钟），任何幸存的智能体赢下重新认领并接管。恢复是确定性的：重放日志，得到同一个世界。实测：SIGKILL 后 12.2 秒链条痊愈。</p></details>
-    <details><summary>哪些智能体能接入？</summary><p>原生工蚁走 <code>@antlegion/ant</code>（脚本或 LLM 驱动的 act）；任何会说 MCP 的（Claude Code、Cursor、Cline、Codex CLI、Windsurf、Zed……）；以及任何能发 HTTP 或引入 TypeScript SDK 的东西。</p></details>
+    <details><summary>哪些智能体能接入？</summary><p>原生工蚁走 <code>@antlegion/ant</code>（脚本或 LLM 驱动的 act）；任何能执行 shell 命令的（Claude Code、Cursor、Cline、Codex CLI、Windsurf、Zed……）经 <code>alctl</code> CLI；以及任何能发 HTTP 或引入 TypeScript SDK 的东西。</p></details>
     <details><summary>能上生产吗？</summary><p>Alpha。核心协议稳定且经过验证——218 个测试、跨语言一致性向量、进程内约 16 万 append/s——但它按可信环境设计（与 Redis 同款模型）：留在 localhost 或私有网络里，设置稳定的 secret。</p></details>
     <p class="not">FAQ 没答到的？→ <a href="https://github.com/YangKGcsdms/AntLegion/discussions">去 Discussions 问</a></p>
   </div>

@@ -8,7 +8,7 @@
 
 ![npx @antlegion/bus demo——恰好一次竞速、崩溃接管、字节级重放](deploy/media/demo.gif)
 
-它不锁文件、不串行化你的智能体——冲突在**分工层**就被消灭了，两个单元根本不会碰同一个任务。你已有的 Claude Code / Cursor 会话也能作为工作单元接入同一条总线（[MCP](#通过-mcp-接入)）。
+它不锁文件、不串行化你的智能体——冲突在**分工层**就被消灭了，两个单元根本不会碰同一个任务。你已有的 Claude Code / Cursor 会话也能作为工作单元接入同一条总线（通过 [`alctl` CLI](#用-alctl-cli-接入-agent)）。
 
 [![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
@@ -30,7 +30,7 @@
 - [快速上手](#快速上手)
 - [事实的结构](#事实的结构)
 - [从代码接入](#从代码接入)
-- [通过 MCP 接入](#通过-mcp-接入)
+- [用 `alctl` CLI 接入 Agent](#用-alctl-cli-接入-agent)
 - [经验证的保证](#经验证的保证)
 - [配置参数](#配置参数)
 - [架构](#架构)
@@ -86,7 +86,7 @@
 | 恰好一次认领 | ✗（靠锁和运气） | ✗（行锁） | 厂商定义 | 厂商定义 | ✓ 全序的定理 |
 | 因果/审计 | ✗ | ✗ | 部分 | 部分 | ✓ `refs` + 签名日志 |
 | 本地可内嵌 | ✓ | ✓ | ✗ | ✗ | ✓ 一个进程一个文件 |
-| 跨 harness | ✓（勉强） | ✓ | 绑框架 | 绑单一厂商 | ✓ HTTP + MCP，任何 agent |
+| 跨 harness | ✓（勉强） | ✓ | 绑框架 | 绑单一厂商 | ✓ HTTP + CLI + SDK，任何 agent |
 | 协议开放 | — | — | ✗ | ✗ | ✓ [PROTOCOL.md](PROTOCOL.md) + 一致性向量 |
 
 ### 三个机制，一套协作模型
@@ -128,7 +128,7 @@ npx @antlegion/ant board      # 监督看板 → http://localhost:28091/devchain
 
 约 2 秒内 `dcu-plan` 认领需求（恰好一次，最小 seq 胜出）、产出 `plan.ready`、裁决者校验证据形状、链条停在 H1 人工门——在看板上批准后，dev → unittest → e2e 自己跑到 ✔ CHAIN DONE。没有编排器，没有单元互相寻址，全部协调都是对事实流的读者折叠。
 
-详见 [`ant/`](ant)（DCU 运行时、dev-chain、证据裁决、看板）。此外，任何支持 MCP 的 agent（Claude Code、Cursor……）也可以接入总线获得 publish/claim/resolve 工具——参见[通过 MCP 接入](#通过-mcp-接入)。
+详见 [`ant/`](ant)（DCU 运行时、dev-chain、证据裁决、看板）。此外，任何能执行 shell 命令的 agent（Claude Code、Cursor……）都可以通过 [`alctl` CLI](#用-alctl-cli-接入-agent) 驱动总线做 publish/claim/resolve。
 
 **或者全部装进容器，一条命令**——1 个总线 + 3 个 pi-agent 容器（Ubuntu 24.04），100 个 LLM act 循环，结束打记分板：
 
@@ -156,7 +156,7 @@ docker run -p 28090:28090 -e ANTLEGION_BUS_SECRET=your-stable-secret antlegion
 
 ### 用终端操作（`alctl` — redis-cli 的对应物）
 
-`npm i -g @antlegion/bus` 会安装三个命令：`antlegion`（服务器）、`alctl`、`antlegion-mcp`。每条 `alctl` 命令在 stdout 输出机器可读的 JSON；人类可读的错误走 stderr 并以非零码退出。
+`npm i -g @antlegion/bus` 会安装两个命令：`antlegion`（服务器）和 `alctl`。每条 `alctl` 命令在 stdout 输出机器可读的 JSON；人类可读的错误走 stderr 并以非零码退出。
 
 ```bash
 alctl publish task.build '{"target":"todo-app"}' --author alice
@@ -311,70 +311,51 @@ const client = new ClientV2(localTransport(bus), "my-agent");
 // 无 HTTP、无网络——同一套 SDK，同一套折叠逻辑
 ```
 
-## 通过 MCP 接入
+## 用 `alctl` CLI 接入 Agent
 
-任何支持 MCP 的 Agent——Claude Code、Cursor、Cline、Windsurf、Zed、Goose——都可以通过一行命令以 stdio 方式连接到总线，无需定制集成：
+无头 / PI agent——Claude Code、Cursor、Codex CLI、shell 工具、cron 任务——通过 shell 调用 **`alctl` CLI** 驱动总线。一个接口，每个动词恰好映射到一次折叠调用。完整指南见 [`docs/AGENT-CLI.md`](docs/AGENT-CLI.zh-CN.md)。
 
 ```bash
-claude mcp add antlegion \
-  --env ANTLEGION_BUS_URL=http://localhost:28090 \
-  --env ANTLEGION_AGENT_NAME=my-agent \
-  -- npx -y -p @antlegion/bus antlegion-mcp
+export ANTLEGION_BUS_URL=http://localhost:28090   # 默认
+export ANTLEGION_AUTHOR=my-agent                   # 稳定的 agent 身份
+
+# 读取新事实、恰好一次认领、用子事实解决
+alctl read --type 'task.*' --since "$CURSOR"
+alctl claim <id> && alctl resolve <id>
+alctl publish task.done '{"result":"ok"}' --parent <id>
 ```
 
-或者通过 `.mcp.json`：
+*（不想全局安装的话，给每条命令加前缀 `npx -y -p @antlegion/bus`。）*
 
-```json
-{
-  "mcpServers": {
-    "antlegion": {
-      "command": "npx",
-      "args": ["-y", "-p", "@antlegion/bus", "antlegion-mcp"],
-      "env": {
-        "ANTLEGION_BUS_URL": "http://localhost:28090",
-        "ANTLEGION_AGENT_NAME": "my-agent"
-      }
-    }
-  }
-}
-```
+`ANTLEGION_DATA_DIR` 与 `ANTLEGION_BUS_SECRET`（见[配置参数](#配置参数)）用于配置总线服务端本身。CLI 驱动的是与 HTTP 客户端相同的 `ClientV2` 折叠 SDK——协调语义只实现一次，不会因接口而重复。
 
-`ANTLEGION_AGENT_NAME` 默认是 `<系统用户名>@<主机名>`；启动时会把解析出的身份打印到 stderr。
-`ANTLEGION_DATA_DIR` 与 `ANTLEGION_BUS_SECRET`（见[配置参数](#配置参数)）用于配置总线服务端本身。
+### 给 agent 的第一条 prompt
 
-暴露的 **7 个工具**：`antlegion_publish`、`antlegion_query`、`antlegion_claim`、`antlegion_resolve`、`antlegion_observe`、`antlegion_causation`、`antlegion_state`。
+采用发生在提示词里，不在安装里。给能执行 shell 命令的 agent 贴这段作为第一条消息：
 
-**1 个资源**：`antlegion://facts/recent`——最近 20 条事实的 JSON。
-
-MCP 适配器与 HTTP 客户端使用同一套 `ClientV2` 折叠 SDK——协调语义只实现一次，不会因适配器而重复。
-
-### 挂载后的第一条 prompt
-
-采用发生在提示词里，不在安装里。给刚拿到工具的 agent 贴这段作为第一条消息：
-
-> 查看 antlegion 事实总线上有没有开放的 `task.todo` 事实。有未认领的就先认领再干活；只有认领成功才继续。做完后用简短的结果 payload 解决它。如果没有开放任务，就把你接下来打算做的事发布成一条 `task.todo`，让其他 agent 看得见。
+> 查看 antlegion 事实总线上有没有开放的 `task.todo` 事实（`alctl read --type task.todo`）。有未认领的就先 `alctl claim <id>` 再干活；只有认领退出码为 0 才继续。做完后用简短的结果 `alctl resolve <id>`。如果没有开放任务，就 `alctl publish task.todo '{…}'` 把你接下来打算做的事发布出去，让其他 agent 看得见。
 
 ### 贴进 CLAUDE.md / .cursorrules 的协作规则
 
 ```markdown
 ## 多智能体协作（AntLegion）
-- 动手前先查总线；某任务的 task.todo 已被认领就换别的活。
-- 干活前先认领（antlegion_claim）；只有赢了才继续。输掉认领是常态——换下一个。
-- 完成后解决事实（antlegion_resolve）并附上产出。绝不只用散文宣布完工。
-- 把重要观察发布成事实，让其他 agent 能够反应——别囤上下文。
+- 动手前先 `alctl read` 查总线；某任务的 task.todo 已被认领就换别的活。
+- 干活前先认领（`alctl claim <id>`）；只有退出码为 0 才继续。输掉认领是常态——换下一个。
+- 完成后 `alctl resolve <id>` 并附上产出。绝不只用散文宣布完工。
+- 把重要观察发布成事实（`alctl publish`），让其他 agent 能够反应——别囤上下文。
 ```
 
 ### 双窗口实验（5 分钟）
 
-开两个 Claude Code 窗口，都挂上 MCP，然后在**窗口 A**：
+开两个 PATH 上有 `alctl` 的 agent shell，都指向同一条总线，然后在**窗口 A**：
 
-> 发布一条 task.todo 事实：{"title": "写一首关于全序的俳句"}——然后认领它并开始工作。
+> 发布一条 task.todo 事实——`alctl publish task.todo '{"title": "写一首关于全序的俳句"}'`——然后认领它（`alctl claim <id>`）并开始工作。
 
 紧接着在**窗口 B**：
 
-> 找到总线上最新的 task.todo 并认领它。
+> 找到总线上最新的 task.todo（`alctl read --type task.todo`）并认领它。
 
-窗口 B 会输：认领工具返回 `won: false` 并报出 A 是胜者，B 转头去干别的而不是重复劳动。这就是零锁的恰好一次——由哪条认领先落进全序决定，两个读者算出同一个结果。
+窗口 B 会输：`alctl claim` 以非零码退出并报出 A 是胜者，B 转头去干别的而不是重复劳动。这就是零锁的恰好一次——由哪条认领先落进全序决定，两个读者算出同一个结果。
 
 ## 经验证的保证
 
@@ -450,17 +431,17 @@ node dist/index.js
 
 ```
  客户端
- ┌──────────────────┐  ┌───────────────┐  ┌────────────────────┐
- │  ClientV2 (SDK)  │  │  alctl CLI    │  │  MCP stdio 适配器  │
- │  client.ts       │  │  cli.ts       │  │  mcp.ts            │
- │  - publish       │  │  - publish    │  │  - antlegion_*     │
- │  - claim/resolve │  │  - claim      │  │    tools (7)       │
- │  - trust/state   │  │  - tail/info  │  │                    │
- └────────┬─────────┘  └──────┬────────┘  └─────────┬──────────┘
-          │                   │                      │
-          └───────────────────┴──────────────────────┘
-                              │ HTTP (POST /facts · GET /facts)
-                              ▼
+ ┌──────────────────┐  ┌───────────────┐
+ │  ClientV2 (SDK)  │  │  alctl CLI    │
+ │  client.ts       │  │  cli.ts       │
+ │  - publish       │  │  - publish    │
+ │  - claim/resolve │  │  - claim      │
+ │  - trust/state   │  │  - tail/info  │
+ └────────┬─────────┘  └──────┬────────┘
+          │                   │
+          └─────────┬─────────┘
+                    │ HTTP (POST /facts · GET /facts)
+                    ▼
  ┌────────────────────────────────────────────────────────────────┐
  │  server.ts（Hono，轻量线协议层）                               │
  │  POST /facts · GET /facts[?since&type&author&refs.*]           │
@@ -507,7 +488,8 @@ antlegion-platform/
 ├── Dockerfile              ← docker build . && docker run -p 28090:28090 …
 ├── ant/                    ← @antlegion/ant——DCU 运行时 + dev-chain 舰队 + 看板
 ├── docs/
-│   ├── QUICKSTART.md       ← 逐步指南：服务端 + SDK + CLI + MCP
+│   ├── QUICKSTART.md       ← 逐步指南：服务端 + SDK + CLI
+│   ├── AGENT-CLI.md        ← agent 如何用 alctl 驱动总线
 │   └── EVOLUTION.md        ← v0 → v1 → v2：尝试过什么、为何改变
 └── antlegion-bus/
     ├── src/
@@ -516,7 +498,6 @@ antlegion-platform/
     │   ├── client.ts       ← ClientV2 折叠 SDK
     │   ├── server.ts       ← Hono 线协议层
     │   ├── log.ts          ← 只追加日志
-    │   ├── mcp.ts          ← MCP stdio 适配器
     │   ├── cli.ts / bin.ts ← alctl CLI
     │   ├── hash.ts         ← sha256 内容地址 + HMAC + verifySig
     │   ├── canonical.ts    ← stableJsonStringify（兼容 Python 浮点格式）
@@ -544,7 +525,7 @@ antlegion-platform/
 - [x] 只追加日志，支持 `appendfsync always|everysec|no` + BGREWRITEAOF 风格压缩
 - [x] 读者折叠 SDK：`lifecycle`、`trust`、`supersession`、`causation`
 - [x] `alctl` CLI — redis-cli 的对应物
-- [x] MCP stdio 适配器——一行命令接入任何支持 MCP 的 Agent
+- [x] agent 经 `alctl` 从 shell 驱动总线——全折叠动词对等，无需按集成写适配器（`docs/AGENT-CLI.md`）
 - [x] §5 追加时的因果深度上限强制
 - [x] §4 日志恢复时的签名校验，`sig_failures` 通过 `/info` 暴露
 - [x] 跨语言一致性向量——哈希 + 折叠互操作证明，配套独立 Python 校验器

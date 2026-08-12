@@ -11,7 +11,7 @@ Agent 发布、读取、认领、解决不可变的内容寻址事实，从不�
 协调（恰好一次的认领、信任、取代、因果）从单一全序中涌现，
 以纯**读者折叠**在客户端计算——总线本身保持无状态。
 
-本包是完整实现：可信内核（HTTP 服务器）、折叠 SDK、`alctl` CLI、MCP stdio 适配器。
+本包是完整实现：可信内核（HTTP 服务器）、折叠 SDK、`alctl` CLI。
 
 ## 快速上手
 
@@ -21,14 +21,17 @@ Agent 发布、读取、认领、解决不可变的内容寻址事实，从不�
 npx @antlegion/bus        # → http://localhost:28090
 ```
 
-**2. 给任何支持 MCP 的 agent 装上事实总线工具**（Claude Code、Cursor、Cline……）：
+**2. 把你的 agent 指向总线**（Claude Code、Cursor、Codex CLI……）。agent 通过
+`alctl` CLI 驱动总线——每个动词对应一次折叠调用：
 
 ```bash
-claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp
+export ANTLEGION_BUS_URL=http://localhost:28090    # 另加 ANTLEGION_AUTHOR=my-agent
+npx -p @antlegion/bus alctl read --type 'task.*'   # 再 claim / resolve
 ```
 
-两个这样接入的 agent 仅通过事实流即可协作：一个发布 `task.todo` 事实，
-另一个认领并解决——恰好一次，没有编排器。
+两个驱动 `alctl` 的 agent 仅通过事实流即可协作：一个发布 `task.todo` 事实，
+另一个认领并解决——恰好一次，没有编排器。完整 agent 指南见
+[`../docs/AGENT-CLI.md`](../docs/AGENT-CLI.zh-CN.md)。
 
 **3. 用 `alctl` 从终端操作**：
 
@@ -63,7 +66,6 @@ curl http://localhost:28090/info | jq
 curl "http://localhost:28090/facts?since=0" | jq
 
 node dist/bin.js info          # alctl CLI（需先 build）
-npm run mcp                    # MCP stdio 适配器（需先 build）
 npm run bench                  # 吞吐 benchmark（进程内约 16 万 append/s）
 ```
 
@@ -78,13 +80,12 @@ npm run bench                  # 吞吐 benchmark（进程内约 16 万 append/s
 | `ANTLEGION_BUS_SECRET` | 每次启动随机生成 | HMAC 签名密钥；**设为稳定值**以便重启后签名仍可验证 |
 | `ANTLEGION_MAX_DEPTH` | `64` | 因果链深度上限（§5 安全规则） |
 
-客户端（`alctl` CLI、SDK、MCP 适配器）：
+客户端（`alctl` CLI、SDK）：
 
 | 变量 | 默认值 | 用途 |
 |---|---|---|
-| `ANTLEGION_BUS_URL` | `http://localhost:28090` | CLI / SDK / MCP 适配器连接的总线地址 |
+| `ANTLEGION_BUS_URL` | `http://localhost:28090` | CLI / SDK 连接的总线地址 |
 | `ANTLEGION_AUTHOR` | `<系统用户名>@<主机名>` | CLI 身份；`--author <名字>` 可按命令覆盖 |
-| `ANTLEGION_AGENT_NAME` | `<系统用户名>@<主机名>` | MCP 适配器身份（启动时打印到 stderr） |
 
 `alctl` 在 stdout 输出机器可读的 JSON（如 `{"id":…,"seq":…,"deduped":…}`、
 `{"won":…,"winner":…}`、`{"state":…,"owner":…}`），人类可读的错误走 stderr 并以
@@ -108,8 +109,7 @@ python3 conformance/verify.py    # 独立 Python 重新实现；0 失败 = 跨�
 
 ## 技术栈
 
-Node.js ≥ 18、TypeScript 5.x、Hono、`@hono/node-server`、
-`@modelcontextprotocol/sdk`、Vitest。
+Node.js ≥ 18、TypeScript 5.x、Hono、`@hono/node-server`、Vitest。
 
 ## 许可证
 

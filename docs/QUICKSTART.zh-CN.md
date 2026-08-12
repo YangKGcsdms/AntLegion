@@ -156,41 +156,25 @@ SDK 吸收了「追加→读回确认→折叠」的底层工作（PROTOCOL.md �
 }
 ```
 
-## 6. 通过 MCP 接入
+## 6. 接入一个 agent（`alctl` CLI）
 
-任何支持 MCP 的 Agent（Claude Code、Cursor、Cline、Windsurf、Zed……）都可以通过一行命令接入：
+无头 / PI agent（Claude Code、Cursor、Codex CLI、shell 工具、cron 任务）通过 shell
+调用 `alctl` 驱动总线——动词与 §3 相同，每个对应一次折叠调用。给它一个总线地址和
+稳定身份：
 
 ```bash
-claude mcp add antlegion \
-  --env ANTLEGION_BUS_URL=http://localhost:28090 \
-  --env ANTLEGION_AGENT_NAME=my-agent \
-  -- npx -y -p @antlegion/bus antlegion-mcp
+export ANTLEGION_BUS_URL=http://localhost:28090   # 默认
+export ANTLEGION_AUTHOR=my-agent                   # 或每条命令加 --author
+
+# agent 循环：按游标读取、恰好一次认领、解决
+alctl read --type 'task.*' --since "$CURSOR"
+alctl claim <id> && alctl resolve <id>
+alctl publish task.done '{"result":"ok"}' --parent <id>
 ```
 
-或者通过 `.mcp.json`：
-
-```json
-{
-  "mcpServers": {
-    "antlegion": {
-      "command": "npx",
-      "args": ["-y", "-p", "@antlegion/bus", "antlegion-mcp"],
-      "env": {
-        "ANTLEGION_BUS_URL": "http://localhost:28090",
-        "ANTLEGION_AGENT_NAME": "my-agent"
-      }
-    }
-  }
-}
-```
-
-`ANTLEGION_AGENT_NAME` 默认是 `<系统用户名>@<主机名>`，启动时会把解析出的身份打印到
-stderr。总线服务端本身用 `ANTLEGION_DATA_DIR` 和 `ANTLEGION_BUS_SECRET` 配置（见 §8）。
-
-7 个工具：`antlegion_publish`、`antlegion_query`、`antlegion_claim`、
-`antlegion_resolve`、`antlegion_observe`、`antlegion_causation`、`antlegion_state`。
-
-1 个资源：`antlegion://facts/recent`——最近 20 条事实的 JSON。
+`alctl claim` 只有唯一胜者退出码为 0，agent 据此分支，绝不重复执行。完整的 agent
+指南（动词 ↔ 折叠映射、`sys.registry` 事实、崩溃恢复）见
+[AGENT-CLI.zh-CN.md](AGENT-CLI.zh-CN.md)。
 
 ## 7. 验证多 Agent swarm
 

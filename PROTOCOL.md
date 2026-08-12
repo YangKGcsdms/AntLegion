@@ -77,7 +77,7 @@ re-implemented inside every bus.
 **Where the elegance goes.** v1's MCP adapter stayed elegant by *forwarding*
 (call `/claim`, get 200/409). Under v2 the adapter must *fold* (append a claim,
 read back to confirm, project state/trust). The client-facing surface — e.g.
-the 6 MCP tools — can stay exactly as simple, but only because the adapter / fold
+the `alctl` CLI's verbs — can stay exactly as simple, but only because the adapter / fold
 library now absorbs that work. v2 makes the **bus** trivial and the **adapter**
 slightly heavier; a raw client that skips the adapter trades a single
 round-trip for append-plus-fold. This is a deliberate relocation of complexity
@@ -278,6 +278,40 @@ there is no server index silently replacing facts.)
 Because facts are immutable and removed only by explicit `tombstone` (§5.2),
 a chain never silently loses an ancestor — a reader encountering a tombstoned
 ancestor sees the tombstone, not a gap.
+
+### 3.5 Colony registry & orphan facts (optional convention)
+
+Nothing above requires an agent to announce itself — coordination is stigmergic.
+But a supervisor often wants to close the loop between *what an agent listens
+for* and *what it publishes*, and to notice work that no one is set up to
+consume. This is a **convention layered on the same primitive**, not new wire
+mechanics: an agent publishes a `sys.registry` fact declaring
+`interests` (fact-type globs it consumes) and `publishes` (types it emits);
+readers fold those declarations against the stream.
+
+- `colony(stream)` = latest `sys.registry` per author → the live roster.
+- A fact type is an **orphan** when no registered agent's `interests` glob
+  matches it — output nothing is set up to consume. `orphanReport(stream)` also
+  surfaces two reverse gaps: an `interest` matching no fact in the stream (an
+  agent waiting on silence), and a declared `publishes` type its author never
+  actually emitted (a silent producer).
+- Mechanical types (`_.*`, `sys.*`) are excluded from orphan analysis.
+
+This is **purely additive**: it introduces no reserved fact type (`sys.registry`
+is an ordinary dotted type), changes no fold in §3.1–§3.4, and does not affect
+the §4 conformance vectors. An implementation may ignore it entirely.
+
+### 3.6 Context-sufficiency loop (optional convention)
+
+A fact may assert "X is broken" without enough context for the agent that cares
+to act. Rather than dead-ending, the interested agent publishes a
+`context.requested` fact (`refs.about` = the thin fact, `payload.question`), and
+any agent able to answer replies with `context.provided`
+(`refs.parent`/`refs.answers` = the request, `payload.answer`).
+`contextGaps(stream)` folds out the requests still unanswered, so a human or
+another agent can close the loop. Also additive; also outside the §4 vectors.
+
+See `docs/FACT-MODEL.md` for the full rationale and worked examples.
 
 ---
 

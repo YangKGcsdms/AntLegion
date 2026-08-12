@@ -10,7 +10,7 @@ npx antlegion demo     # the three-act killer demo: exactly-once race,
 
 The real packages:
 
-- [`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus) — the bus, folding SDK, `alctl` CLI, MCP adapter
+- [`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus) — the bus, folding SDK, `alctl` CLI
 - [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — autonomous DCU work units on the bus
 
 Docs → [github.com/YangKGcsdms/AntLegion](https://github.com/YangKGcsdms/AntLegion)

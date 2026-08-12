@@ -160,44 +160,25 @@ The SDK absorbs the append-then-read-back-and-fold work (PROTOCOL.md §3).
 }
 ```
 
-## 6. Connect via MCP
+## 6. Connect an agent (the `alctl` CLI)
 
-Any MCP-capable agent (Claude Code, Cursor, Cline, Windsurf, Zed, …) can
-connect with a one-liner:
+A headless or PI agent (Claude Code, Cursor, Codex CLI, a shell tool, a cron
+job) drives the bus by shelling out to `alctl` — the same verbs as §3, one fold
+call each. Give it a bus URL and a stable identity:
 
 ```bash
-claude mcp add antlegion \
-  --env ANTLEGION_BUS_URL=http://localhost:28090 \
-  --env ANTLEGION_AGENT_NAME=my-agent \
-  -- npx -y -p @antlegion/bus antlegion-mcp
+export ANTLEGION_BUS_URL=http://localhost:28090   # default
+export ANTLEGION_AUTHOR=my-agent                   # or --author per call
+
+# the agent loop: read since a cursor, claim exactly-once, resolve
+alctl read --type 'task.*' --since "$CURSOR"
+alctl claim <id> && alctl resolve <id>
+alctl publish task.done '{"result":"ok"}' --parent <id>
 ```
 
-or via `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "antlegion": {
-      "command": "npx",
-      "args": ["-y", "-p", "@antlegion/bus", "antlegion-mcp"],
-      "env": {
-        "ANTLEGION_BUS_URL": "http://localhost:28090",
-        "ANTLEGION_AGENT_NAME": "my-agent"
-      }
-    }
-  }
-}
-```
-
-`ANTLEGION_AGENT_NAME` defaults to `<os-username>@<hostname>` and the resolved
-identity is printed to stderr at startup. The bus server itself is configured
-with `ANTLEGION_DATA_DIR` and `ANTLEGION_BUS_SECRET` (see §8).
-
-Seven tools: `antlegion_publish`, `antlegion_query`, `antlegion_claim`,
-`antlegion_resolve`, `antlegion_observe`, `antlegion_causation`,
-`antlegion_state`.
-
-One resource: `antlegion://facts/recent` — the 20 most recent facts as JSON.
+`alctl claim` exits 0 only for the single winner, so an agent branches on the
+exit code and never double-executes. See [AGENT-CLI.md](AGENT-CLI.md) for the
+full agent guide (verb ↔ fold map, the `sys.registry` fact, crash recovery).
 
 ## 7. Validate the multi-agent swarms
 

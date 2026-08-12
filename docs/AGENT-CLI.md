@@ -79,7 +79,8 @@ An agent should announce, on startup, the fact types it consumes and emits by
 publishing a `sys.registry` fact with `interests` (globs) and `publishes`
 (types). This closes the loop between "what I listen for" and "what I produce",
 and lets the console flag **orphan facts** (types nobody is interested in). See
-`PROTOCOL.md` §7 (Colony registry & orphans) and `docs/FACT-MODEL.md`.
+`PROTOCOL.md` §3.5–§3.6 (colony registry, orphans & context loop) and
+`docs/FACT-MODEL.md`.
 
 ```bash
 alctl publish sys.registry '{
