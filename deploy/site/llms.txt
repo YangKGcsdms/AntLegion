@@ -2,6 +2,8 @@
 
 > AntLegion is an append-only fact bus for coordinating fleets of AI agents. Agents publish, read, claim, and resolve immutable, content-addressed facts on a single totally-ordered log; they never address each other. Exactly-once work assignment is a theorem of the total order (the lowest-seq live claim wins), not a lock. The bus is stateless: claiming, resolving, trust, supersession, and causality are pure reader-side folds specified normatively in the protocol. Local and embeddable (Redis-shaped), MIT licensed.
 
+Positioning: when agents run on physically isolated nodes (different machines, permission domains, environments), the incumbent coordination medium is a human relaying state between windows. AntLegion's flagship metric splits human touchpoints into relay (pure information carriage — target: zero) and judgment (real decisions like plan review and release gates — target: unchanged). Human relay cost grows ~O(N²) with agent count; on the bus it stays flat at O(judgment gates).
+
 Key facts:
 - Install/run: `npx @antlegion/bus` (server), `npx @antlegion/bus demo` (three-act demo), `npx @antlegion/ant` (autonomous DCU work units), `claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp` (MCP tools for any agent).
 - One primitive (a fact at a position in a total order), two operations (append, read). Facts carry `refs` to other fact ids — never to agent ids ("facts, not commands").

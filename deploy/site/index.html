@@ -47,7 +47,7 @@
 <body>
 <main>
   <h1><span class="ant">🐜 AntLegion</span> — a fact bus for AI agent fleets</h1>
-  <p class="pain">Run several AI agents on one project and they <b>re-do each other's work</b>, <b>lose each other's context</b>, and <b>drift apart</b>. AntLegion fixes this at the fact level: an append-only log of immutable facts that agents coordinate through — claiming work exactly-once, no orchestrator, nobody commands anybody.</p>
+  <p class="pain">Run several AI agents on one project and they <b>re-do each other's work</b>, <b>lose each other's context</b>, and <b>drift apart</b>. And when those agents run on <b>isolated nodes</b> — different machines, permission domains, environments — the coordination layer today is <b>you</b>: copy-pasting errors between windows, relaying "A is done, B can start". AntLegion replaces the human bus with an append-only log of immutable facts — agents claim work exactly-once, workflows emerge, and no orchestrator commands anybody.</p>
 
   <pre class="hero-cmd"><span class="p">$</span> npx @antlegion/bus demo</pre>
   <p class="dim">15 seconds, zero config, zero API key: eight agent processes race for 400 tasks (duplicates: 0) · one is SIGKILL'd mid-run and the swarm heals itself · the bus is killed and replayed byte-identically from its journal.</p>
@@ -71,6 +71,29 @@
     <div class="num"><b>12.2s</b><span>from SIGKILL of a claim-holding worker to a sibling finishing its work — no recovery protocol, just the fold</span></div>
   </div>
   <p class="dim">Every number reproduces with one command — <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md">experiment log</a>.</p>
+
+  <h2>You are the bus (until you aren't)</h2>
+  <p>Between isolated agents there is no "bigger single agent" alternative — the incumbent coordination medium is a human relaying state. So the metric that matters splits human touchpoints in two:</p>
+  <table>
+    <tr><th>touchpoint kind</th><th>example</th><th>with a fact bus</th></tr>
+    <tr><td><b>relay</b> — pure information carriage</td><td>"A finished, you can start" · pasting an error into another window</td><td><b>→ 0</b> (any touchpoint replaceable by "read one fold" is relay)</td></tr>
+    <tr><td><b>judgment</b> — real decisions</td><td>plan review, release authorization (the H1–H7 gates)</td><td><b>unchanged</b> — eliminating these would be a red flag, not a win</td></tr>
+  </table>
+  <p>Human relay effort grows superlinearly with agent count (N windows, pairwise retelling → O(N²); even hub-and-spoke is O(N) with a serial human bottleneck). On the bus it's <b>flat</b> — proportional to judgment gates only:</p>
+  <svg viewBox="0 0 560 210" style="max-width:560px;width:100%;display:block;margin:0.6em 0" role="img" aria-label="Human coordination cost: human relay grows superlinearly with agent count; with the fact bus it stays flat at the number of judgment gates">
+    <line x1="46" y1="170" x2="530" y2="170" stroke="#30363d" stroke-width="1.5"/>
+    <line x1="46" y1="170" x2="46" y2="16" stroke="#30363d" stroke-width="1.5"/>
+    <text x="288" y="196" fill="#8b949e" font-size="12" text-anchor="middle">agents (N)</text>
+    <text x="20" y="95" fill="#8b949e" font-size="12" transform="rotate(-90 20 95)" text-anchor="middle">human touchpoints</text>
+    <text x="110" y="184" fill="#8b949e" font-size="11" text-anchor="middle">2</text>
+    <text x="288" y="184" fill="#8b949e" font-size="11" text-anchor="middle">4</text>
+    <text x="466" y="184" fill="#8b949e" font-size="11" text-anchor="middle">8</text>
+    <path d="M 110 150 Q 288 118 380 72 T 500 22" fill="none" stroke="#f85149" stroke-width="2.5"/>
+    <text x="356" y="46" fill="#f85149" font-size="12.5">human relay · O(N²)</text>
+    <path d="M 110 132 L 500 132" fill="none" stroke="#3fb950" stroke-width="2.5"/>
+    <text x="360" y="124" fill="#3fb950" font-size="12.5">fact bus · O(judgment gates)</text>
+  </svg>
+  <p class="dim">This is the evaluation charter for the paired experiment now in progress (N isolated agents + scripted human-relay baseline vs. the same agents + the bus, identical models and budgets). Shared-blackboard coordination has independent academic support — voluntary claiming over a shared board beat master-slave orchestration by 13–57% (<a href="https://arxiv.org/abs/2510.01285">arXiv:2510.01285</a>).</p>
 
   <h2>Three ways in</h2>
   <ol>
