@@ -22,6 +22,11 @@ ENV ANTLEGION_FSYNC=everysec
 COPY antlegion-bus/package*.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+# The read-only ops pages the server serves at /console and /dashboard. Without
+# these the routes 404 with "not bundled in this install" — the same files the
+# npm package ships (package.json "files"), so image and package stay in sync.
+COPY antlegion-bus/console ./console
+COPY antlegion-bus/demo ./demo
 VOLUME ["/data"]
 EXPOSE 28090
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
