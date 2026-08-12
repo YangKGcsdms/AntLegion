@@ -20,8 +20,8 @@
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"A fact bus for autonomous agents — append-only, totally-ordered coordination infrastructure with exactly-once claiming and causal chains.","url":"https://antlegion.dev","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
 </script>
 <style>
-  :root{color-scheme:light dark;--bg:#f9f9f7;--card:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--ink3:#898781;--line:#e1e0d9;--acc:#2a78d6;--code:#f0efec}
-  @media (prefers-color-scheme:dark){:root{--bg:#0d0d0d;--card:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--ink3:#898781;--line:#2c2c2a;--acc:#3987e5;--code:#232322}}
+  :root{color-scheme:light dark;--bg:#f9f9f7;--card:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--ink3:#898781;--line:#e1e0d9;--acc:#b45309;--code:#f0efec}
+  @media (prefers-color-scheme:dark){:root{--bg:#0d0d0d;--card:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--ink3:#898781;--line:#2c2c2a;--acc:#f0a020;--code:#232322}}
   *{box-sizing:border-box;margin:0}
   body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65}
   .wrap{max-width:880px;margin:0 auto;padding:28px 24px 80px}
@@ -67,28 +67,28 @@
 <div class="wrap">
   <nav>
     <svg class="mark" viewBox="0 0 64 64" fill="none" aria-label="AntLegion logo">
-      <line x1="4" y1="46" x2="60" y2="46" stroke="currentColor" stroke-opacity="0.32" stroke-width="3" stroke-linecap="round"/>
-      <line x1="24" y1="46" x2="40" y2="46" stroke="var(--acc)" stroke-width="3" stroke-linecap="round"/>
-      <path d="M20 38.5 L16 45 M26 36 L24 45 M31.5 35.5 L34.5 45" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-      <circle cx="19" cy="31" r="8.5" fill="currentColor"/>
-      <circle cx="32" cy="29" r="5.5" fill="var(--acc)"/>
-      <circle cx="42" cy="26" r="4.2" fill="currentColor"/>
-      <path d="M44.8 23 Q46.5 17.5 51.5 14.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-      <path d="M46 25 Q50.5 21.5 55.5 21.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+      <line x1="3" y1="47" x2="61" y2="47" stroke="currentColor" stroke-opacity="0.28" stroke-width="2.6" stroke-linecap="round"/>
+      <line x1="9.5" y1="47" x2="46" y2="47" stroke="var(--acc)" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M14 39.5 L12.5 45.7 M29.5 38.2 L27.8 45.7 M34.8 37.5 L39 45.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="16.5" cy="30" r="10" fill="currentColor"/>
+      <circle cx="31.6" cy="32.8" r="6.4" fill="var(--acc)"/>
+      <circle cx="41.2" cy="36.2" r="4.5" fill="currentColor"/>
+      <path d="M43.2 32.6 Q49 24.5 55 21.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+      <path d="M44.8 34.6 Q52.5 29.5 59 29.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
     </svg>
     <span class="word">AntLegion</span>
     <span class="links">
-      <a href="https://github.com/YangKGcsdms/antlegion-platform">GitHub</a>
-      <a href="https://github.com/YangKGcsdms/antlegion-platform/blob/master/PROTOCOL.md">Protocol</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Protocol</a>
       <a href="https://www.npmjs.com/package/@antlegion/bus">npm</a>
-      <a href="https://github.com/YangKGcsdms/antlegion-platform/blob/master/README.zh-CN.md">中文</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/README.zh-CN.md">中文</a>
     </span>
   </nav>
 
   <h1>A fact bus for autonomous agents</h1>
   <p class="tag">Local, embeddable infrastructure where agents coordinate by sharing <b>immutable facts</b> — never by sending each other commands. No orchestrator. Work doesn't duplicate, doesn't drop, and every outcome traces back to its origin.</p>
   <div class="cta">
-    <a class="btn p" href="https://github.com/YangKGcsdms/antlegion-platform">Star on GitHub</a>
+    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion">Star on GitHub</a>
     <a class="btn s" href="https://www.npmjs.com/package/@antlegion/bus">@antlegion/bus</a>
     <a class="btn s" href="https://www.npmjs.com/package/@antlegion/ant">@antlegion/ant</a>
   </div>
@@ -99,10 +99,10 @@
 <b>npx @antlegion/ant init</b>           <i># guided setup for a worker ant (DCU)</i>
 <b>npx @antlegion/ant start</b>          <i># it wakes up when facts it cares about appear</i></pre>
     <p>Or watch four containers coordinate a full dev pipeline with one command — 25 requirements, 100 stage loops, no orchestrator:</p>
-<pre><b>git clone</b> https://github.com/YangKGcsdms/antlegion-platform && cd antlegion-platform/deploy/mvp
+<pre><b>git clone</b> https://github.com/YangKGcsdms/AntLegion && cd AntLegion/deploy/mvp
 <b>docker compose up</b> --build --exit-code-from mvp</pre>
     <p>Already running Claude Code or Cursor? They can join the same bus, via MCP:</p>
-<pre><b>claude mcp add</b> antlegion -- npx -y antlegion-mcp</pre>
+<pre><b>claude mcp add</b> antlegion -- npx -y -p @antlegion/bus antlegion-mcp</pre>
   </div>
 
   <div class="sec">
@@ -135,18 +135,18 @@
 
   <div class="sec">
     <h2>FAQ</h2>
-    <details><summary>How do I share state between multiple Claude Code / Cursor sessions?</summary><p>Start the bus (<code>npx antlegion</code>), then add the MCP adapter to each session (<code>claude mcp add antlegion -- npx -y antlegion-mcp</code>). Every session can publish facts, claim work before touching it, and fold the same log — so two sessions never grab the same task or redo each other's work.</p></details>
+    <details><summary>How do I share state between multiple Claude Code / Cursor sessions?</summary><p>Start the bus (<code>npx antlegion</code>), then add the MCP adapter to each session (<code>claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp</code>). Every session can publish facts, claim work before touching it, and fold the same log — so two sessions never grab the same task or redo each other's work.</p></details>
     <details><summary>Is this a message queue?</summary><p>No. Queues deliver commands to consumers and forget. AntLegion stores immutable facts forever (with compaction), in one total order, so any reader at any time can reconstruct who claimed what, what superseded what, and how an outcome came to be. Coordination semantics live in reader-side folds, not in the broker.</p></details>
     <details><summary>Does it lock files?</summary><p>No. Conflicts are eliminated one layer earlier: agents claim a unit of work before acting, and exactly-once claiming guarantees a single owner. If nobody edits the same thing, nothing needs locking.</p></details>
     <details><summary>What happens when an agent crashes mid-task?</summary><p>Its claim expires (bus-stamped time, not the agent's clock), and any surviving agent wins the re-claim and takes over. Recovery is deterministic: replay the log, get the same world.</p></details>
     <details><summary>Which agents can join?</summary><p>Native worker ants via <code>@antlegion/ant</code> (script or LLM-powered acts), anything MCP-speaking (Claude Code, Cursor, Cline, Codex CLI, Windsurf, Zed…), and anything that can speak HTTP or import the TypeScript SDK.</p></details>
-    <details><summary>Is it production-ready?</summary><p>Alpha. The core protocol is stable and verified — 170 tests, cross-language conformance vectors, ~160k appends/s — but it's designed for trusted environments (like Redis): keep it on localhost or a private network, set a stable secret.</p></details>
+    <details><summary>Is it production-ready?</summary><p>Alpha. The core protocol is stable and verified — 218 tests, cross-language conformance vectors, ~160k appends/s — but it's designed for trusted environments (like Redis): keep it on localhost or a private network, set a stable secret.</p></details>
   </div>
 
   <footer>
-    <a href="https://github.com/YangKGcsdms/antlegion-platform">GitHub</a>
-    <a href="https://github.com/YangKGcsdms/antlegion-platform/blob/master/PROTOCOL.md">Protocol spec</a>
-    <a href="https://github.com/YangKGcsdms/antlegion-platform/blob/master/README.zh-CN.md">中文</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Protocol spec</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/README.zh-CN.md">中文</a>
     <a href="/llms.txt">llms.txt</a>
     <span>MIT · built by Carter.Yang</span>
   </footer>

@@ -5,12 +5,12 @@
 ## Quick start
 - Start the bus: `npx antlegion` (HTTP on localhost:28090; binds loopback by default)
 - Worker ants (DCUs): `npx @antlegion/ant init` then `npx @antlegion/ant start`
-- Join existing agents via MCP: `claude mcp add antlegion -- npx -y antlegion-mcp`
+- Join existing agents via MCP: `claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp`
 - Four-container demo: `deploy/mvp` in the repo, `docker compose up --build --exit-code-from mvp`
 
 ## Key resources
-- Repo: https://github.com/YangKGcsdms/antlegion-platform
-- Protocol spec: https://github.com/YangKGcsdms/antlegion-platform/blob/master/PROTOCOL.md
+- Repo: https://github.com/YangKGcsdms/AntLegion
+- Protocol spec: https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md
 - npm: @antlegion/bus (the bus + CLI `alctl` + MCP adapter), @antlegion/ant (DCU runtime), antlegion (entry alias)
 - License: MIT
 

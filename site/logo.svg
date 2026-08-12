@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <!-- AntLegion mark: an ant walking the bus line; the blue segment is the fact it claimed -->
-  <line x1="4" y1="46" x2="60" y2="46" stroke="currentColor" stroke-opacity="0.32" stroke-width="3" stroke-linecap="round"/>
-  <line x1="24" y1="46" x2="40" y2="46" stroke="#2a78d6" stroke-width="3" stroke-linecap="round"/>
-  <path d="M20 38.5 L16 45 M26 36 L24 45 M31.5 35.5 L34.5 45" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-  <circle cx="19" cy="31" r="8.5" fill="currentColor"/>
-  <circle cx="32" cy="29" r="5.5" fill="#2a78d6"/>
-  <circle cx="42" cy="26" r="4.2" fill="currentColor"/>
-  <path d="M44.8 23 Q46.5 17.5 51.5 14.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-  <path d="M46 25 Q50.5 21.5 55.5 21.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  <!-- AntLegion mark: an ant head-down on the bus line, reading the fact it claimed (amber) -->
+  <line x1="3" y1="47" x2="61" y2="47" stroke="currentColor" stroke-opacity="0.28" stroke-width="2.6" stroke-linecap="round"/>
+  <line x1="9.5" y1="47" x2="46" y2="47" stroke="#d97706" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M14 39.5 L12.5 45.7 M29.5 38.2 L27.8 45.7 M34.8 37.5 L39 45.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="16.5" cy="30" r="10" fill="currentColor"/>
+  <circle cx="31.6" cy="32.8" r="6.4" fill="#d97706"/>
+  <circle cx="41.2" cy="36.2" r="4.5" fill="currentColor"/>
+  <path d="M43.2 32.6 Q49 24.5 55 21.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+  <path d="M44.8 34.6 Q52.5 29.5 59 29.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
 </svg>
