@@ -123,9 +123,17 @@ async function runStart(): Promise<void> {
     ...(cfg.identity ? { identity: cfg.identity } : {}),
     ...(cfg.spawn ? { spawn: cfg.spawn } : {}),
   });
+  if (cfg.schedules && cfg.schedules.length > 0) {
+    const { schedulerDCU } = await import("./dcus/scheduler-dcu.js");
+    fleet.push(schedulerDCU(cfg.busUrl, cfg.schedules, cfg.identity));
+  }
   const loops = fleet.map((spec) => runDCU(spec));
   loops.push(runIngestor()); // mirror the workspace so req dirs/docs become facts
   await Promise.all(loops);
+  // Loops are done (SIGTERM/SIGINT drained) but the ingestor's fs.watch and
+  // rescan timers still hold the event loop — exit explicitly so `ant stop`
+  // (SIGTERM from the daemon) actually terminates the colony.
+  process.exit(0);
 }
 
 async function runBoard(): Promise<void> {
@@ -199,9 +207,14 @@ usage: ant <command>
                               --no-fleet feeds/scores an external fleet
 
   init                        guided setup → ./ant.config.json (bus URL,
-                              workspace, act mode llm|simulated, auto-gate)
+                              workspace, act mode llm|simulated|spawn,
+                              colony identity, auto-gate)
   start                       resident colony from the config: fleet +
-                              workspace ingestor; wakes on facts, sleeps after
+                              workspace ingestor (+ scheduler if configured);
+                              wakes on facts, sleeps after
+  start --daemon              detach the colony; pid/log → ./.ant/
+  stop | status | logs [-f]   manage the detached colony
+  launchd                     print a launchd plist (macOS boot autostart)
 
 config: ./ant.config.json (optional; sensible defaults apply)
 env:    ANTLEGION_BUS_URL (default http://localhost:28090) · BOARD_PORT (28091)
@@ -236,7 +249,30 @@ switch (cmd) {
       .catch((err) => { console.error(err instanceof Error ? err.message : err); process.exit(1); });
     break;
   case "start":
-    runStart().catch((err) => { console.error(err); process.exit(1); });
+    if (process.argv.includes("--daemon")) {
+      import("./daemon.js")
+        .then((m) => m.startDaemon()).then((code) => process.exit(code))
+        .catch((err) => { console.error(err); process.exit(1); });
+    } else {
+      runStart().catch((err) => { console.error(err); process.exit(1); });
+    }
+    break;
+  case "stop":
+    import("./daemon.js").then((m) => m.stopDaemon()).then((code) => process.exit(code))
+      .catch((err) => { console.error(err); process.exit(1); });
+    break;
+  case "status":
+    import("./daemon.js").then((m) => m.statusDaemon()).then((code) => process.exit(code))
+      .catch((err) => { console.error(err); process.exit(1); });
+    break;
+  case "logs":
+    import("./daemon.js").then((m) => m.logsDaemon(process.argv.includes("-f")))
+      .then((code) => process.exit(code))
+      .catch((err) => { console.error(err); process.exit(1); });
+    break;
+  case "launchd":
+    import("./daemon.js").then((m) => m.printLaunchd()).then((code) => process.exit(code))
+      .catch((err) => { console.error(err); process.exit(1); });
     break;
   case "--version":
   case "-v":
