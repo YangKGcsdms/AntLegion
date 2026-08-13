@@ -25,16 +25,59 @@ export interface WatchRoot {
   origin: string;
 }
 
+/** Colony identity (计划 13 §三). All optional — absent keeps legacy behavior. */
+export interface IdentityConfig {
+  /** Colony name → author suffix: dcu-dev@devchain becomes dcu-dev@{colony}. */
+  colony?: string;
+  /** Only claim work whose req fact carries one of these origin tags. */
+  origins?: string[];
+  /** Structured claim-side predicate on the trigger fact's payload
+   * (NOT a JSON substring match — key order / nesting would break that). */
+  filter?: { path: string; eq: unknown };
+}
+
+/** Headless-agent act (计划 13 §二). Template vars in `cmd`:
+ * {cwd} {promptFile} {artifactFile} {req} {stage}. */
+export interface SpawnConfig {
+  /** e.g. "claude -p {promptFile}" / "pi --cwd {cwd} -p {promptFile}". */
+  cmd: string;
+  /** Working dir for the child; relative ⇒ colony root. Default ".". */
+  cwd?: string;
+  /** Hard kill after this many seconds (default 1800). */
+  timeoutSec?: number;
+  /** Artifact contract path (template vars {req} {stage}); relative ⇒ colony root. */
+  artifact: string;
+  /** Extra env var NAMES passed through to the child (whitelist additions).
+   * ANTLEGION_BUS_SECRET and LARK_* are never passed, even if listed. */
+  envPass?: string[];
+}
+
+/** scheduler DCU entry (计划 13 §四): publish a fact on a cron beat. */
+export interface ScheduleEntry {
+  /** Stable name — part of the deterministic nonce. */
+  name: string;
+  /** Five-field cron: "min hour dom mon dow" — numbers, wildcard, step (slash-n), lists, ranges. */
+  cron: string;
+  type: string;
+  payload?: Record<string, unknown>;
+}
+
 export interface AntConfig {
   busUrl: string;
   watchRoots: WatchRoot[];
   /** Act mode for stage workers (ant start): "llm" routes acts through the
-   * configured model via pi-ai; "simulated" needs no key. Env ANT_WORKER wins. */
-  worker?: "llm" | "simulated";
+   * configured model via pi-ai; "simulated" needs no key; "spawn" wakes a
+   * headless agent in the colony folder. Env ANT_WORKER wins. */
+  worker?: "llm" | "simulated" | "spawn";
   /** Model id for llm acts (default deepseek-v4-flash). Env ANT_LLM_MODEL wins. */
   model?: string;
   /** Auto-approve human gates (unattended). Env ANT_AUTO_GATE wins. */
   autoGate?: boolean;
+  identity?: IdentityConfig;
+  spawn?: SpawnConfig;
+  schedules?: ScheduleEntry[];
+  /** sys.heartbeat interval (default 20s; conflict window = 2×). 0 disables. */
+  heartbeatSec?: number;
 }
 
 /** Package root (board.html and friends live here) — works from src/ and dist/. */
@@ -70,13 +113,48 @@ export async function loadConfig(configPath = path.join(process.cwd(), "ant.conf
       throw new Error(`each watchRoots entry needs {root, origin} (${configPath})`);
     }
   }
+  if (raw.identity?.colony !== undefined) {
+    const c = raw.identity.colony;
+    if (typeof c !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(c)) {
+      throw new Error(`identity.colony must match [A-Za-z0-9][A-Za-z0-9_-]* (${configPath})`);
+    }
+  }
+  if (raw.worker === "spawn") {
+    if (!raw.spawn?.cmd || !raw.spawn?.artifact) {
+      throw new Error(`worker "spawn" needs spawn.{cmd, artifact} (${configPath})`);
+    }
+  }
+  for (const s of raw.schedules ?? []) {
+    if (!s.name || !s.cron || !s.type) {
+      throw new Error(`each schedules entry needs {name, cron, type} (${configPath})`);
+    }
+  }
   return {
     busUrl: envBusUrl() ?? raw.busUrl ?? DEFAULT_BUS_URL,
     watchRoots,
-    ...(raw.worker === "llm" || raw.worker === "simulated" ? { worker: raw.worker } : {}),
+    ...(raw.worker === "llm" || raw.worker === "simulated" || raw.worker === "spawn" ? { worker: raw.worker } : {}),
     ...(typeof raw.model === "string" && raw.model ? { model: raw.model } : {}),
     ...(typeof raw.autoGate === "boolean" ? { autoGate: raw.autoGate } : {}),
+    ...(raw.identity ? { identity: raw.identity } : {}),
+    ...(raw.spawn ? { spawn: raw.spawn } : {}),
+    ...(raw.schedules ? { schedules: raw.schedules } : {}),
+    ...(typeof raw.heartbeatSec === "number" ? { heartbeatSec: raw.heartbeatSec } : {}),
   };
+}
+
+/**
+ * Rewrite an author's colony suffix: colonyAuthor("dcu-dev@devchain", "projA")
+ * → "dcu-dev@projA". No colony (or no "@") ⇒ unchanged — full back-compat.
+ */
+export function colonyAuthor(base: string, colony?: string): string {
+  if (!colony) return base;
+  const at = base.indexOf("@");
+  return at === -1 ? `${base}@${colony}` : `${base.slice(0, at)}@${colony}`;
+}
+
+/** Colony residency dir (pid, logs, prompts, agent working memory). */
+export function antDir(): string {
+  return path.join(process.cwd(), ".ant");
 }
 
 /** Resolve a configured root to an absolute path (relative ⇒ cwd). */

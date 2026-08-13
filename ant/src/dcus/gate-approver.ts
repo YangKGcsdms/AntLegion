@@ -12,27 +12,31 @@
  */
 
 import type { DCUSpec } from "../runtime.js";
+import { colonyAuthor, type IdentityConfig } from "../config.js";
 import { GATE_APPROVED, SYS_REGISTRY, foldDevchain } from "../folds/devchain.js";
 import { foldOpts } from "./devchain-dcus.js";
 import { httpTransport } from "@antlegion/bus/client";
 
 export const GATE_APPROVER_AUTHOR = "dcu-gate-approver@devchain";
 
-export function gateApproverDCU(busUrl: string): DCUSpec {
+export function gateApproverDCU(busUrl: string, identity?: IdentityConfig): DCUSpec {
+  const author = colonyAuthor(GATE_APPROVER_AUTHOR, identity?.colony);
+  const colony = identity?.colony ?? "devchain";
   const approved = new Set<string>(); // inputIds approved this session (belt; the fold is suspenders)
   return {
-    name: GATE_APPROVER_AUTHOR,
-    author: GATE_APPROVER_AUTHOR,
+    name: author,
+    author,
     busUrl,
     pollMs: 1000,
     init: async (ctx) => {
       const r = await httpTransport(busUrl).append({
         type: SYS_REGISTRY,
-        author: GATE_APPROVER_AUTHOR,
+        author,
         ts: 0,
         payload: {
           domain: "devchain",
-          dcu: GATE_APPROVER_AUTHOR,
+          colony,
+          dcu: author,
           role: "gate-approver",
           worker: "deterministic",
           // interests here is a human note (gates aren't a single fact type);
@@ -43,7 +47,7 @@ export function gateApproverDCU(busUrl: string): DCUSpec {
           produces: [GATE_APPROVED],
           note: "auto-approves human gates — unattended runs only",
         },
-        nonce: `registry:devchain:${GATE_APPROVER_AUTHOR}:v2`,
+        nonce: `registry:${colony}:${author}:v3`,
       });
       ctx.log(`registry ${r.deduped ? "deduped" : "published"} (seq ${r.seq})`);
     },

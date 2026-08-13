@@ -9,6 +9,7 @@
  */
 
 import type { DCUSpec } from "../runtime.js";
+import { colonyAuthor, type IdentityConfig } from "../config.js";
 import { foldDevchain } from "../folds/devchain.js";
 import {
   CHAIN_STARVED, ESCALATE_HUMAN, WATCHDOG_AUTHOR, STARVED_AFTER_S, ESCALATE_CLAIMS,
@@ -16,14 +17,15 @@ import {
 } from "../folds/watchdog.js";
 import { foldOpts, publishRegistry } from "./devchain-dcus.js";
 
-export function watchdogDCU(busUrl: string): DCUSpec {
+export function watchdogDCU(busUrl: string, identity?: IdentityConfig): DCUSpec {
+  const author = colonyAuthor(WATCHDOG_AUTHOR, identity?.colony);
   return {
-    name: WATCHDOG_AUTHOR,
-    author: WATCHDOG_AUTHOR,
+    name: author,
+    author,
     busUrl,
     pollMs: 2000, // exceptions are slow-moving; no need to race the stage DCUs
     init: async (ctx) => {
-      await publishRegistry(busUrl, WATCHDOG_AUTHOR, null, {
+      await publishRegistry(busUrl, author, null, {
         role: "watchdog",
         listens: ["*"],
         produces: [CHAIN_STARVED, ESCALATE_HUMAN],
@@ -32,7 +34,7 @@ export function watchdogDCU(busUrl: string): DCUSpec {
           claim_churn: `同一输入 ≥${ESCALATE_CLAIMS} 次认领全部过期`,
           evidence_rejected: "artifact 证据被裁决拒绝（含游离 artifact）",
         },
-      }, ctx.log);
+      }, ctx.log, identity);
     },
     onBatch: async (_batch, ctx) => {
       const views = foldDevchain(ctx.mirror, foldOpts());

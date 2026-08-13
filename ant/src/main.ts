@@ -71,11 +71,15 @@ async function runChain(): Promise<void> {
   const cfg = await loadConfig();
   const root = dcuWorkspaceRoot(cfg);
   const autoGate = process.env.ANT_AUTO_GATE === "1" || (dcus?.includes("gate") ?? false);
+  const stageOpts = {
+    ...(cfg.identity ? { identity: cfg.identity } : {}),
+    ...(cfg.spawn ? { spawn: cfg.spawn } : {}),
+  };
   // --replica N shifts stage identities (dcu-plan-rN…) so a second process
   // joins the same bus as a SIBLING, never as a same-identity twin.
   let fleet = replica > 0
-    ? [...STAGES.map((s) => stageDCU(s, cfg.busUrl, root, replica))]
-    : devchainFleet(cfg.busUrl, root, { autoGate });
+    ? [...STAGES.map((s) => stageDCU(s, cfg.busUrl, root, replica, stageOpts))]
+    : devchainFleet(cfg.busUrl, root, { autoGate, ...stageOpts });
   if (dcus) {
     fleet = fleet.filter((spec) => {
       const short = spec.name.split("@")[0]!; // e.g. dcu-plan
@@ -105,11 +109,20 @@ async function runStart(): Promise<void> {
     console.error("error: worker mode is llm but DEEPSEEK_API_KEY is not set — export it or set worker to simulated");
     process.exit(1);
   }
+  if (process.env.ANT_WORKER === "spawn" && !cfg.spawn) {
+    console.error("error: worker mode is spawn but the config has no spawn block — see ant init");
+    process.exit(1);
+  }
   const autoGate = process.env.ANT_AUTO_GATE === "1" || (cfg.autoGate ?? false);
   const root = dcuWorkspaceRoot(cfg);
-  console.error(`[start] bus ${cfg.busUrl} · worker ${process.env.ANT_WORKER ?? "simulated"} · autoGate ${autoGate} · workspace ${root}`);
+  const colony = cfg.identity?.colony;
+  console.error(`[start] bus ${cfg.busUrl} · worker ${process.env.ANT_WORKER ?? "simulated"} · autoGate ${autoGate} · workspace ${root}${colony ? ` · colony ${colony}` : ""}`);
 
-  const fleet = devchainFleet(cfg.busUrl, root, { autoGate });
+  const fleet = devchainFleet(cfg.busUrl, root, {
+    autoGate,
+    ...(cfg.identity ? { identity: cfg.identity } : {}),
+    ...(cfg.spawn ? { spawn: cfg.spawn } : {}),
+  });
   const loops = fleet.map((spec) => runDCU(spec));
   loops.push(runIngestor()); // mirror the workspace so req dirs/docs become facts
   await Promise.all(loops);
