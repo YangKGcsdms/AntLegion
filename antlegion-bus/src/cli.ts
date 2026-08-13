@@ -64,6 +64,7 @@ const USAGE = [
   "  trust <id>              trust state of a fact",
   "  causation <id>          causation chain root→fact",
   "  colony                  registered agents (interests/publishes)",
+  "  registry                full colony directory — 板上有谁、谁听什么、谁产什么",
   "  orphans                 fact types nobody is interested in + declaration gaps",
   "  ask-context <id> <q>    request more context on a too-thin fact   [--author a]",
   "  provide-context <req-id> [json]  answer a context request         [--author a]",
@@ -206,6 +207,30 @@ export async function runCli(
 
       case "orphans": {
         write(JSON.stringify(await client.orphans()));
+        return 0;
+      }
+
+      // The governance directory (multi-colony 计划 13): fold every
+      // sys.registry into who is on the board, under which colony, listening
+      // for what, producing what, scoped how. Pure reader-side — the bus has
+      // no registrar to ask.
+      case "registry": {
+        write(JSON.stringify((await client.colony()).map((r) => {
+          const p = r.fact.payload as Record<string, unknown>;
+          return {
+            author: r.author,
+            ...(typeof p.colony === "string" ? { colony: p.colony } : {}),
+            ...(typeof p.role === "string" ? { role: p.role } : {}),
+            listens: r.interests,
+            produces: r.publishes,
+            ...(Array.isArray(p.origins) ? { origins: p.origins } : {}),
+            ...(p.filter !== undefined ? { filter: p.filter } : {}),
+            ...(typeof p.engine === "string" ? { engine: p.engine } : {}),
+            ...(typeof p.workspace === "string" ? { workspace: p.workspace } : {}),
+            ...(typeof p.worker === "string" ? { worker: p.worker } : {}),
+            seq: r.seq,
+          };
+        })));
         return 0;
       }
 

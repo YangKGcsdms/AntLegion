@@ -122,6 +122,7 @@ async function runStart(): Promise<void> {
     autoGate,
     ...(cfg.identity ? { identity: cfg.identity } : {}),
     ...(cfg.spawn ? { spawn: cfg.spawn } : {}),
+    ...(cfg.heartbeatSec !== undefined ? { heartbeatSec: cfg.heartbeatSec } : {}),
   });
   if (cfg.schedules && cfg.schedules.length > 0) {
     const { schedulerDCU } = await import("./dcus/scheduler-dcu.js");

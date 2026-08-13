@@ -379,7 +379,10 @@ export function adjudicatorDCU(busUrl: string, identity?: IdentityConfig): DCUSp
  * every stage DCU with distinct identities — a live exactly-once stress. */
 export function devchainFleet(
   busUrl: string, workspaceRoot: string,
-  opts: { autoGate?: boolean; replicas?: number; identity?: IdentityConfig; spawn?: SpawnConfig; colonyRoot?: string } = {},
+  opts: {
+    autoGate?: boolean; replicas?: number; identity?: IdentityConfig;
+    spawn?: SpawnConfig; colonyRoot?: string; heartbeatSec?: number;
+  } = {},
 ): DCUSpec[] {
   const replicas = Math.max(1, opts.replicas ?? 1);
   const stageOpts: StageDCUOpts = {
@@ -391,7 +394,8 @@ export function devchainFleet(
   for (let r = 0; r < replicas; r++) {
     fleet.push(...STAGES.map((s) => stageDCU(s, busUrl, workspaceRoot, r, stageOpts)));
   }
-  fleet.push(adjudicatorDCU(busUrl, opts.identity), watchdogDCU(busUrl, opts.identity));
+  fleet.push(adjudicatorDCU(busUrl, opts.identity), watchdogDCU(busUrl, opts.identity, opts.heartbeatSec));
   if (opts.autoGate) fleet.push(gateApproverDCU(busUrl, opts.identity));
+  if (opts.heartbeatSec !== undefined) for (const s of fleet) s.heartbeatSec = opts.heartbeatSec;
   return fleet;
 }

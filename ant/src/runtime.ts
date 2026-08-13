@@ -11,8 +11,12 @@
  * from an empty journal (head < cursor) the mirror resets and `init` re-runs.
  */
 
+import { randomUUID } from "node:crypto";
 import { ClientV2, httpTransport } from "@antlegion/bus/client";
 import type { Fact } from "@antlegion/bus/types";
+
+/** Heartbeat fact type — instance liveness, the identity-conflict fold's input. */
+export const SYS_HEARTBEAT = "sys.heartbeat";
 
 export interface DCUContext {
   client: ClientV2;
@@ -32,6 +36,13 @@ export interface DCUSpec {
   pollMs?: number;
   /** Read page size (default 500). */
   pageSize?: number;
+  /**
+   * sys.heartbeat interval in seconds (default 20; 0 disables). Each beat
+   * carries this process's random boot token — same author + two live tokens
+   * is how a double-started identity gets FOLDED OUT (计划 13 §三.3:
+   * 检测代替禁止). Conflict window = 2× this.
+   */
+  heartbeatSec?: number;
   /**
    * Cold start, and re-run after a bus restart (head < cursor). Use it for
    * backfills — publishes here must be idempotent (stable nonces).
@@ -79,6 +90,12 @@ export async function runDCU(spec: DCUSpec): Promise<void> {
   const mirror: Fact[] = [];
   let stopping = false;
   let down = false;
+  // Boot instance token: minted per loop start, never part of the author —
+  // it lives in heartbeat payloads so readers can fold out double-starts.
+  const instance = randomUUID();
+  const heartbeatMs = (spec.heartbeatSec ?? 20) * 1000;
+  let lastBeat = 0;
+  let beatN = 0;
 
   const stop = (sig: string) => {
     if (stopping) return;
@@ -132,6 +149,13 @@ export async function runDCU(spec: DCUSpec): Promise<void> {
       if (!initialized) {
         initialized = true;
         if (spec.init) await spec.init(ctx);
+      }
+
+      // Heartbeat on the poll beat (not a timer): it shares the loop's
+      // failure handling, and a wedged loop correctly stops beating.
+      if (heartbeatMs > 0 && Date.now() - lastBeat >= heartbeatMs) {
+        lastBeat = Date.now();
+        await client.publish(SYS_HEARTBEAT, { instance, n: ++beatN });
       }
 
       await spec.onBatch?.(batch, ctx);

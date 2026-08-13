@@ -15,10 +15,16 @@ import {
   CHAIN_STARVED, ESCALATE_HUMAN, WATCHDOG_AUTHOR, STARVED_AFTER_S, ESCALATE_CLAIMS,
   alreadyReported, detectEscalations, detectOrphanRejections, detectStarved,
 } from "../folds/watchdog.js";
+import { IDENTITY_CONFLICT, detectIdentityConflicts, reportedConflicts } from "../folds/identity.js";
 import { foldOpts, publishRegistry } from "./devchain-dcus.js";
 
-export function watchdogDCU(busUrl: string, identity?: IdentityConfig): DCUSpec {
+export function watchdogDCU(
+  busUrl: string, identity?: IdentityConfig, heartbeatSec = 20,
+): DCUSpec {
   const author = colonyAuthor(WATCHDOG_AUTHOR, identity?.colony);
+  // ≥ 2× the beat so one missed heartbeat is not a false all-clear; with the
+  // 20s default a double-start is folded out well inside 60s (验收 3).
+  const conflictWindowSec = heartbeatSec * 2;
   return {
     name: author,
     author,
@@ -28,11 +34,12 @@ export function watchdogDCU(busUrl: string, identity?: IdentityConfig): DCUSpec 
       await publishRegistry(busUrl, author, null, {
         role: "watchdog",
         listens: ["*"],
-        produces: [CHAIN_STARVED, ESCALATE_HUMAN],
+        produces: [CHAIN_STARVED, ESCALATE_HUMAN, IDENTITY_CONFLICT],
         rules: {
           starved: `阶段 open 超 ${STARVED_AFTER_S}s 无人认领`,
           claim_churn: `同一输入 ≥${ESCALATE_CLAIMS} 次认领全部过期`,
           evidence_rejected: "artifact 证据被裁决拒绝（含游离 artifact）",
+          identity_conflict: `同 author 双 instance 心跳共存于 ${conflictWindowSec}s 窗口`,
         },
       }, ctx.log, identity);
     },
@@ -56,6 +63,17 @@ export function watchdogDCU(busUrl: string, identity?: IdentityConfig): DCUSpec 
           { reqSlug: e.reqSlug, stage: e.stage, reason: e.reason, detail: e.detail },
           { refs: { escalates: e.factId } });
         ctx.log(`ESCALATE ${e.reqSlug}/${e.stage} — ${e.reason}: ${e.detail}`);
+      }
+
+      // 双开检测 (计划 13 §三.3): same author, two live instance tokens →
+      // one conflict fact per pair, ever (fold-deduped, restart-safe).
+      const knownPairs = reportedConflicts(ctx.mirror);
+      for (const c of detectIdentityConflicts(ctx.mirror, conflictWindowSec, nowSec)) {
+        if (knownPairs.has(c.pairKey)) continue;
+        await ctx.client.publish(IDENTITY_CONFLICT,
+          { author: c.author, tokens: c.tokens, pair_key: c.pairKey, window_s: conflictWindowSec },
+          { refs: { subject: c.heartbeats[0], conflicts_with: c.heartbeats[1] } });
+        ctx.log(`IDENTITY CONFLICT — ${c.author} is double-started (tokens ${c.tokens[0].slice(0, 8)}…/${c.tokens[1].slice(0, 8)}…)`);
       }
     },
   };

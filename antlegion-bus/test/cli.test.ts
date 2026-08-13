@@ -156,4 +156,32 @@ describe("alctl — the redis-cli analog", () => {
     expect(lines).toHaveLength(0);
     expect(errs.at(-1)).toMatch(/^error: invalid JSON payload: /);
   });
+
+  it("registry folds the full colony directory — 板上有谁、谁听什么、谁产什么", async () => {
+    const { lines, run } = harness();
+    await run(["publish", "sys.registry", JSON.stringify({
+      colony: "projA", role: "dev", listens: ["ops.incident.dev.requested"],
+      produces: ["ops.fix.ready"], origins: ["projA"],
+      filter: { path: "repo", eq: "projA" }, engine: "claude -p", workspace: "~/projA",
+    }), "--author", "dev@projA"]);
+    await run(["publish", "sys.registry", JSON.stringify({
+      colony: "projB", listens: ["b.requested"], produces: ["b.done"],
+    }), "--author", "dev@projB"]);
+    lines.length = 0;
+
+    expect(await run(["registry"])).toBe(0);
+    const dir = JSON.parse(lines[0]!);
+    expect(dir).toHaveLength(2);
+    const a = dir.find((r: { author: string }) => r.author === "dev@projA");
+    expect(a.colony).toBe("projA");
+    expect(a.role).toBe("dev");
+    expect(a.listens).toEqual(["ops.incident.dev.requested"]);
+    expect(a.produces).toEqual(["ops.fix.ready"]);
+    expect(a.origins).toEqual(["projA"]);
+    expect(a.filter).toEqual({ path: "repo", eq: "projA" });
+    expect(a.engine).toBe("claude -p");
+    const b = dir.find((r: { author: string }) => r.author === "dev@projB");
+    expect(b.colony).toBe("projB");
+    expect(b.role).toBeUndefined();
+  });
 });
