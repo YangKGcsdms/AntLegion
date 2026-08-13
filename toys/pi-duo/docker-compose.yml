@@ -14,7 +14,7 @@
 name: pi-duo
 
 x-agent: &agent
-  build: .
+  build: ../pi-agent
   environment: &env
     BUS_URL: http://host.docker.internal:28090
     DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?export DEEPSEEK_API_KEY first}

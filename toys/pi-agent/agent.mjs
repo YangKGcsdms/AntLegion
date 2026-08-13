@@ -13,6 +13,8 @@
  *   LISTEN_TYPE       poem.request
  *   PRODUCE_TYPE      poem.draft
  *   OUTPUT_HINT       one line telling the LLM what JSON to produce
+ *   PAYLOAD_FILTER    optional substring of JSON.stringify(payload) — only
+ *                     facts matching it are claimed (e.g. '"pass":true')
  *   DEEPSEEK_API_KEY  injected inference credentials (never logged)
  */
 
@@ -25,6 +27,7 @@ const PERSONA = process.env.PERSONA ?? "You are a helpful agent.";
 const LISTEN = process.env.LISTEN_TYPE ?? "task.todo";
 const PRODUCE = process.env.PRODUCE_TYPE ?? "task.done";
 const HINT = process.env.OUTPUT_HINT ?? '{"text":"..."}';
+const FILTER = process.env.PAYLOAD_FILTER ?? "";
 
 const model = {
   id: process.env.ANT_LLM_MODEL ?? "deepseek-v4-flash",
@@ -66,9 +69,9 @@ async function main() {
   const reg = await t.append({
     type: "sys.registry", author: NAME, ts: 0,
     nonce: `registry:toy:${NAME}:v1`,
-    payload: { domain: "toy", agent: NAME, listens: [LISTEN], produces: [PRODUCE], engine: model.id },
+    payload: { domain: process.env.DOMAIN ?? "toy", agent: NAME, listens: [LISTEN], produces: [PRODUCE], ...(FILTER ? { filter: FILTER } : {}), engine: model.id },
   });
-  log(`registered on the board (seq ${reg.seq}${reg.deduped ? ", deduped" : ""}) — listens ${LISTEN} → produces ${PRODUCE}`);
+  log(`registered on the board (seq ${reg.seq}${reg.deduped ? ", deduped" : ""}) — listens ${LISTEN}${FILTER ? ` (filter: ${FILTER})` : ""} → produces ${PRODUCE}`);
 
   let cursor = 0;
   const seen = new Map(); // id -> fact, my listen type only
@@ -79,7 +82,7 @@ async function main() {
         if (page.length === 0) break;
         for (const f of page) {
           if (f.seq > cursor) cursor = f.seq;
-          if (f.type === LISTEN) seen.set(f.id, f);
+          if (f.type === LISTEN && (!FILTER || JSON.stringify(f.payload ?? {}).includes(FILTER))) seen.set(f.id, f);
         }
         if (page.length < 500) break;
       }

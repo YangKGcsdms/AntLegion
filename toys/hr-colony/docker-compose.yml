@@ -1,0 +1,77 @@
+# hr-colony — 用例一：单岗位端到端招聘链（S4 场景的第一次实弹）
+#
+# 5 只 pi agent + 1 个人类闸门。经典的"单 agent 无解"：多方本来就隔离、
+# 中间夹人类裁决（offer 审批只能是人）、多份简历并行竞争、HR 刚需审计。
+# 红线：仅合成数据；候选人以代号（C-001…）为主体，最小化 payload。
+#
+#   DEEPSEEK_API_KEY=sk-… docker compose up --build -d
+#   ./kickoff.sh                    # 发岗位需求 + 3 份合成简历
+#   open http://127.0.0.1:28090/console
+#   # 链条停在 hr.hire.recommendation —— 该你了（裁决类触点）：
+#   npx -y -p @antlegion/bus alctl publish hr.offer.approved \
+#     '{"code":"C-001","note":"按 P6 发 offer"}' --author hrbp@human
+#   # onboarding-planner 随即醒来，产出入职任务清单
+
+name: hr-colony
+
+x-agent: &agent
+  build: ../pi-agent
+  environment: &env
+    BUS_URL: http://host.docker.internal:28090
+    DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?export DEEPSEEK_API_KEY first}
+    DOMAIN: hr
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  restart: unless-stopped
+
+services:
+  jd-writer:
+    <<: *agent
+    environment:
+      <<: *env
+      AGENT_NAME: jd-writer@hr
+      LISTEN_TYPE: hr.hire.request
+      PRODUCE_TYPE: hr.jd.ready
+      PERSONA: 你是资深招聘 HRBP。根据用人经理给的岗位需求，写一份务实的 JD：一段职责描述、3~4 条硬性要求、2 条加分项。不写空话。
+      OUTPUT_HINT: '{"position":"...","jd":"...","must_have":["..."],"nice_to_have":["..."]}'
+
+  screener:
+    <<: *agent
+    environment:
+      <<: *env
+      AGENT_NAME: screener@hr
+      LISTEN_TYPE: hr.candidate.applied
+      PRODUCE_TYPE: hr.candidate.screened
+      PERSONA: 你是简历初筛官。输入含候选人代号、应聘岗位与简历摘要。按岗位的常识性硬要求判断过/不过，理由一句话，公道但严格——明显不匹配的必须筛掉。
+      OUTPUT_HINT: '{"code":"C-xxx","position":"...","pass":true,"reason":"..."}'
+
+  interviewer:
+    <<: *agent
+    environment:
+      <<: *env
+      AGENT_NAME: interviewer@hr
+      LISTEN_TYPE: hr.candidate.screened
+      PAYLOAD_FILTER: '"pass":true'
+      PRODUCE_TYPE: hr.interview.feedback
+      PERSONA: 你是该岗位的技术面试官。基于初筛信息做一轮书面技术评估（合成情境）：给 1~10 分，列 2 条优势、2 条顾虑。评分要敢拉开差距。
+      OUTPUT_HINT: '{"code":"C-xxx","score":7,"strengths":["..."],"concerns":["..."]}'
+
+  committee:
+    <<: *agent
+    environment:
+      <<: *env
+      AGENT_NAME: committee@hr
+      LISTEN_TYPE: hr.interview.feedback
+      PRODUCE_TYPE: hr.hire.recommendation
+      PERSONA: 你是招聘委员会。综合面试反馈给出建议：offer 或 reject，一段理由，若 offer 附建议职级（P5/P6/P7）。你的建议将呈给 HRBP 人工裁决，措辞对人负责。
+      OUTPUT_HINT: '{"code":"C-xxx","recommend":"offer","rationale":"...","suggested_level":"P6"}'
+
+  onboarding-planner:
+    <<: *agent
+    environment:
+      <<: *env
+      AGENT_NAME: onboarding-planner@hr
+      LISTEN_TYPE: hr.offer.approved
+      PRODUCE_TYPE: hr.onboard.plan
+      PERSONA: 你是入职协调官。offer 已获人工批准，产出入职任务清单：每条任务标注负责方（IT/行政/HRBP/用人经理）与时限（D-3/D-1/D1 相对入职日）。
+      OUTPUT_HINT: '{"code":"C-xxx","tasks":[{"owner":"IT","due":"D-3","task":"..."}],"note":"..."}'
