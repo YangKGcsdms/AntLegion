@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>博客 — AntLegion</title>
+<meta name="description" content="关于多智能体协调的随笔：黑板架构、共识素（stigmergy）、把恰好一次认领变成算术，以及四十年前的总线协议还能教我们什么。">
+<link rel="canonical" href="https://antlegion.dev/zh/blog/">
+<link rel="alternate" hreflang="en" href="https://antlegion.dev/blog/">
+<link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/blog/">
+<link rel="alternate" hreflang="x-default" href="https://antlegion.dev/blog/">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://antlegion.dev/zh/blog/">
+<meta property="og:title" content="博客 — AntLegion">
+<meta property="og:description" content="关于多智能体协调与事实总线的随笔。"><meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://antlegion.dev/og.png">
+<style>
+  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
+  *{box-sizing:border-box;margin:0}
+  html{scroll-behavior:smooth}
+  body{font-family:system-ui,-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;background:radial-gradient(900px 480px at 70% -10%,rgba(240,160,32,.13),transparent 60%),radial-gradient(700px 420px at 8% 22%,rgba(226,118,45,.07),transparent 60%);pointer-events:none;z-index:0}
+  body::after{content:"";position:fixed;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%);pointer-events:none;z-index:0}
+  .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:26px 24px 90px}
+  nav{display:flex;align-items:center;gap:10px;margin-bottom:64px}
+  nav .mark{width:34px;height:34px;color:var(--ink)}
+  nav .word{font-weight:650;font-size:18px;letter-spacing:.2px}
+  nav .word a{color:var(--ink);text-decoration:none}
+  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center;flex-wrap:wrap}
+  nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
+  nav .links a:hover{color:var(--acc)}
+  nav .links a[aria-current]{color:var(--acc)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 12.4px 4px 14px;background:rgba(240,160,32,.06)}
+  h1{font-size:38px;line-height:1.25;letter-spacing:0;margin-top:20px;font-weight:750}
+  h1 .g{background:linear-gradient(92deg,#f6d38a,var(--acc) 45%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:17.5px;color:var(--ink2);margin-top:16px;max-width:680px}
+  .posts{margin-top:52px;display:grid;gap:14px}
+  a.post{display:block;background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:24px;text-decoration:none;transition:border-color .2s}
+  a.post:hover{border-color:var(--line)}
+  .post .meta{font-size:12.5px;color:var(--ink3);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .post .soon{display:inline-block;font-size:11.5px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:2px 10px;background:rgba(240,160,32,.06)}
+  .post h2{font-size:20px;line-height:1.45;letter-spacing:0;margin-top:10px;color:var(--ink)}
+  .post p{font-size:14px;color:var(--ink2);margin-top:10px;max-width:640px}
+  .not{margin-top:28px;font-size:14px;color:var(--ink3);max-width:700px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(240,160,32,.08);border-radius:5px;padding:.08em .38em;color:#f3cf8f}
+  footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink2)}
+  a{color:var(--acc)}
+  @media(max-width:760px){h1{font-size:30px}nav .links{gap:12px}}
+  @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:10px;font-size:13px}}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}a.post{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <svg class="mark" viewBox="0 0 64 64" fill="none" aria-label="AntLegion logo">
+      <line x1="3" y1="47" x2="61" y2="47" stroke="currentColor" stroke-opacity="0.28" stroke-width="2.6" stroke-linecap="round"/>
+      <line x1="9.5" y1="47" x2="46" y2="47" stroke="var(--acc)" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M14 39.5 L12.5 45.7 M29.5 38.2 L27.8 45.7 M34.8 37.5 L39 45.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="16.5" cy="30" r="10" fill="currentColor"/>
+      <circle cx="31.6" cy="32.8" r="6.4" fill="var(--acc)"/>
+      <circle cx="41.2" cy="36.2" r="4.5" fill="currentColor"/>
+      <path d="M43.2 32.6 Q49 24.5 55 21.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+      <path d="M44.8 34.6 Q52.5 29.5 59 29.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+    </svg>
+    <span class="word"><a href="/zh/">AntLegion</a></span>
+    <span class="links">
+      <a href="/zh/quickstart.html">快速上手</a>
+      <a href="/zh/protocol.html">协议</a>
+      <a href="/zh/blog/" aria-current="page">博客</a>
+      <a href="/zh/about.html">关于</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+      <a href="/blog/" lang="en">English</a>
+    </span>
+  </nav>
+
+  <span class="eyebrow">博客</span>
+  <h1>来自<span class="g">事实总线</span>的笔记</h1>
+  <p class="tag">关于多智能体协调的随笔：黑板架构、共识素（stigmergy）、把恰好一次认领变成算术，以及四十年前的总线协议还能教我们什么。每篇文章英文版发在这里，中文版同步发于公众号。</p>
+
+  <div class="posts">
+    <a class="post" href="/zh/blog/can-bus-lessons.html">
+      <span class="meta"><span class="soon">2026-08</span><span>· 旗舰文</span></span>
+      <h2>Exactly-once as a theorem: what a CAN bus taught us about coordinating AI agents</h2>
+      <p>1986 年，汽车解决了一个多智能体协调问题：几十个控制单元、没有中央电脑、没有单元给谁下命令。CAN 一直缺的是记忆与因果——而补上恰好这两样，广播纪律就变成了 AI 智能体的协调层，恰好一次认领也从锁变成了算术。</p>
+    </a>
+  </div>
+
+  <p class="not">后续更新——Watch <a href="https://github.com/YangKGcsdms/AntLegion">GitHub 仓库</a>或加入 <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a>。</p>
+
+  <footer>
+    <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+    <a href="/zh/quickstart.html">快速上手</a>
+    <a href="/zh/protocol.html">协议</a>
+    <a href="/zh/about.html">关于</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a>
+    <a href="/blog/" lang="en">English</a>
+    <span>MIT · Carter.Yang 出品</span>
+  </footer>
+</div>
+</body>
+</html>

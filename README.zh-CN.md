@@ -13,7 +13,7 @@
 [![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/测试-147%20通过-brightgreen?style=flat-square)](antlegion-bus/test/)
+[![CI](https://img.shields.io/github/actions/workflow/status/YangKGcsdms/AntLegion/ci.yml?branch=master&style=flat-square&label=CI)](https://github.com/YangKGcsdms/AntLegion/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/许可证-MIT-blue?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/状态-alpha-orange?style=flat-square)]()
 

@@ -1,0 +1,62 @@
+{
+  "ran_at": "2026-08-13T07:21:39.142Z",
+  "rounds": 5,
+  "rogue_author": "rogue-worker@exp8",
+  "results": [
+    {
+      "round": 1,
+      "forged": 8,
+      "control": 4,
+      "caught": 8,
+      "leaked": 0,
+      "false_kills": 0,
+      "passed": 4,
+      "unjudged": 0,
+      "wait_s": 1
+    },
+    {
+      "round": 2,
+      "forged": 8,
+      "control": 4,
+      "caught": 8,
+      "leaked": 0,
+      "false_kills": 0,
+      "passed": 4,
+      "unjudged": 0,
+      "wait_s": 1
+    },
+    {
+      "round": 3,
+      "forged": 8,
+      "control": 4,
+      "caught": 8,
+      "leaked": 0,
+      "false_kills": 0,
+      "passed": 4,
+      "unjudged": 0,
+      "wait_s": 1
+    },
+    {
+      "round": 4,
+      "forged": 8,
+      "control": 4,
+      "caught": 8,
+      "leaked": 0,
+      "false_kills": 0,
+      "passed": 4,
+      "unjudged": 0,
+      "wait_s": 1
+    },
+    {
+      "round": 5,
+      "forged": 8,
+      "control": 4,
+      "caught": 8,
+      "leaked": 0,
+      "false_kills": 0,
+      "passed": 4,
+      "unjudged": 0,
+      "wait_s": 1
+    }
+  ]
+}

@@ -1,0 +1,164 @@
+{
+  "ran_at": "2026-08-13T07:30:11.870Z",
+  "n": 10,
+  "delta_s": 6,
+  "distributions": {
+    "expiry_to_takeover": {
+      "min": 0.02,
+      "p50": 0.03,
+      "p95": 1,
+      "max": 1,
+      "mean": 0.151
+    },
+    "kill_to_takeover": {
+      "min": 5.92,
+      "p50": 5.96,
+      "p95": 6.91,
+      "max": 6.91,
+      "mean": 6.0760000000000005
+    },
+    "kill_to_resolve": {
+      "min": 9.93,
+      "p50": 9.98,
+      "p95": 10.92,
+      "max": 10.92,
+      "mean": 10.088000000000001
+    },
+    "kill_to_chain_done": {
+      "min": 18.54,
+      "p50": 20.05,
+      "p95": 21.19,
+      "max": 21.19,
+      "mean": 19.981
+    },
+    "claim_to_kill": {
+      "min": 0.04,
+      "p50": 0.08,
+      "p95": 0.11,
+      "max": 0.11,
+      "mean": 0.076
+    }
+  },
+  "iterations": [
+    {
+      "iter": 0,
+      "victim": "dcu-dev@devchain",
+      "survivor": "dcu-dev-r1@devchain",
+      "claim_to_kill_s": 0.07,
+      "kill_to_expiry_s": 5.93,
+      "expiry_to_takeover_s": 0.03,
+      "kill_to_takeover_s": 5.96,
+      "kill_to_resolve_s": 9.97,
+      "kill_to_chain_done_s": 21.19,
+      "double_executions": 0
+    },
+    {
+      "iter": 1,
+      "victim": "dcu-dev-r1@devchain",
+      "survivor": "dcu-dev@devchain",
+      "claim_to_kill_s": 0.11,
+      "kill_to_expiry_s": 5.89,
+      "expiry_to_takeover_s": 0.28,
+      "kill_to_takeover_s": 6.17,
+      "kill_to_resolve_s": 10.18,
+      "kill_to_chain_done_s": 18.54,
+      "double_executions": 0
+    },
+    {
+      "iter": 2,
+      "victim": "dcu-dev-r1@devchain",
+      "survivor": "dcu-dev@devchain",
+      "claim_to_kill_s": 0.08,
+      "kill_to_expiry_s": 5.92,
+      "expiry_to_takeover_s": 0.03,
+      "kill_to_takeover_s": 5.95,
+      "kill_to_resolve_s": 9.97,
+      "kill_to_chain_done_s": 20.05,
+      "double_executions": 0
+    },
+    {
+      "iter": 3,
+      "victim": "dcu-dev@devchain",
+      "survivor": "dcu-dev-r1@devchain",
+      "claim_to_kill_s": 0.08,
+      "kill_to_expiry_s": 5.92,
+      "expiry_to_takeover_s": 0.02,
+      "kill_to_takeover_s": 5.94,
+      "kill_to_resolve_s": 9.95,
+      "kill_to_chain_done_s": 19.12,
+      "double_executions": 0
+    },
+    {
+      "iter": 4,
+      "victim": "dcu-dev-r1@devchain",
+      "survivor": "dcu-dev@devchain",
+      "claim_to_kill_s": 0.09,
+      "kill_to_expiry_s": 5.91,
+      "expiry_to_takeover_s": 1,
+      "kill_to_takeover_s": 6.91,
+      "kill_to_resolve_s": 10.92,
+      "kill_to_chain_done_s": 20,
+      "double_executions": 0
+    },
+    {
+      "iter": 5,
+      "victim": "dcu-dev@devchain",
+      "survivor": "dcu-dev-r1@devchain",
+      "claim_to_kill_s": 0.08,
+      "kill_to_expiry_s": 5.92,
+      "expiry_to_takeover_s": 0.04,
+      "kill_to_takeover_s": 5.96,
+      "kill_to_resolve_s": 9.98,
+      "kill_to_chain_done_s": 20.05,
+      "double_executions": 0
+    },
+    {
+      "iter": 6,
+      "victim": "dcu-dev-r1@devchain",
+      "survivor": "dcu-dev@devchain",
+      "claim_to_kill_s": 0.11,
+      "kill_to_expiry_s": 5.89,
+      "expiry_to_takeover_s": 0.03,
+      "kill_to_takeover_s": 5.92,
+      "kill_to_resolve_s": 9.93,
+      "kill_to_chain_done_s": 20.02,
+      "double_executions": 0
+    },
+    {
+      "iter": 7,
+      "victim": "dcu-dev@devchain",
+      "survivor": "dcu-dev-r1@devchain",
+      "claim_to_kill_s": 0.05,
+      "kill_to_expiry_s": 5.95,
+      "expiry_to_takeover_s": 0.04,
+      "kill_to_takeover_s": 5.99,
+      "kill_to_resolve_s": 10,
+      "kill_to_chain_done_s": 20.21,
+      "double_executions": 0
+    },
+    {
+      "iter": 8,
+      "victim": "dcu-dev@devchain",
+      "survivor": "dcu-dev-r1@devchain",
+      "claim_to_kill_s": 0.04,
+      "kill_to_expiry_s": 5.97,
+      "expiry_to_takeover_s": 0.02,
+      "kill_to_takeover_s": 5.99,
+      "kill_to_resolve_s": 10,
+      "kill_to_chain_done_s": 20.33,
+      "double_executions": 0
+    },
+    {
+      "iter": 9,
+      "victim": "dcu-dev@devchain",
+      "survivor": "dcu-dev-r1@devchain",
+      "claim_to_kill_s": 0.05,
+      "kill_to_expiry_s": 5.96,
+      "expiry_to_takeover_s": 0.02,
+      "kill_to_takeover_s": 5.97,
+      "kill_to_resolve_s": 9.98,
+      "kill_to_chain_done_s": 20.3,
+      "double_executions": 0
+    }
+  ]
+}

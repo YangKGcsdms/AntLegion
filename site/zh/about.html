@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>关于 — AntLegion</title>
+<meta name="description" content="谁在做 AntLegion、为什么做：一个刻意为之的第二系统——第一代事实总线死于服务端状态之后，从第一性原理重新推导。一位架构者，一条公理：事实，而非命令。">
+<link rel="canonical" href="https://antlegion.dev/zh/about.html">
+<link rel="alternate" hreflang="en" href="https://antlegion.dev/about.html">
+<link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/about.html">
+<link rel="alternate" hreflang="x-default" href="https://antlegion.dev/about.html">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://antlegion.dev/zh/about.html">
+<meta property="og:title" content="关于 — AntLegion">
+<meta property="og:description" content="谁在做 AntLegion、为什么做——一个从第一性原理推导的第二系统。"><meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://antlegion.dev/og.png">
+<style>
+  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
+  *{box-sizing:border-box;margin:0}
+  html{scroll-behavior:smooth}
+  body{font-family:system-ui,-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;background:radial-gradient(900px 480px at 70% -10%,rgba(240,160,32,.13),transparent 60%),radial-gradient(700px 420px at 8% 22%,rgba(226,118,45,.07),transparent 60%);pointer-events:none;z-index:0}
+  body::after{content:"";position:fixed;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%);pointer-events:none;z-index:0}
+  .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:26px 24px 90px}
+  nav{display:flex;align-items:center;gap:10px;margin-bottom:64px}
+  nav .mark{width:34px;height:34px;color:var(--ink)}
+  nav .word{font-weight:650;font-size:18px;letter-spacing:.2px}
+  nav .word a{color:var(--ink);text-decoration:none}
+  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center;flex-wrap:wrap}
+  nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
+  nav .links a:hover{color:var(--acc)}
+  nav .links a[aria-current]{color:var(--acc)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 12.4px 4px 14px;background:rgba(240,160,32,.06)}
+  h1{font-size:38px;line-height:1.25;letter-spacing:0;margin-top:20px;font-weight:750}
+  h1 .g{background:linear-gradient(92deg,#f6d38a,var(--acc) 45%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:17.5px;color:var(--ink2);margin-top:16px;max-width:680px}
+  .tag b{color:var(--ink)}
+  .sec{margin-top:64px}
+  .sec h2{font-size:26px;letter-spacing:0;margin-top:14px}
+  .sec>p{color:var(--ink2);margin-top:12px;max-width:700px}
+  .sec>p b{color:var(--ink)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px}
+  a.stat{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:20px 18px;transition:border-color .2s;text-decoration:none;display:block}
+  a.stat:hover{border-color:var(--line)}
+  .stat b{display:block;font-size:26px;font-weight:750;background:linear-gradient(92deg,#f6d38a,var(--acc));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat span{font-size:12.5px;color:var(--ink3);display:block;margin-top:6px;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+  .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s}
+  .card:hover{border-color:var(--line)}
+  .card h3{font-size:15.5px}
+  .card h3 em{font-style:normal;color:var(--acc)}
+  .card p{font-size:13.5px;color:var(--ink2);margin-top:9px}
+  .not{margin-top:20px;font-size:14px;color:var(--ink3);max-width:700px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(240,160,32,.08);border-radius:5px;padding:.08em .38em;color:#f3cf8f}
+  footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink2)}
+  a{color:var(--acc)}
+  @media(max-width:960px){.stats{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}h1{font-size:30px}nav .links{gap:12px}}
+  @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:10px;font-size:13px}.stats{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.card,a.stat{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <svg class="mark" viewBox="0 0 64 64" fill="none" aria-label="AntLegion logo">
+      <line x1="3" y1="47" x2="61" y2="47" stroke="currentColor" stroke-opacity="0.28" stroke-width="2.6" stroke-linecap="round"/>
+      <line x1="9.5" y1="47" x2="46" y2="47" stroke="var(--acc)" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M14 39.5 L12.5 45.7 M29.5 38.2 L27.8 45.7 M34.8 37.5 L39 45.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="16.5" cy="30" r="10" fill="currentColor"/>
+      <circle cx="31.6" cy="32.8" r="6.4" fill="var(--acc)"/>
+      <circle cx="41.2" cy="36.2" r="4.5" fill="currentColor"/>
+      <path d="M43.2 32.6 Q49 24.5 55 21.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+      <path d="M44.8 34.6 Q52.5 29.5 59 29.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+    </svg>
+    <span class="word"><a href="/zh/">AntLegion</a></span>
+    <span class="links">
+      <a href="/zh/quickstart.html">快速上手</a>
+      <a href="/zh/protocol.html">协议</a>
+      <a href="/zh/blog/">博客</a>
+      <a href="/zh/about.html" aria-current="page">关于</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+      <a href="/about.html" lang="en">English</a>
+    </span>
+  </nav>
+
+  <span class="eyebrow">关于</span>
+  <h1>做它的人，<br><span class="g">受够了自己当总线</span></h1>
+  <p class="tag">AntLegion 由 <b>Carter.Yang</b>（<a href="https://github.com/YangKGcsdms">@YangKGcsdms</a>）设计并构建——一位架构者，一条公理：<b>事实，而非命令</b>。它的存在，是因为在同一个项目上跑几个 AI 智能体时，人总是不知不觉变成协调介质，在窗口之间转述状态。</p>
+
+  <div class="sec">
+    <span class="eyebrow">来路</span>
+    <h2>一个刻意为之的第二系统</h2>
+    <p>第一次尝试——<a href="https://github.com/YangKGcsdms/claw_fact_bus">claw_fact_bus</a>（2026-03，Python）——把总线做成了一个向感兴趣的智能体推送事实的仲裁者。它死于这套设计正要治的那些病：服务端状态、隐式命令、住在运行时里的协调规则。</p>
+    <p>重写删掉了所有能删的，只留下不可删的——<b>全序</b>——再把每一种语义搬进读者侧折叠。结果是一条无状态的总线，规范一份文档写完，恰好一次认领是定理而不是锁。<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/EVOLUTION.zh-CN.md">EVOLUTION</a> 讲完了 v0 → v1 → v2 的全部故事；先把失败的版本做出来，正是这一版长成这样的原因。</p>
+    <p>这条血脉比 AI 更老：汽车的 CAN 总线（1986）上，没有中央电脑指挥各个控制单元。AntLegion 保留了那种广播纪律，补上 CAN 从未有过的两样东西——记忆与因果。工作单元命名为 <b>DCU</b>，向 ECU 致敬。</p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">现状</span>
+    <h2>用数字说话</h2>
+    <div class="stats">
+      <a class="stat" href="https://www.npmjs.com/package/@antlegion/bus"><b>0.4.1</b><span>@antlegion/bus——总线、SDK 与 <code>alctl</code> CLI，npm 与 GHCR 双渠道</span></a>
+      <a class="stat" href="https://www.npmjs.com/package/@antlegion/ant"><b>0.4.0</b><span>@antlegion/ant——DCU 运行时、dev-chain 蚁群、监督看板</span></a>
+      <a class="stat" href="https://github.com/YangKGcsdms/AntLegion"><b>237</b><span>两包合计测试数 · 跨语言一致性向量 · 进程内约 16 万 append/s</span></a>
+      <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>3</b><span>第一手实验：双执行 0 · 崩溃接管 12.2 秒 · 伪造报告拦截 8/8</span></a>
+    </div>
+    <p class="not">Alpha，MIT 许可，本地可内嵌——多智能体协调界的 Redis，不是 SaaS。<code>alctl</code> CLI 是唯一的智能体接入面；本站每个数字都能用一条命令复现。</p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">联系</span>
+    <h2>找到我们</h2>
+    <div class="grid">
+      <div class="card"><h3><em>GitHub</em></h3><p>源码、issue、发布：<a href="https://github.com/YangKGcsdms/AntLegion">YangKGcsdms/AntLegion</a></p></div>
+      <div class="card"><h3><em>Discussions</em></h3><p>提问、设计讨论、成果展示：<a href="https://github.com/YangKGcsdms/AntLegion/discussions">GitHub Discussions</a></p></div>
+      <div class="card"><h3><em>npm</em></h3><p><a href="https://www.npmjs.com/package/@antlegion/bus">@antlegion/bus</a> · <a href="https://www.npmjs.com/package/@antlegion/ant">@antlegion/ant</a></p></div>
+    </div>
+  </div>
+
+  <footer>
+    <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+    <a href="/zh/quickstart.html">快速上手</a>
+    <a href="/zh/protocol.html">协议</a>
+    <a href="/zh/blog/">博客</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a>
+    <a href="/about.html" lang="en">English</a>
+    <span>MIT · Carter.Yang 出品</span>
+  </footer>
+</div>
+</body>
+</html>

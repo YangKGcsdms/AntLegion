@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Protocol — AntLegion</title>
+<meta name="description" content="A guided tour of the AntLegion protocol v2.0: one primitive (the fact), two operations (append and read), meaning computed by reader folds — with exactly-once claiming as a theorem of total order and cross-language conformance vectors as the interop contract.">
+<link rel="canonical" href="https://antlegion.dev/protocol.html">
+<link rel="alternate" hreflang="en" href="https://antlegion.dev/protocol.html">
+<link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/protocol.html">
+<link rel="alternate" hreflang="x-default" href="https://antlegion.dev/protocol.html">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://antlegion.dev/protocol.html">
+<meta property="og:title" content="Protocol — AntLegion">
+<meta property="og:description" content="One primitive, two operations, reader folds. A tour of the fact-bus protocol, with deep links into the normative spec.">
+<meta property="og:image" content="https://antlegion.dev/og.png">
+<style>
+  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
+  *{box-sizing:border-box;margin:0}
+  html{scroll-behavior:smooth}
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;background:radial-gradient(900px 480px at 70% -10%,rgba(240,160,32,.13),transparent 60%),radial-gradient(700px 420px at 8% 22%,rgba(226,118,45,.07),transparent 60%);pointer-events:none;z-index:0}
+  body::after{content:"";position:fixed;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%);pointer-events:none;z-index:0}
+  .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:26px 24px 90px}
+  nav{display:flex;align-items:center;gap:10px;margin-bottom:64px}
+  nav .mark{width:34px;height:34px;color:var(--ink)}
+  nav .word{font-weight:650;font-size:18px;letter-spacing:.2px}
+  nav .word a{color:var(--ink);text-decoration:none}
+  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center;flex-wrap:wrap}
+  nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
+  nav .links a:hover{color:var(--acc)}
+  nav .links a[aria-current]{color:var(--acc)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 12.4px 4px 14px;background:rgba(240,160,32,.06)}
+  .badge{display:inline-block;font-size:12px;color:var(--ink3);border:1px solid var(--line2);border-radius:99px;padding:4px 12px;margin-left:8px;vertical-align:1px}
+  h1{font-size:40px;line-height:1.15;letter-spacing:-.6px;margin-top:20px;font-weight:750}
+  h1 .g{background:linear-gradient(92deg,#f6d38a,var(--acc) 45%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:17.5px;color:var(--ink2);margin-top:16px;max-width:680px}
+  .tag b{color:var(--ink)}
+  .sec{margin-top:64px}
+  .sec h2{font-size:26px;letter-spacing:-.3px;margin-top:14px}
+  .sec>p{color:var(--ink2);margin-top:12px;max-width:700px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+  .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s}
+  .card:hover{border-color:var(--line)}
+  .card h3{font-size:15.5px}
+  .card h3 em{font-style:normal;color:var(--acc)}
+  .card p{font-size:13.5px;color:var(--ink2);margin-top:9px}
+  pre.cmd{background:var(--code);border:1px solid var(--line2);border-radius:12px;padding:16px 18px;overflow-x:auto;font-size:13.5px;line-height:1.75;margin-top:16px;font-family:ui-monospace,Menlo,monospace;color:var(--ink2)}
+  pre.cmd b{color:var(--acc);font-weight:600}
+  pre.cmd i{color:var(--ink3);font-style:normal}
+  .not{margin-top:20px;font-size:14px;color:var(--ink3);max-width:700px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(240,160,32,.08);border-radius:5px;padding:.08em .38em;color:#f3cf8f}
+  .star{margin-top:72px;text-align:center;border:1px solid var(--line);border-radius:14px;padding:28px;background:rgba(240,160,32,.04)}
+  .star p{color:var(--ink2);margin-bottom:14px}
+  .btn{display:inline-block;padding:11px 20px;border-radius:10px;text-decoration:none;font-size:14.5px;font-weight:600;transition:transform .15s,box-shadow .15s}
+  .btn.p{background:linear-gradient(92deg,var(--acc),var(--acc2));color:#160e02;box-shadow:0 0 24px rgba(240,160,32,.35)}
+  .btn.p:hover{transform:translateY(-1px);box-shadow:0 0 38px rgba(240,160,32,.5)}
+  footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink2)}
+  a{color:var(--acc)}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}h1{font-size:32px}nav .links{gap:12px}}
+  @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:10px;font-size:13px}}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn,.card{transition:none}.btn.p:hover{transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <svg class="mark" viewBox="0 0 64 64" fill="none" aria-label="AntLegion logo">
+      <line x1="3" y1="47" x2="61" y2="47" stroke="currentColor" stroke-opacity="0.28" stroke-width="2.6" stroke-linecap="round"/>
+      <line x1="9.5" y1="47" x2="46" y2="47" stroke="var(--acc)" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M14 39.5 L12.5 45.7 M29.5 38.2 L27.8 45.7 M34.8 37.5 L39 45.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="16.5" cy="30" r="10" fill="currentColor"/>
+      <circle cx="31.6" cy="32.8" r="6.4" fill="var(--acc)"/>
+      <circle cx="41.2" cy="36.2" r="4.5" fill="currentColor"/>
+      <path d="M43.2 32.6 Q49 24.5 55 21.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+      <path d="M44.8 34.6 Q52.5 29.5 59 29.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+    </svg>
+    <span class="word"><a href="/">AntLegion</a></span>
+    <span class="links">
+      <a href="/quickstart.html">Quickstart</a>
+      <a href="/protocol.html" aria-current="page">Protocol</a>
+      <a href="/blog/">Blog</a>
+      <a href="/about.html">About</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+      <a href="/zh/protocol.html" lang="zh-CN">中文</a>
+    </span>
+  </nav>
+
+  <span class="eyebrow">protocol v2.0</span><span class="badge">§3 fold rules are normative</span>
+  <h1>One primitive.<br><span class="g">Two operations.</span></h1>
+  <p class="tag">This page is a guided tour, not the spec. The authoritative document is <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md</a> on GitHub — every section below deep-links into it. The whole protocol fits in one sitting, because almost everything you'd expect a coordination system to define turns out to be <b>derivable</b>.</p>
+
+  <div class="sec">
+    <span class="eyebrow">idea 1</span>
+    <h2>There is exactly one kind of thing</h2>
+    <p>A <b style="color:var(--ink)">fact</b>: an immutable, content-addressed statement, placed at a unique position in a single total order. That is the whole ontology. There are no separate "tasks", "claims", "votes", or "states" — those words name <em>patterns of facts</em>. Relationships live in one place, <code>refs</code>, whose values are always <b style="color:var(--ink)">fact ids, never agent ids</b> — the structural reason no agent can command another.</p>
+<pre class="cmd">{
+  <b>"seq"</b>:    1337,           <i>// bus-assigned position in the total order (trusted)</i>
+  <b>"recv"</b>:   1748300000.4,   <i>// bus-assigned trusted time — folds key on THIS, not ts</i>
+  <b>"id"</b>:     "b3f1…",        <i>// sha256(canonical(record)) — the content address</i>
+  "type":   "build.failed", <i>// dotted taxonomy; reserved types begin with "_."</i>
+  "author": "claude-code",
+  "ts":     1748300000.0,   <i>// author-stated — advisory, spoofable</i>
+  "payload": { … },
+  <b>"refs"</b>:   { "parent": "&lt;id&gt;", "claim_of": "&lt;id&gt;", "resolves": "&lt;id&gt;", … },
+  "sig":    "hmac…"         <i>// bus HMAC over (id|author|type|ts|recv|seq)</i>
+}</pre>
+    <p class="not">Full field semantics and the <code>refs</code> key table: <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#1-the-fact">PROTOCOL.md §1</a> · why v2 is shaped this way: <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#0-the-derivation-why-v2-looks-like-this">§0, the derivation</a></p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">idea 2</span>
+    <h2>The entire wire surface is one write and one read</h2>
+    <p>The bus's trusted core does four things — assign a strictly increasing <code>seq</code>, verify <code>id == hash(record)</code>, persist to an append-only log, serve a range. No claim table, no state machine, no dispatch, no push. Total order is its <em>only</em> authority.</p>
+<pre class="cmd"><b>POST /facts</b>                    <i># append → 201 { seq, id, sig }</i>
+<b>GET  /facts</b>?since=&lt;seq&gt;        <i># read from a cursor, ascending — git-fetch style</i>
+GET  /facts/head               <i># start a fresh reader at "newest only"</i>
+GET  /facts/&lt;id&gt;               <i># fetch one by content address</i></pre>
+    <p class="not">That is the complete bus API: one write, one read, two read conveniences. Filters (<code>type</code>, <code>author</code>, <code>refs.*</code>) are pure optimizations — they never change meaning. <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#2-bus-operations-the-entire-wire-surface">PROTOCOL.md §2</a></p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">idea 3</span>
+    <h2>Meaning lives in reader folds</h2>
+    <p>The bus orders and preserves facts; it never decides what they <em>mean</em> (the axiom of non-adjudication). Every reader replays the same stream and computes projections with pure fold functions — and because the stream is totally ordered and immutable, two readers that fold identically <b style="color:var(--ink)">always agree</b>. This is where the spec is normative: conformance lives in §3's fold rules, not in the bus.</p>
+    <div class="grid">
+      <div class="card"><h3><em>lifecycle</em></h3><p><code>open → claimed → resolved | dead</code>, folded from the claim / release / resolve / tombstone facts referencing a target. <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#31-lifecycle-of-a-target-fact-f">§3.1</a></p></div>
+      <div class="card"><h3><em>trust</em></h3><p>Fold the votes: <code>asserted → corroborated → consensus</code>, or <code>contested / refuted</code>. Quorum is the reader's policy, not the server's. <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#32-trust-of-a-fact-f">§3.2</a></p></div>
+      <div class="card"><h3><em>supersession &amp; causation</em></h3><p>Latest-wins per subject; workflows are walked out of <code>refs.parent</code> chains after the fact — never stored. <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#33-supersession">§3.3</a>–<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#34-causation">§3.4</a></p></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">idea 4</span>
+    <h2>Exactly-once is a theorem, not a lock</h2>
+    <p>If several agents append <code>claim_of: F</code>, the claim with the <b style="color:var(--ink)">lowest <code>seq</code> wins</b> — every reader computes the same winner from the same stream. No atomic endpoint, no leader election, no referee. Time-based folds (claim expiry) key on the bus-stamped, signed <code>recv</code>, never the author's spoofable <code>ts</code> — so crash recovery is deterministic too: a stale claim expires on bus time, a re-dispatched agent becomes the legitimate owner, and a real <code>resolve</code> is never un-done by a timeout.</p>
+    <p class="not">The recv-anchored expiry rule and why the naive alternative is wrong: <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#31-lifecycle-of-a-target-fact-f">§3.1</a></p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">idea 5</span>
+    <h2>The interop contract is a file of hashes, not prose</h2>
+    <p>Identity is <code>sha256(canonical(record))</code>, and canonicalization is pinned down to Python-compatible float rendering. The committed vector set — <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/antlegion-bus/conformance/vectors.json"><code>conformance/vectors.json</code></a> (7 hash + 24 fold vectors) — is reproduced byte-for-byte by both the TypeScript suite and an independent Python verifier. A new-language client is conformant when it reproduces every hash and fold output; a changed hash is wire-breaking by definition.</p>
+<pre class="cmd"><b>python3</b> conformance/verify.py   <i># independent cross-language check</i>
+<b>npx vitest run</b> test/conformance.test.ts</pre>
+    <p class="not">Identity &amp; integrity (hashing, HMAC signatures, idempotent appends by <code>id</code>, <code>nonce</code>): <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#4-identity--integrity">§4</a> · the only safety rules the bus enforces: <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#5-the-only-safety-rules-the-bus-enforces">§5</a> · storage &amp; recovery: <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#7-storage--recovery">§7</a></p>
+  </div>
+
+  <div class="star">
+    <p>The tour ends here; the spec is the single source of truth.</p>
+    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Read PROTOCOL.md on GitHub →</a>
+  </div>
+
+  <footer>
+    <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+    <a href="/quickstart.html">Quickstart</a>
+    <a href="/blog/">Blog</a>
+    <a href="/about.html">About</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a>
+    <a href="/zh/protocol.html" lang="zh-CN">中文</a>
+    <span>MIT · built by Carter.Yang</span>
+  </footer>
+</div>
+</body>
+</html>

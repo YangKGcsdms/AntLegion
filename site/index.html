@@ -33,7 +33,7 @@
   nav{display:flex;align-items:center;gap:10px;margin-bottom:72px}
   nav .mark{width:34px;height:34px;color:var(--ink)}
   nav .word{font-weight:650;font-size:18px;letter-spacing:.2px}
-  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center}
+  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center;flex-wrap:wrap}
   nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
   nav .links a:hover{color:var(--acc)}
   :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
@@ -149,9 +149,11 @@
     </svg>
     <span class="word">AntLegion</span>
     <span class="links">
-      <a href="#run">Quickstart</a>
+      <a href="/quickstart.html">Quickstart</a>
+      <a href="/protocol.html">Protocol</a>
+      <a href="/blog/">Blog</a>
+      <a href="/about.html">About</a>
       <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
-      <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">Protocol</a>
       <a href="/zh/" lang="zh-CN">中文</a>
     </span>
   </nav>
@@ -193,7 +195,7 @@
     <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>0</b><span>double executions — 100 claim units, 4× replicated workers racing (S2 exp 1)</span></a>
     <a class="stat" href="#faq-evidence"><b>8/8</b><span>forged "all-green" reports rejected by evidence folds · 0 false kills</span></a>
     <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>12.2s</b><span>from SIGKILL of a claim holder to a sibling finishing the work</span></a>
-    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/tree/master/antlegion-bus"><b>160k/s</b><span>appends in-process · 218 tests · cross-language conformance</span></a>
+    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/tree/master/antlegion-bus"><b>160k/s</b><span>appends in-process · 237 tests · cross-language conformance</span></a>
   </div>
   <p class="repro">Every number above is reproducible on your machine — no benchmark you can't rerun. <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md">Experiment log →</a></p>
 
@@ -210,21 +212,26 @@
       </tbody>
     </table>
     </div>
-    <p>Human relay effort grows superlinearly with agent count (N windows, pairwise retelling → O(N²)). On the bus it stays <b style="color:var(--ink)">flat</b> — proportional to judgment gates only:</p>
-    <svg class="curve" viewBox="0 0 560 210" role="img" aria-label="Human coordination cost: human relay grows superlinearly with agent count; with the fact bus it stays flat at the number of judgment gates">
+    <p>We measured it (paired experiment, same tasks and gates on both arms). Human relay climbs with agent count until the human <em>saturates</em> — at N=8 the relayer is busy 96% of wall-clock and becomes the serial bottleneck. On the bus, relay is <b style="color:var(--ink)">zero at every N</b>, and judgment gates stay exactly 6 → 6:</p>
+    <svg class="curve" viewBox="0 0 560 210" role="img" aria-label="Measured human relay touchpoints per run: human relay 52 at N=2, 80 at N=4, 64 at N=8 where the human saturates; with the fact bus relay is zero at every N">
       <line x1="46" y1="170" x2="530" y2="170" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
       <line x1="46" y1="170" x2="46" y2="16" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
       <text x="288" y="196" fill="#8b887f" font-size="12" text-anchor="middle">agents (N)</text>
-      <text x="20" y="95" fill="#8b887f" font-size="12" transform="rotate(-90 20 95)" text-anchor="middle">human touchpoints</text>
+      <text x="20" y="95" fill="#8b887f" font-size="12" transform="rotate(-90 20 95)" text-anchor="middle">relay touchpoints / run</text>
       <text x="110" y="184" fill="#8b887f" font-size="11" text-anchor="middle">2</text>
       <text x="288" y="184" fill="#8b887f" font-size="11" text-anchor="middle">4</text>
       <text x="466" y="184" fill="#8b887f" font-size="11" text-anchor="middle">8</text>
-      <path d="M 110 150 Q 288 118 380 72 T 500 22" fill="none" stroke="#f87171" stroke-width="2.5"/>
-      <text x="356" y="46" fill="#f87171" font-size="12.5">human relay · O(N²)</text>
-      <path d="M 110 132 L 500 132" fill="none" stroke="#4ade80" stroke-width="2.5"/>
-      <text x="360" y="124" fill="#4ade80" font-size="12.5">fact bus · O(judgment gates)</text>
+      <path d="M 110 79 L 288 30 L 466 58" fill="none" stroke="#f87171" stroke-width="2.5"/>
+      <circle cx="110" cy="79" r="3.5" fill="#f87171"/><circle cx="288" cy="30" r="3.5" fill="#f87171"/><circle cx="466" cy="58" r="3.5" fill="#f87171"/>
+      <text x="96" y="70" fill="#f87171" font-size="11.5">52</text>
+      <text x="280" y="21" fill="#f87171" font-size="11.5">80</text>
+      <text x="476" y="52" fill="#f87171" font-size="11.5">64</text>
+      <text x="150" y="44" fill="#f87171" font-size="12.5">human relay (dips at N=8: relayer 96% busy — saturated)</text>
+      <path d="M 110 164 L 500 164" fill="none" stroke="#4ade80" stroke-width="2.5"/>
+      <circle cx="110" cy="164" r="3.5" fill="#4ade80"/><circle cx="288" cy="164" r="3.5" fill="#4ade80"/><circle cx="466" cy="164" r="3.5" fill="#4ade80"/>
+      <text x="330" y="152" fill="#4ade80" font-size="12.5">fact bus · relay = 0, judgment gates 6 → 6</text>
     </svg>
-    <p class="not">This is the evaluation charter for the paired experiment now in progress — not measured results yet. Shared-blackboard coordination has independent academic support: voluntary claiming over a shared board beat master-slave orchestration by 13–57% (<a href="https://arxiv.org/abs/2510.01285">arXiv:2510.01285</a>).</p>
+    <p class="not">Measured 2026-08, simulated acts, human relay modeled as a best-case script (a lower bound — a real human relays slower): <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/m1m3-paired-2026-08.md">full data &amp; harness</a>. Shared-blackboard coordination has independent academic support: voluntary claiming over a shared board beat master-slave orchestration by 13–57% (<a href="https://arxiv.org/abs/2510.01285">arXiv:2510.01285</a>).</p>
   </div>
 
   <div class="ticker" aria-hidden="true"><div>
@@ -298,7 +305,7 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
     <details><summary>Does it lock files?</summary><p>No. Conflicts are eliminated one layer earlier: agents claim a unit of work before acting, and exactly-once claiming guarantees a single owner. If nobody edits the same thing, nothing needs locking.</p></details>
     <details><summary>What happens when an agent crashes mid-task?</summary><p>Its claim expires (bus-stamped time, not the agent's clock), and any surviving agent wins the re-claim and takes over. Recovery is deterministic: replay the log, get the same world. Measured: the chain healed 12.2s after a SIGKILL.</p></details>
     <details><summary>Which agents can join?</summary><p>Native worker ants via <code>@antlegion/ant</code> (script or LLM-powered acts), any agent that can run a shell command (Claude Code, Cursor, Cline, Codex CLI, Windsurf, Zed…) via the <code>alctl</code> CLI, and anything that can speak HTTP or import the TypeScript SDK.</p></details>
-    <details><summary>Is it production-ready?</summary><p>Alpha. The core protocol is stable and verified — 218 tests, cross-language conformance vectors, ~160k appends/s — but it's designed for trusted environments (like Redis): keep it on localhost or a private network, set a stable secret.</p></details>
+    <details><summary>Is it production-ready?</summary><p>Alpha. The core protocol is stable and verified — 237 tests, cross-language conformance vectors, ~160k appends/s — but it's designed for trusted environments (like Redis): keep it on localhost or a private network, set a stable secret.</p></details>
     <p class="not">Questions the FAQ didn't answer? → <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a></p>
   </div>
 

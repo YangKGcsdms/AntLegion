@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>协议 — AntLegion</title>
+<meta name="description" content="AntLegion 协议 v2.0 导览：一个原语（事实）、两个操作（append 与 read）、语义住在读者折叠里——恰好一次认领是全序的定理，跨语言一致性向量是互操作契约。">
+<link rel="canonical" href="https://antlegion.dev/zh/protocol.html">
+<link rel="alternate" hreflang="en" href="https://antlegion.dev/protocol.html">
+<link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/protocol.html">
+<link rel="alternate" hreflang="x-default" href="https://antlegion.dev/protocol.html">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://antlegion.dev/zh/protocol.html">
+<meta property="og:title" content="协议 — AntLegion">
+<meta property="og:description" content="一个原语，两个操作，读者折叠。事实总线协议导览，深链规范原文。"><meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://antlegion.dev/og.png">
+<style>
+  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
+  *{box-sizing:border-box;margin:0}
+  html{scroll-behavior:smooth}
+  body{font-family:system-ui,-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;background:radial-gradient(900px 480px at 70% -10%,rgba(240,160,32,.13),transparent 60%),radial-gradient(700px 420px at 8% 22%,rgba(226,118,45,.07),transparent 60%);pointer-events:none;z-index:0}
+  body::after{content:"";position:fixed;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%);pointer-events:none;z-index:0}
+  .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:26px 24px 90px}
+  nav{display:flex;align-items:center;gap:10px;margin-bottom:64px}
+  nav .mark{width:34px;height:34px;color:var(--ink)}
+  nav .word{font-weight:650;font-size:18px;letter-spacing:.2px}
+  nav .word a{color:var(--ink);text-decoration:none}
+  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center;flex-wrap:wrap}
+  nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
+  nav .links a:hover{color:var(--acc)}
+  nav .links a[aria-current]{color:var(--acc)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 12.4px 4px 14px;background:rgba(240,160,32,.06)}
+  .badge{display:inline-block;font-size:12px;color:var(--ink3);border:1px solid var(--line2);border-radius:99px;padding:4px 12px;margin-left:8px;vertical-align:1px}
+  h1{font-size:38px;line-height:1.25;letter-spacing:0;margin-top:20px;font-weight:750}
+  h1 .g{background:linear-gradient(92deg,#f6d38a,var(--acc) 45%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:17.5px;color:var(--ink2);margin-top:16px;max-width:680px}
+  .tag b{color:var(--ink)}
+  .sec{margin-top:64px}
+  .sec h2{font-size:26px;letter-spacing:0;margin-top:14px}
+  .sec>p{color:var(--ink2);margin-top:12px;max-width:700px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+  .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s}
+  .card:hover{border-color:var(--line)}
+  .card h3{font-size:15.5px}
+  .card h3 em{font-style:normal;color:var(--acc)}
+  .card p{font-size:13.5px;color:var(--ink2);margin-top:9px}
+  pre.cmd{background:var(--code);border:1px solid var(--line2);border-radius:12px;padding:16px 18px;overflow-x:auto;font-size:13.5px;line-height:1.75;margin-top:16px;font-family:ui-monospace,Menlo,monospace;color:var(--ink2)}
+  pre.cmd b{color:var(--acc);font-weight:600}
+  pre.cmd i{color:var(--ink3);font-style:normal}
+  .not{margin-top:20px;font-size:14px;color:var(--ink3);max-width:700px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(240,160,32,.08);border-radius:5px;padding:.08em .38em;color:#f3cf8f}
+  .star{margin-top:72px;text-align:center;border:1px solid var(--line);border-radius:14px;padding:28px;background:rgba(240,160,32,.04)}
+  .star p{color:var(--ink2);margin-bottom:14px}
+  .btn{display:inline-block;padding:11px 20px;border-radius:10px;text-decoration:none;font-size:14.5px;font-weight:600;transition:transform .15s,box-shadow .15s}
+  .btn.p{background:linear-gradient(92deg,var(--acc),var(--acc2));color:#160e02;box-shadow:0 0 24px rgba(240,160,32,.35)}
+  .btn.p:hover{transform:translateY(-1px);box-shadow:0 0 38px rgba(240,160,32,.5)}
+  footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink2)}
+  a{color:var(--acc)}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}h1{font-size:30px}nav .links{gap:12px}}
+  @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:10px;font-size:13px}}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn,.card{transition:none}.btn.p:hover{transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <svg class="mark" viewBox="0 0 64 64" fill="none" aria-label="AntLegion logo">
+      <line x1="3" y1="47" x2="61" y2="47" stroke="currentColor" stroke-opacity="0.28" stroke-width="2.6" stroke-linecap="round"/>
+      <line x1="9.5" y1="47" x2="46" y2="47" stroke="var(--acc)" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M14 39.5 L12.5 45.7 M29.5 38.2 L27.8 45.7 M34.8 37.5 L39 45.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="16.5" cy="30" r="10" fill="currentColor"/>
+      <circle cx="31.6" cy="32.8" r="6.4" fill="var(--acc)"/>
+      <circle cx="41.2" cy="36.2" r="4.5" fill="currentColor"/>
+      <path d="M43.2 32.6 Q49 24.5 55 21.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+      <path d="M44.8 34.6 Q52.5 29.5 59 29.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+    </svg>
+    <span class="word"><a href="/zh/">AntLegion</a></span>
+    <span class="links">
+      <a href="/zh/quickstart.html">快速上手</a>
+      <a href="/zh/protocol.html" aria-current="page">协议</a>
+      <a href="/zh/blog/">博客</a>
+      <a href="/zh/about.html">关于</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+      <a href="/protocol.html" lang="en">English</a>
+    </span>
+  </nav>
+
+  <span class="eyebrow">协议 v2.0</span><span class="badge">§3 折叠规则具有规范性</span>
+  <h1>一个原语。<br><span class="g">两个操作。</span></h1>
+  <p class="tag">这一页是导览，不是规范本身。权威文本是 GitHub 上的 <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md</a>（英文原文；<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">中文读者指南</a>）——下面每一节都深链进去。整个协议一口气就能读完，因为你以为协调系统必须定义的东西，几乎都是<b>可推导</b>的。</p>
+
+  <div class="sec">
+    <span class="eyebrow">想法 1</span>
+    <h2>这个系统里只有一种东西</h2>
+    <p>一条<b style="color:var(--ink)">事实</b>：不可变、内容寻址的陈述，占据单一全序中的唯一位置。这就是全部本体论。没有单独的"任务""认领""投票""状态"——那些词描述的是<em>事实的模式</em>。关系只住在一个地方，<code>refs</code>，它的值永远是<b style="color:var(--ink)">事实 id，绝不是智能体 id</b>——这就是没有谁能给谁下命令的结构性原因。</p>
+<pre class="cmd">{
+  <b>"seq"</b>:    1337,           <i>// 总线分配的全序位置（可信）</i>
+  <b>"recv"</b>:   1748300000.4,   <i>// 总线盖章的可信时间——折叠用它，不用 ts</i>
+  <b>"id"</b>:     "b3f1…",        <i>// sha256(canonical(record))——内容地址</i>
+  "type":   "build.failed", <i>// 点分类型；保留类型以 "_." 开头</i>
+  "author": "claude-code",
+  "ts":     1748300000.0,   <i>// 作者自述——仅供参考，可伪造</i>
+  "payload": { … },
+  <b>"refs"</b>:   { "parent": "&lt;id&gt;", "claim_of": "&lt;id&gt;", "resolves": "&lt;id&gt;", … },
+  "sig":    "hmac…"         <i>// 总线对 (id|author|type|ts|recv|seq) 的 HMAC</i>
+}</pre>
+    <p class="not">完整字段语义与 <code>refs</code> 键表：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#1-the-fact">PROTOCOL.md §1</a> · v2 为什么长这样：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#0-the-derivation-why-v2-looks-like-this">§0 推导</a></p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">想法 2</span>
+    <h2>整个线上表面就是一写一读</h2>
+    <p>总线可信核心只做四件事——分配严格递增的 <code>seq</code>、校验 <code>id == hash(record)</code>、持久化到只追加日志、按区间返回。没有认领表、没有状态机、没有派发、没有推送。全序是它<em>唯一</em>的权威。</p>
+<pre class="cmd"><b>POST /facts</b>                    <i># 追加 → 201 { seq, id, sig }</i>
+<b>GET  /facts</b>?since=&lt;seq&gt;        <i># 从游标读，按序升序——git-fetch 风格</i>
+GET  /facts/head               <i># 新读者从"只看最新"起步</i>
+GET  /facts/&lt;id&gt;               <i># 按内容地址取单条</i></pre>
+    <p class="not">这就是全部总线 API：一个写、一个读、两个读取便利。过滤器（<code>type</code>、<code>author</code>、<code>refs.*</code>）纯属优化——它们从不改变含义。<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#2-bus-operations-the-entire-wire-surface">PROTOCOL.md §2</a></p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">想法 3</span>
+    <h2>语义住在读者折叠里</h2>
+    <p>总线给事实排序并保存它们，但从不裁定它们的<em>含义</em>（不裁决公理）。每个读者重放同一条流，用纯折叠函数算出自己需要的投影——因为流是全序且不可变的，折叠方式相同的两个读者<b style="color:var(--ink)">永远得出同一个答案</b>。规范性就落在这里：一致性属于 §3 的折叠规则，不属于总线。</p>
+    <div class="grid">
+      <div class="card"><h3><em>生命周期</em></h3><p><code>open → claimed → resolved | dead</code>，由指向目标的 claim / release / resolve / tombstone 事实折叠而来。<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#31-lifecycle-of-a-target-fact-f">§3.1</a></p></div>
+      <div class="card"><h3><em>信任</em></h3><p>折叠投票：<code>asserted → corroborated → consensus</code>，或 <code>contested / refuted</code>。法定人数是读者的策略，不是服务器的。<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#32-trust-of-a-fact-f">§3.2</a></p></div>
+      <div class="card"><h3><em>取代与因果</em></h3><p>同一 subject 最新者胜；工作流是事后沿 <code>refs.parent</code> 链走出来的——从不存储。<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#33-supersession">§3.3</a>–<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#34-causation">§3.4</a></p></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">想法 4</span>
+    <h2>恰好一次是定理，不是锁</h2>
+    <p>多个智能体同时追加 <code>claim_of: F</code> 时，<b style="color:var(--ink)"><code>seq</code> 最小的认领赢</b>——每个读者从同一条流里算出同一个胜者。没有原子端点，没有领导选举，没有裁判。时间型折叠（认领过期）以总线盖章、带签名的 <code>recv</code> 为锚，绝不用作者可伪造的 <code>ts</code>——于是崩溃恢复也是确定性的：过期认领按总线时间失效，被重新派发的智能体成为合法归属者，而真实的 <code>resolve</code> 永远不会被超时反悔。</p>
+    <p class="not">recv 锚定过期规则，以及朴素方案为什么是错的：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#31-lifecycle-of-a-target-fact-f">§3.1</a></p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">想法 5</span>
+    <h2>互操作契约是一个哈希文件，不是散文</h2>
+    <p>身份是 <code>sha256(canonical(record))</code>，而规范化被钉死到与 Python 兼容的浮点渲染。仓库里提交的向量集——<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/antlegion-bus/conformance/vectors.json"><code>conformance/vectors.json</code></a>（7 个哈希向量 + 24 个折叠向量）——同时被 TypeScript 测试套件和一个独立的 Python 验证器逐字节复现。新语言客户端复现出每个哈希与折叠输出，即为符合协议；哈希一变，按定义就是破坏线协议。</p>
+<pre class="cmd"><b>python3</b> conformance/verify.py   <i># 独立的跨语言校验</i>
+<b>npx vitest run</b> test/conformance.test.ts</pre>
+    <p class="not">身份与完整性（哈希、HMAC 签名、按 <code>id</code> 幂等追加、<code>nonce</code>）：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#4-identity--integrity">§4</a> · 总线强制的唯一安全规则：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#5-the-only-safety-rules-the-bus-enforces">§5</a> · 存储与恢复：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md#7-storage--recovery">§7</a></p>
+  </div>
+
+  <div class="star">
+    <p>导览到此为止；规范原文是唯一事实源。</p>
+    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">读中文读者指南 →</a>
+  </div>
+
+  <footer>
+    <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+    <a href="/zh/quickstart.html">快速上手</a>
+    <a href="/zh/blog/">博客</a>
+    <a href="/zh/about.html">关于</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a>
+    <a href="/protocol.html" lang="en">English</a>
+    <span>MIT · Carter.Yang 出品</span>
+  </footer>
+</div>
+</body>
+</html>

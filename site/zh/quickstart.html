@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>快速上手 — AntLegion</title>
+<meta name="description" content="六十秒从 npx 到一支协作的智能体舰队：起总线（npx、Docker 或守护进程三选一）、用 alctl CLI 接入 Claude Code / Cursor 会话、放一支 DCU 蚁群上去、或用 TypeScript SDK 从代码协作。">
+<link rel="canonical" href="https://antlegion.dev/zh/quickstart.html">
+<link rel="alternate" hreflang="en" href="https://antlegion.dev/quickstart.html">
+<link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/quickstart.html">
+<link rel="alternate" hreflang="x-default" href="https://antlegion.dev/quickstart.html">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://antlegion.dev/zh/quickstart.html">
+<meta property="og:title" content="快速上手 — AntLegion">
+<meta property="og:description" content="六十秒从 npx 到一支协作的智能体舰队——总线、alctl CLI、DCU 蚁群、SDK。"><meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://antlegion.dev/og.png">
+<style>
+  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
+  *{box-sizing:border-box;margin:0}
+  html{scroll-behavior:smooth}
+  body{font-family:system-ui,-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;background:radial-gradient(900px 480px at 70% -10%,rgba(240,160,32,.13),transparent 60%),radial-gradient(700px 420px at 8% 22%,rgba(226,118,45,.07),transparent 60%);pointer-events:none;z-index:0}
+  body::after{content:"";position:fixed;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%);pointer-events:none;z-index:0}
+  .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:26px 24px 90px}
+  nav{display:flex;align-items:center;gap:10px;margin-bottom:64px}
+  nav .mark{width:34px;height:34px;color:var(--ink)}
+  nav .word{font-weight:650;font-size:18px;letter-spacing:.2px}
+  nav .word a{color:var(--ink);text-decoration:none}
+  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center;flex-wrap:wrap}
+  nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
+  nav .links a:hover{color:var(--acc)}
+  nav .links a[aria-current]{color:var(--acc)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 12.4px 4px 14px;background:rgba(240,160,32,.06)}
+  .badge{display:inline-block;font-size:12px;color:var(--ink3);border:1px solid var(--line2);border-radius:99px;padding:4px 12px;margin-left:8px;vertical-align:1px}
+  h1{font-size:38px;line-height:1.25;letter-spacing:0;margin-top:20px;font-weight:750}
+  h1 .g{background:linear-gradient(92deg,#f6d38a,var(--acc) 45%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:17.5px;color:var(--ink2);margin-top:16px;max-width:680px}
+  .tag b{color:var(--ink)}
+  .cta{margin-top:26px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .copy{display:flex;align-items:center;gap:0;background:var(--code);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 0 24px rgba(240,160,32,.18)}
+  .copy code{padding:12px 18px;font-family:ui-monospace,Menlo,monospace;font-size:14.5px;color:var(--ink);background:none;border:none}
+  .copy button{border:none;border-left:1px solid var(--line);background:rgba(240,160,32,.1);color:var(--acc);font:600 13px/1 system-ui;padding:14px 16px;cursor:pointer;transition:background .15s}
+  .copy button:hover{background:rgba(240,160,32,.2)}
+  .cta .sub{font-size:13px;color:var(--ink3)}
+  .sec{margin-top:64px}
+  .sec h2{font-size:26px;letter-spacing:0;margin-top:14px}
+  .sec>p{color:var(--ink2);margin-top:12px;max-width:700px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+  .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s}
+  .card:hover{border-color:var(--line)}
+  .card h3{font-size:15.5px}
+  .card h3 em{font-style:normal;color:var(--acc)}
+  .card p{font-size:13.5px;color:var(--ink2);margin-top:9px}
+  pre.cmd{background:var(--code);border:1px solid var(--line2);border-radius:12px;padding:16px 18px;overflow-x:auto;font-size:13.5px;line-height:1.75;margin-top:16px;font-family:ui-monospace,Menlo,monospace;color:var(--ink2)}
+  pre.cmd b{color:var(--acc);font-weight:600}
+  pre.cmd i{color:var(--ink3);font-style:normal}
+  pre.cmd .ok{color:var(--grn)}
+  .not{margin-top:20px;font-size:14px;color:var(--ink3);max-width:700px}
+  .tablewrap{overflow-x:auto;margin-top:22px;border:1px solid var(--line2);border-radius:14px}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px}
+  th,td{border-bottom:1px solid var(--line2);padding:11px 14px;text-align:left;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  thead th{background:rgba(255,255,255,.02);font-size:12.5px;color:var(--ink2)}
+  tbody td:first-child{white-space:nowrap;color:var(--ink)}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(240,160,32,.08);border-radius:5px;padding:.08em .38em;color:#f3cf8f}
+  .star{margin-top:72px;text-align:center;border:1px solid var(--line);border-radius:14px;padding:28px;background:rgba(240,160,32,.04)}
+  .star p{color:var(--ink2);margin-bottom:14px}
+  .btn{display:inline-block;padding:11px 20px;border-radius:10px;text-decoration:none;font-size:14.5px;font-weight:600;transition:transform .15s,box-shadow .15s}
+  .btn.p{background:linear-gradient(92deg,var(--acc),var(--acc2));color:#160e02;box-shadow:0 0 24px rgba(240,160,32,.35)}
+  .btn.p:hover{transform:translateY(-1px);box-shadow:0 0 38px rgba(240,160,32,.5)}
+  footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink2)}
+  a{color:var(--acc)}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}h1{font-size:30px}nav .links{gap:12px}}
+  @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:10px;font-size:13px}}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn,.card{transition:none}.btn.p:hover{transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <svg class="mark" viewBox="0 0 64 64" fill="none" aria-label="AntLegion logo">
+      <line x1="3" y1="47" x2="61" y2="47" stroke="currentColor" stroke-opacity="0.28" stroke-width="2.6" stroke-linecap="round"/>
+      <line x1="9.5" y1="47" x2="46" y2="47" stroke="var(--acc)" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M14 39.5 L12.5 45.7 M29.5 38.2 L27.8 45.7 M34.8 37.5 L39 45.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="16.5" cy="30" r="10" fill="currentColor"/>
+      <circle cx="31.6" cy="32.8" r="6.4" fill="var(--acc)"/>
+      <circle cx="41.2" cy="36.2" r="4.5" fill="currentColor"/>
+      <path d="M43.2 32.6 Q49 24.5 55 21.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+      <path d="M44.8 34.6 Q52.5 29.5 59 29.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+    </svg>
+    <span class="word"><a href="/zh/">AntLegion</a></span>
+    <span class="links">
+      <a href="/zh/quickstart.html" aria-current="page">快速上手</a>
+      <a href="/zh/protocol.html">协议</a>
+      <a href="/zh/blog/">博客</a>
+      <a href="/zh/about.html">关于</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+      <a href="/quickstart.html" lang="en">English</a>
+    </span>
+  </nav>
+
+  <span class="eyebrow">快速上手</span><span class="badge">bus 0.4.1 · ant 0.4.0 · Node ≥ 20</span>
+  <h1>六十秒，组起一支<br><span class="g">协作的舰队</span></h1>
+  <p class="tag">总线是唯一的常驻进程。其余一切——工蚁、你的 Claude Code / Cursor 会话、任何能执行 shell 命令的东西——都以对等身份加入，通过事实协作。没有编排器要配置，因为它根本不存在。</p>
+  <div class="cta">
+    <span class="copy"><code>npx @antlegion/bus demo</code><button type="button" onclick="navigator.clipboard.writeText('npx @antlegion/bus demo');this.textContent='copied ✓';setTimeout(()=>this.textContent='copy',1600)">copy</button></span>
+    <span class="sub">15 秒 · 零配置 · 零 API key</span>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">第 0 步 · 15 秒</span>
+    <h2>先看它自证</h2>
+    <p>什么都不用装，让三幕演示在你机器上把整套主张跑一遍：8 个 agent 进程竞速 400 个任务、<b style="color:var(--ink)">重复 0</b>；一个 worker 被 <code>kill -9</code>，幸存者接管它的认领；最后杀掉总线本身，从日志重放，逐字节一致。</p>
+<pre class="cmd"><b>npx @antlegion/bus demo</b>
+<i># ACT 1 · THE RACE   → resolved 400/400 · 重复 0</i>
+<i># ACT 2 · THE CRASH  → 认领在总线时钟上过期 · 幸存者重新赢下</i>
+<i># ACT 3 · THE REPLAY → 流哈希逐字节一致</i>
+<span class="ok">全部不变量成立</span></pre>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">第 1 步</span>
+    <h2>起总线——三种方式任选</h2>
+    <p>总线是一个进程，只做一件事：给每条事实编号、永不擦除。三条渠道跑的是同一个东西，都在 <code>localhost:28090</code>。</p>
+    <div class="grid">
+      <div class="card">
+        <h3><em>npx</em> — 最快</h3>
+<pre class="cmd"><b>npx @antlegion/bus</b>
+<i># append-only fact bus on
+# http://localhost:28090</i></pre>
+        <p>五秒，零配置。控制台在 <code>/dashboard</code>。</p>
+      </div>
+      <div class="card">
+        <h3><em>Docker</em> — 从 GHCR 拉</h3>
+<pre class="cmd"><b>docker run</b> -d --name antlegion \
+  -p 28090:28090 \
+  -v antlegion-data:/data \
+  -e ANTLEGION_BUS_SECRET=change-me \
+  ghcr.io/yangkgcsdms/antlegion</pre>
+        <p>公开多架构镜像（amd64 + arm64）。<code>/data</code> 里只有日志文件，别无其他。</p>
+      </div>
+      <div class="card">
+        <h3><em>守护进程</em> — redis-server 式</h3>
+<pre class="cmd"><b>npm i -g</b> @antlegion/bus
+<b>antlegion start</b>    <i># 后台运行</i>
+<b>antlegion status</b>   <i># pid · /health</i>
+<b>antlegion stop</b>     <i># 退出前刷盘</i></pre>
+        <p>pidfile 与日志随数据目录存放。</p>
+      </div>
+    </div>
+<pre class="cmd"><i># 确认它起来了</i>
+<b>curl</b> http://localhost:28090/health
+<i># {"status":"ok","protocol":"2.0","head_seq":0}</i></pre>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">第 2 步</span>
+    <h2>把你的智能体会话接进来（<code>alctl</code>）</h2>
+    <p>任何能执行 shell 命令的智能体——Claude Code、Cursor、Cline、Codex CLI、cron 任务——都通过 <code>alctl</code> CLI（<code>redis-cli</code> 的对应物）驱动总线。它随服务端一起安装（<code>npm i -g @antlegion/bus</code>），或给每条命令加 <code>npx -y -p @antlegion/bus</code> 前缀。整个智能体循环就三个动词：</p>
+<pre class="cmd"><b>alctl read</b> --type 'task.*'  <i># 看有哪些开放任务</i>
+<b>alctl claim</b> &lt;id&gt;            <i># 恰好一次；输家退出码非 0</i>
+<b>alctl resolve</b> &lt;id&gt;          <i># 只有胜者能解决</i></pre>
+    <p><code>alctl claim</code> 只对唯一的胜者返回 0，智能体据退出码分支，永不双执行。发布工作与结果再加一个动词：</p>
+<pre class="cmd"><b>alctl publish</b> task.build '{"target":"todo-app"}' --author alice
+<i># {"id":"b3f1…","seq":1,"deduped":false}</i>
+<b>alctl state</b> b3f1…
+<i># {"state":"claimed","owner":"alice"}</i>
+<b>alctl tail</b> --follow        <i># 实时跟流</i></pre>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th scope="col">设置</th><th scope="col">用途</th></tr></thead>
+      <tbody>
+      <tr><td><code>--author &lt;name&gt;</code></td><td>单条命令的身份——优先级最高</td></tr>
+      <tr><td><code>ANTLEGION_AUTHOR</code></td><td>整个 shell 会话的身份</td></tr>
+      <tr><td><em>（默认）</em></td><td><code>&lt;os-username&gt;@&lt;hostname&gt;</code>——跨命令稳定，先 <code>claim</code> 后 <code>resolve</code> 直接可用</td></tr>
+      <tr><td><code>ANTLEGION_BUS_URL</code></td><td>CLI 找总线的地址（默认 <code>http://localhost:28090</code>）</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="not">完整智能体指南——动词 ↔ 折叠对照、首条提示词、CLAUDE.md / .cursorrules 规则片段、崩溃恢复：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/AGENT-CLI.zh-CN.md">docs/AGENT-CLI.zh-CN.md</a></p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">第 3 步</span>
+    <h2>放一支 DCU 蚁群上去</h2>
+    <p>常驻的自治工作单元（<a href="https://www.npmjs.com/package/@antlegion/ant"><code>@antlegion/ant</code></a>）在自己关心的事实出现时醒来、恰好一次认领、干活、带证据解决。dev-chain 自带 4 个阶段 DCU + 证据裁决器 + 看门狗：</p>
+<pre class="cmd"><b>npx @antlegion/ant chain</b>                          <i># 起蚁群</i>
+<b>npx @antlegion/ant req new</b> "试点需求" -s pilot
+<b>npx @antlegion/ant board</b>   <i># 监督看板 → localhost:28091/devchain.html</i></pre>
+    <p>约 2 秒内 <code>dcu-plan</code> 认领需求、产出 <code>plan.ready</code>，裁决器核查其证据形状，链条停在 H1 人工闸门——在看板上批准，plan → dev → unittest → e2e 自动跑到 ✔ CHAIN DONE。没有谁给谁下命令；全部协调都是事实流上的读者折叠。</p>
+    <p class="not">或者问答式配置一只工蚁：<code>npx @antlegion/ant init</code>，然后 <code>npx @antlegion/ant start</code>。</p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">第 4 步 · 可选</span>
+    <h2>从代码协作</h2>
+    <p>折叠 SDK（<code>npm i @antlegion/bus</code>）替你消化"追加后读回再折叠"的工作：</p>
+<pre class="cmd"><i>import</i> { ClientV2, httpTransport } <i>from</i> "@antlegion/bus/client";
+
+<i>const</i> alice = <i>new</i> ClientV2(httpTransport("http://localhost:28090"), "alice");
+<i>const</i> bob   = <i>new</i> ClientV2(httpTransport("http://localhost:28090"), "bob");
+
+<i>const</i> { id } = <i>await</i> alice.publish("task.build", { target: "todo-app" });
+
+<i>// 两边竞速；seq 最小者赢——确定性，无锁</i>
+<i>const</i> [ra, rb] = <i>await</i> Promise.all([alice.claim(id), bob.claim(id)]);
+<i>const</i> winner = ra.won ? alice : bob;
+
+<i>await</i> winner.resolve(id, [{ type: "build.done", payload: { ok: true } }]);
+
+<i>await</i> alice.state(id);  <i>// { state: "resolved", owner: &lt;winner&gt; }</i>
+<i>await</i> bob.state(id);    <i>// 完全一致——确定性折叠</i></pre>
+    <p class="not">客户端表面：<code>publish</code> / <code>claim</code> / <code>resolve</code> / <code>release</code> / <code>observe</code> / <code>state</code> / <code>trustOf</code> / <code>causation</code> / <code>query</code> / <code>snapshot</code>。底下的原始 HTTP 表面只有 <code>POST /facts</code> 和 <code>GET /facts?since=</code>——见<a href="/zh/protocol.html">协议导览</a>。</p>
+  </div>
+
+  <div class="sec">
+    <span class="eyebrow">依赖它之前</span>
+    <h2>先记住三件事</h2>
+    <div class="grid">
+      <div class="card"><h3><em>1.</em> 设一个稳定的 secret</h3><p>不设的话，总线每次启动都铸一把新 HMAC 密钥——重启后先前的签名无法验证（在 <code>/info</code> 里以 <code>sig_failures</code> 浮现）。设一次 <code>ANTLEGION_BUS_SECRET</code>，一直用它。</p></div>
+      <div class="card"><h3><em>2.</em> 全部状态就是一个文件</h3><p>一切都在 <code>$ANTLEGION_DATA_DIR/facts-v2.jsonl</code> 里。备份 = 复制它；重来 = 删掉它。Ctrl-C 是安全的——恢复时重放日志并逐条验签。</p></div>
+      <div class="card"><h3><em>3.</em> 与 Redis 同款信任模型</h3><p>总线信任它的调用方，默认只监听 <code>127.0.0.1</code>。留在 localhost 或私有网络里，别暴露给不受信的调用方。</p></div>
+    </div>
+  </div>
+
+  <div class="star">
+    <p>再深一层：含 HTTP 线上表面、持久化与蜂群验证的完整分步指南。</p>
+    <a class="btn p" href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/QUICKSTART.zh-CN.md">读完整 QUICKSTART →</a>
+  </div>
+
+  <footer>
+    <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+    <a href="/zh/protocol.html">协议</a>
+    <a href="/zh/blog/">博客</a>
+    <a href="/zh/about.html">关于</a>
+    <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a>
+    <a href="/quickstart.html" lang="en">English</a>
+    <span>MIT · Carter.Yang 出品</span>
+  </footer>
+</div>
+</body>
+</html>

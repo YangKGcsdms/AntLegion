@@ -1,0 +1,149 @@
+{
+  "ran_at": "2026-08-13T07:21:19.377Z",
+  "delta_s": 2,
+  "fold_outputs_identical": true,
+  "skew_fact_ids_differ": true,
+  "arms": [
+    {
+      "arm": "control",
+      "skew_s": 0,
+      "rows": [
+        {
+          "unit": "U1",
+          "probe": "final-lifecycle",
+          "value": "resolved/worker-skew@exp5"
+        },
+        {
+          "unit": "U1",
+          "probe": "winner-under-contention@bothclaims+0.2s",
+          "value": "worker-skew@exp5"
+        },
+        {
+          "unit": "U2",
+          "probe": "lifecycle@claim+1.0s (Δ=2)",
+          "value": "claimed/worker-skew@exp5"
+        },
+        {
+          "unit": "U2",
+          "probe": "lifecycle@claim+2.5s (Δ=2)",
+          "value": "open/-"
+        },
+        {
+          "unit": "U3",
+          "probe": "final-lifecycle (zombie resolve ignored?)",
+          "value": "resolved/worker-honest@exp5"
+        },
+        {
+          "unit": "U3",
+          "probe": "post-expiry-winner@takeover+0.2s",
+          "value": "worker-honest@exp5"
+        }
+      ],
+      "canonical": "[{\"unit\":\"U1\",\"probe\":\"final-lifecycle\",\"value\":\"resolved/worker-skew@exp5\"},{\"unit\":\"U1\",\"probe\":\"winner-under-contention@bothclaims+0.2s\",\"value\":\"worker-skew@exp5\"},{\"unit\":\"U2\",\"probe\":\"lifecycle@claim+1.0s (Δ=2)\",\"value\":\"claimed/worker-skew@exp5\"},{\"unit\":\"U2\",\"probe\":\"lifecycle@claim+2.5s (Δ=2)\",\"value\":\"open/-\"},{\"unit\":\"U3\",\"probe\":\"final-lifecycle (zombie resolve ignored?)\",\"value\":\"resolved/worker-honest@exp5\"},{\"unit\":\"U3\",\"probe\":\"post-expiry-winner@takeover+0.2s\",\"value\":\"worker-honest@exp5\"}]",
+      "sha256": "8e8e8a7d3bd02b6e3fa9e02148c3ca894f00da8fe52b203ab223199d6d35d61e",
+      "facts_total": 11,
+      "skew_ts_minus_recv_mean_s": 0,
+      "skew_fact_ids": [
+        "1c54147e484529e8a8ee58302149740541387354cf4a9cd3b958b7e8ab39ad42",
+        "3f225162b74161bf620b294818a7187a1faafb8e8d6681fcff92104156e88a3a",
+        "f857071e6db3e1a3243ed934f8da82d575f8e9bcb923ad2e9435609717ac4cae",
+        "d4a92fc04d20ce55221422e6575a3a01b4195441294d6002399ff2733780e3e4",
+        "b2bcd021f441da7fe448035b31af9872dda0e8a462b3cc192524d96d38c655ce"
+      ]
+    },
+    {
+      "arm": "fast+300s",
+      "skew_s": 300,
+      "rows": [
+        {
+          "unit": "U1",
+          "probe": "final-lifecycle",
+          "value": "resolved/worker-skew@exp5"
+        },
+        {
+          "unit": "U1",
+          "probe": "winner-under-contention@bothclaims+0.2s",
+          "value": "worker-skew@exp5"
+        },
+        {
+          "unit": "U2",
+          "probe": "lifecycle@claim+1.0s (Δ=2)",
+          "value": "claimed/worker-skew@exp5"
+        },
+        {
+          "unit": "U2",
+          "probe": "lifecycle@claim+2.5s (Δ=2)",
+          "value": "open/-"
+        },
+        {
+          "unit": "U3",
+          "probe": "final-lifecycle (zombie resolve ignored?)",
+          "value": "resolved/worker-honest@exp5"
+        },
+        {
+          "unit": "U3",
+          "probe": "post-expiry-winner@takeover+0.2s",
+          "value": "worker-honest@exp5"
+        }
+      ],
+      "canonical": "[{\"unit\":\"U1\",\"probe\":\"final-lifecycle\",\"value\":\"resolved/worker-skew@exp5\"},{\"unit\":\"U1\",\"probe\":\"winner-under-contention@bothclaims+0.2s\",\"value\":\"worker-skew@exp5\"},{\"unit\":\"U2\",\"probe\":\"lifecycle@claim+1.0s (Δ=2)\",\"value\":\"claimed/worker-skew@exp5\"},{\"unit\":\"U2\",\"probe\":\"lifecycle@claim+2.5s (Δ=2)\",\"value\":\"open/-\"},{\"unit\":\"U3\",\"probe\":\"final-lifecycle (zombie resolve ignored?)\",\"value\":\"resolved/worker-honest@exp5\"},{\"unit\":\"U3\",\"probe\":\"post-expiry-winner@takeover+0.2s\",\"value\":\"worker-honest@exp5\"}]",
+      "sha256": "8e8e8a7d3bd02b6e3fa9e02148c3ca894f00da8fe52b203ab223199d6d35d61e",
+      "facts_total": 11,
+      "skew_ts_minus_recv_mean_s": 300,
+      "skew_fact_ids": [
+        "66b143571476e598a7aad283ee3a26331b307a82c3712c7784749d4ddc056df3",
+        "321606ae52fae49dadea5049be799b4cdf46e500c6a6fbde9aacf75f94125559",
+        "2ba2843627ba84b53ab0851b3ba0fcb15300c2d98efddff56427c021cc35b1aa",
+        "26adb8cfe76aa36ffbd32b3d18771c878bd7d5f0d3df426196679c4efcb0cf01",
+        "af6e1bfd7692fd3c23d59968703e4be1a3f752f5583618a2a85b6c4b2220bfd5"
+      ]
+    },
+    {
+      "arm": "slow-300s",
+      "skew_s": -300,
+      "rows": [
+        {
+          "unit": "U1",
+          "probe": "final-lifecycle",
+          "value": "resolved/worker-skew@exp5"
+        },
+        {
+          "unit": "U1",
+          "probe": "winner-under-contention@bothclaims+0.2s",
+          "value": "worker-skew@exp5"
+        },
+        {
+          "unit": "U2",
+          "probe": "lifecycle@claim+1.0s (Δ=2)",
+          "value": "claimed/worker-skew@exp5"
+        },
+        {
+          "unit": "U2",
+          "probe": "lifecycle@claim+2.5s (Δ=2)",
+          "value": "open/-"
+        },
+        {
+          "unit": "U3",
+          "probe": "final-lifecycle (zombie resolve ignored?)",
+          "value": "resolved/worker-honest@exp5"
+        },
+        {
+          "unit": "U3",
+          "probe": "post-expiry-winner@takeover+0.2s",
+          "value": "worker-honest@exp5"
+        }
+      ],
+      "canonical": "[{\"unit\":\"U1\",\"probe\":\"final-lifecycle\",\"value\":\"resolved/worker-skew@exp5\"},{\"unit\":\"U1\",\"probe\":\"winner-under-contention@bothclaims+0.2s\",\"value\":\"worker-skew@exp5\"},{\"unit\":\"U2\",\"probe\":\"lifecycle@claim+1.0s (Δ=2)\",\"value\":\"claimed/worker-skew@exp5\"},{\"unit\":\"U2\",\"probe\":\"lifecycle@claim+2.5s (Δ=2)\",\"value\":\"open/-\"},{\"unit\":\"U3\",\"probe\":\"final-lifecycle (zombie resolve ignored?)\",\"value\":\"resolved/worker-honest@exp5\"},{\"unit\":\"U3\",\"probe\":\"post-expiry-winner@takeover+0.2s\",\"value\":\"worker-honest@exp5\"}]",
+      "sha256": "8e8e8a7d3bd02b6e3fa9e02148c3ca894f00da8fe52b203ab223199d6d35d61e",
+      "facts_total": 11,
+      "skew_ts_minus_recv_mean_s": -300,
+      "skew_fact_ids": [
+        "c2f28d836272fc5e52d8ffd66c4bf33aa6ced534dcaca20b48e2f06094e4a017",
+        "7b64f5e0a4760745d5a7bafea5d403867114e3f122da12ddd2a045f18bf226f5",
+        "bdd96f998f5dac7437e0105aac7abfe25e25165f8b85344ab69d38f28218234e",
+        "a38615e78d7b89adbb01c475e3acdc073f6cd39ca87b17783437836f476e5d7e",
+        "c7e603d9fc67dc3d0efc23fff88f2ccfdc0e1a1380288f6558f7a2fc4b6cb468"
+      ]
+    }
+  ]
+}

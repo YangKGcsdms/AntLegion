@@ -8,7 +8,9 @@
   AntLegion bus console — a browser-shaped `tail -f` + INFO, now with a
   settings drawer (claim Δ / poll / time format / language), per-fact
   lifecycle badges (a faithful JS port of fold.ts §3.1 over the loaded
-  window), and a causation tree (refs.parent chain + loaded descendants).
+  window), a causation tree (refs.parent chain + loaded descendants), and
+  an isolation-metrics corner (M5 claim contention / M6 takeover latency /
+  M10 end-to-end latency) folded client-side from the same window.
 
   Read-only by design: this page only issues GET /facts (since cursor),
   GET /facts/head, GET /facts/:id and GET /info. It never writes.
@@ -111,6 +113,7 @@
   #health .grid .k{color:var(--ink3)}
   #health .note{color:var(--yel);grid-column:1/3;font-size:12px}
   #health .note.bad{color:var(--red)}
+  #health .note.ok{color:var(--grn)}
   #health table{max-width:720px;margin-top:4px}
   #health th{color:var(--ink3);text-align:left;font-weight:600;font-size:11.5px;padding:4px 10px;border-bottom:1px solid var(--line)}
   #health td{padding:4px 10px;border-bottom:1px solid var(--row);color:var(--ink2)}
@@ -211,6 +214,12 @@
     <div class="grid" id="h-proc"></div>
     <h3 id="s-authors">作者活跃 <span class="tiny" id="s-authors-sub" style="letter-spacing:0">（基于已加载的事实流折叠）</span></h3>
     <table><thead><tr><th id="a-author">作者</th><th id="a-last">最近活跃</th><th id="a-n">事实数（已加载）</th><th id="a-skew">最大时钟偏差</th></tr></thead><tbody id="h-authors"></tbody></table>
+    <h3 id="s-m5">M5 · 认领竞争 <span class="tiny" id="s-m5-sub" style="letter-spacing:0">（恰好一次核对 · 基于已加载窗口折叠）</span></h3>
+    <div class="grid" id="h-m5"></div>
+    <h3 id="s-m6">M6 · 断连接管 <span class="tiny" id="s-m6-sub" style="letter-spacing:0">（认领过期 → 重新认领）</span></h3>
+    <div class="grid" id="h-m6"></div>
+    <h3 id="s-m10">M10 · 端到端时延 <span class="tiny" id="s-m10-sub" style="letter-spacing:0">（task* 事实 recv → 其 resolve 的 recv）</span></h3>
+    <div class="grid" id="h-m10"></div>
     <p class="src" id="l-readonly">只读页面：只轮询 GET /facts（游标增量）与 GET /info，从不写入。 · 压缩提示：<span style="color:var(--ink2)">curl -X POST $BUS/admin/rewrite</span></p>
   </div>
 
@@ -350,6 +359,15 @@ const STR = {
     gap_none: "✓ 无声明缺口。", ctxgap_none: "✓ 没有待补充上下文的请求。",
     ctx_about: "针对事实", ctx_asked_by: "请求者", ctx_open: "未回应",
     n_facts: "{n} 条",
+    s_m5: "M5 · 认领竞争", s_m5_sub: "（恰好一次核对 · 基于已加载窗口折叠）",
+    m5_claimed: "有认领的事实", m5_c1: "1 个竞争者", m5_c2: "2 个竞争者", m5_c3: "3+ 个竞争者",
+    m5_dual: "双执行（多作者 resolve）",
+    m5_ok: "✓ 恰好一次成立：窗口内没有事实被多个作者 resolve",
+    m5_bad: "✗ {n} 个事实被多个作者 resolve——恰好一次被破坏，请核查",
+    s_m6: "M6 · 断连接管", s_m6_sub: "（认领过期 → 重新认领 · Δ={d}s）",
+    m6_events: "接管事件", m6_lat: "时延 min / 中位 / max",
+    s_m10: "M10 · 端到端时延", s_m10_sub: "（task* 事实 recv → 其 resolve 的 recv）",
+    m10_done: "已 resolve 的 task 事实", m10_lat: "时延 min / 中位 / max",
   },
   en: {
     title: "AntLegion · console", logo: "AntLegion console",
@@ -404,6 +422,15 @@ const STR = {
     gap_none: "✓ no declaration gaps.", ctxgap_none: "✓ no open context requests.",
     ctx_about: "about fact", ctx_asked_by: "asked by", ctx_open: "open",
     n_facts: "{n}",
+    s_m5: "M5 · claim contention", s_m5_sub: "(exactly-once check · folded over the loaded window)",
+    m5_claimed: "facts with claims", m5_c1: "1 claimant", m5_c2: "2 claimants", m5_c3: "3+ claimants",
+    m5_dual: "dual executions (multi-author resolves)",
+    m5_ok: "✓ exactly-once holds: no fact in the window was resolved by multiple authors",
+    m5_bad: "✗ {n} fact(s) resolved by multiple authors — exactly-once violated, investigate",
+    s_m6: "M6 · takeover after expiry", s_m6_sub: "(claim expired → re-claimed · Δ={d}s)",
+    m6_events: "takeover events", m6_lat: "latency min / median / max",
+    s_m10: "M10 · end-to-end latency", s_m10_sub: "(task* fact recv → its resolve's recv)",
+    m10_done: "resolved task facts", m10_lat: "latency min / median / max",
   },
 };
 const T = (k) => (STR[cfg.lang] && STR[cfg.lang][k]) || STR.en[k] || k;
@@ -437,6 +464,9 @@ function applyLang() {
   $("s-authors-sub").textContent = T("s_authors_sub");
   $("a-author").textContent = T("a_author"); $("a-last").textContent = T("a_last");
   $("a-n").textContent = T("a_n"); $("a-skew").textContent = T("a_skew");
+  $("s-m5").firstChild.textContent = T("s_m5") + " "; $("s-m5-sub").textContent = T("s_m5_sub");
+  $("s-m6").firstChild.textContent = T("s_m6") + " "; $("s-m6-sub").textContent = TF("s_m6_sub", { d: cfg.delta });
+  $("s-m10").firstChild.textContent = T("s_m10") + " "; $("s-m10-sub").textContent = T("s_m10_sub");
   $("l-readonly").firstChild.textContent = T("readonly") + " ";
   $("l-settings").textContent = T("settings"); $("l-lang").textContent = T("lang");
   $("l-delta").textContent = T("delta_lbl"); $("l-delta-sub").textContent = T("delta_sub");
@@ -826,7 +856,7 @@ function showTab(name) {
     $(t).style.display = t === name ? "block" : "none";
   }
   $("filters").style.display = name === "stream" ? "flex" : "none";
-  if (name === "health") { renderAuthors(); if (lastInfo) renderHealth(lastInfo, lastRate); }
+  if (name === "health") { renderAuthors(); renderStats(); if (lastInfo) renderHealth(lastInfo, lastRate); }
   if (name === "colony") renderColony();
 }
 $("t-stream").onclick = () => showTab("stream");
@@ -843,7 +873,7 @@ $("t-gear").onclick = openSettings;
 $("g-close").onclick = closeSettings;
 $("shade").onclick = closeSettings;
 
-function setLang(l) { if (cfg.lang === l) return; cfg.lang = l; syncURL(); applyLang(); rerenderAll(); if (lastInfo) renderHealth(lastInfo, lastRate); renderAuthors(); if ($("colony").style.display === "block") renderColony(); updateEmpty(); }
+function setLang(l) { if (cfg.lang === l) return; cfg.lang = l; syncURL(); applyLang(); rerenderAll(); if (lastInfo) renderHealth(lastInfo, lastRate); renderAuthors(); renderStats(); if ($("colony").style.display === "block") renderColony(); updateEmpty(); }
 $("lang-zh").onclick = () => setLang("zh");
 $("lang-en").onclick = () => setLang("en");
 function setTfmt(m) { if (cfg.tfmt === m) return; cfg.tfmt = m; syncURL(); applyLang(); rerenderAll(); }
@@ -851,7 +881,7 @@ $("tfmt-rel").onclick = () => setTfmt("rel");
 $("tfmt-abs").onclick = () => setTfmt("abs");
 $("g-delta").addEventListener("input", () => {
   const v = parseInt($("g-delta").value, 10);
-  if (Number.isFinite(v) && v >= 1) { cfg.delta = v; syncURL(); refreshOpenDetails(); }
+  if (Number.isFinite(v) && v >= 1) { cfg.delta = v; syncURL(); refreshOpenDetails(); if ($("health").style.display === "block") renderStats(); }
 });
 $("g-poll").addEventListener("input", () => {
   const v = parseInt($("g-poll").value, 10);
@@ -925,7 +955,87 @@ function renderAuthors() {
     .map(([a, v]) => `<tr><td>${esc(a)}</td><td>${fmtTime(v.last)}${cfg.tfmt === "rel" ? " " + T("ago") : ""}</td><td>${v.n}</td><td${v.skew > 5 ? ' style="color:var(--yel)"' : ""}>${v.skew.toFixed(1)}s</td></tr>`)
     .join("") || `<tr><td colspan="4" style="color:var(--ink3)">${T("no_facts")}</td></tr>`;
 }
-setInterval(() => { if ($("health").style.display === "block") renderAuthors(); }, 5000);
+setInterval(() => { if ($("health").style.display === "block") { renderAuthors(); renderStats(); } }, 5000);
+
+/* ── 隔离协作统计角（M5/M6/M10，评估宪章 11 号文口径） ──
+   与 lifecycleOf 相同的 §3.1 事件重放（recv 锚定过期），但按目标事实
+   一次分组遍历，顺带产出三组统计。纯读者侧折叠，零服务端参与。
+   - M5 认领竞争：resolve 前不同作者的 claim_of 数分布（1/2/3+），
+     加"双执行"核对——同一事实被 ≥2 个不同作者 resolve 的数量，恒应为 0。
+   - M6 断连接管：认领过期（非 release）后该事实被重新认领的事件；
+     时延 = 接管 claim.recv − 原（最近过期）claim.recv。
+   - M10 端到端：type 为 task* 且被折叠判定 resolved 的事实，
+     时延 = 被采纳的 resolve.recv − 该事实自身 recv（都在窗口内才可计）。 */
+function isoStats() {
+  const delta = cfg.delta;
+  const rel = new Map(); // 目标事实 id → 生命周期相关事实（同 fold.ts relevant()）
+  const add = (id, g) => { const a = rel.get(id); if (a) a.push(g); else rel.set(id, [g]); };
+  for (const g of facts) {
+    if (!g.refs) continue;
+    if (g.refs.claim_of) add(g.refs.claim_of, g);
+    if (g.refs.resolves) add(g.refs.resolves, g);
+    if (g.refs.release_of) add(g.refs.release_of, g);
+    if (g.type === TOMBSTONE && g.refs.tombstones) add(g.refs.tombstones, g);
+  }
+  const m5 = { claimedFacts: 0, contested: [0, 0, 0], dual: 0 };
+  const m6 = { lat: [] };
+  const m10 = { lat: [] };
+  for (const [target, list] of rel) {
+    list.sort((a, b) => a.seq - b.seq);
+    const claimAuthors = new Set(), resolveAuthors = new Set();
+    let active = [], expired = [], resolvedAt = null, dead = false;
+    for (const g of list) {
+      if (g.type === TOMBSTONE && g.refs.tombstones === target) { dead = true; break; }
+      const live = [];
+      for (const c of active) (g.recv <= c.recv + delta ? live : expired).push(c);
+      active = live;
+      if (g.refs.claim_of === target) {
+        if (resolvedAt === null) {
+          claimAuthors.add(g.author);
+          if (active.length === 0 && expired.length) { // 接管：前任过期、无人在位
+            m6.lat.push(g.recv - expired[expired.length - 1].recv);
+            expired = [];
+          }
+        }
+        active.push({ author: g.author, seq: g.seq, recv: g.recv });
+      } else if (g.refs.release_of === target) {
+        active = active.filter((c) => c.author !== g.author);
+      } else if (g.refs.resolves === target) {
+        resolveAuthors.add(g.author); // 折叠采纳与否都记——双执行看的是"谁真做了"
+        if (resolvedAt === null) {
+          const owner = active.length ? [...active].sort((a, b) => a.seq - b.seq)[0].author : null;
+          if (owner === null || g.author === owner) resolvedAt = g.recv;
+        }
+      }
+    }
+    if (claimAuthors.size) { m5.claimedFacts++; m5.contested[Math.min(claimAuthors.size, 3) - 1]++; }
+    if (!dead && resolveAuthors.size >= 2) m5.dual++;
+    if (resolvedAt !== null) {
+      const F = byId.get(target);
+      if (F && /^task(\.|$)/.test(F.type)) m10.lat.push(resolvedAt - F.recv);
+    }
+  }
+  return { m5, m6, m10 };
+}
+
+const fmtDur = (s) => s < 1 ? Math.round(s * 1000) + "ms" : s < 60 ? s.toFixed(1) + "s" : Math.floor(s / 60) + "m " + Math.round(s % 60) + "s";
+const median = (a) => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+function renderStats() {
+  const { m5, m6, m10 } = isoStats();
+  const grid = (id, pairs, notes = []) => {
+    $(id).innerHTML = pairs.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join("") +
+      notes.map((n) => `<div class="note${n.cls ? " " + n.cls : ""}">${n.t}</div>`).join("");
+  };
+  const dist = (a) => a.length ? `${fmtDur(Math.min(...a))} / ${fmtDur(median(a))} / ${fmtDur(Math.max(...a))}` : "—";
+  $("s-m6-sub").textContent = TF("s_m6_sub", { d: cfg.delta });
+  grid("h-m5",
+    [[T("m5_claimed"), m5.claimedFacts], [T("m5_c1"), m5.contested[0]], [T("m5_c2"), m5.contested[1]], [T("m5_c3"), m5.contested[2]],
+     [T("m5_dual"), `<b style="color:${m5.dual > 0 ? "var(--red)" : "var(--grn)"}">${m5.dual}</b>`]],
+    [m5.dual > 0 ? { cls: "bad", t: TF("m5_bad", { n: m5.dual }) } : { cls: "ok", t: T("m5_ok") }]);
+  grid("h-m6", [[T("m6_events"), m6.lat.length], [T("m6_lat"), dist(m6.lat)]]);
+  grid("h-m10", [[T("m10_done"), m10.lat.length], [T("m10_lat"), dist(m10.lat)]]);
+}
 
 /* ── 舰群 / 孤儿告警（fold.ts §7/§8 的内联折叠，基于已加载窗口 facts） ── */
 // 与 canonical.ts globMatch 同语义：* → .*，? → .，其余转义。

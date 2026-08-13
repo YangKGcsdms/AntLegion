@@ -33,7 +33,7 @@
   nav{display:flex;align-items:center;gap:10px;margin-bottom:72px}
   nav .mark{width:34px;height:34px;color:var(--ink)}
   nav .word{font-weight:650;font-size:18px;letter-spacing:.2px}
-  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center}
+  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center;flex-wrap:wrap}
   nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
   nav .links a:hover{color:var(--acc)}
   :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
@@ -148,9 +148,11 @@
     </svg>
     <span class="word">AntLegion</span>
     <span class="links">
-      <a href="#run">快速上手</a>
+      <a href="/zh/quickstart.html">快速上手</a>
+      <a href="/zh/protocol.html">协议</a>
+      <a href="/zh/blog/">博客</a>
+      <a href="/zh/about.html">关于</a>
       <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
-      <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">协议</a>
       <a href="/" lang="en">English</a>
     </span>
   </nav>
@@ -192,7 +194,7 @@
     <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>0</b><span>双执行——100 个认领单元、4 倍副本竞争（S2 实验一）</span></a>
     <a class="stat" href="#faq-evidence"><b>8/8</b><span>伪造"全绿"报告被证据折叠拒收 · 0 误杀</span></a>
     <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md"><b>12.2s</b><span>从 SIGKILL 认领持有者到兄弟单元完成工作</span></a>
-    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/tree/master/antlegion-bus"><b>160k/s</b><span>进程内 append/s · 218 个测试 · 跨语言一致性</span></a>
+    <a class="stat" href="https://github.com/YangKGcsdms/AntLegion/tree/master/antlegion-bus"><b>160k/s</b><span>进程内 append/s · 237 个测试 · 跨语言一致性</span></a>
   </div>
   <p class="repro">以上每个数字都能在你机器上复现——没有一个你跑不出来的 benchmark。<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md">实验记录 →</a></p>
 
@@ -209,21 +211,26 @@
       </tbody>
     </table>
     </div>
-    <p>人肉中继的成本随智能体数量超线性增长（N 个窗口两两转述 → O(N²)）。在总线上它是<b style="color:var(--ink)">水平的</b>——只与裁决闸门数成正比：</p>
-    <svg class="curve" viewBox="0 0 560 210" role="img" aria-label="人类协调成本：人肉中继随智能体数量超线性增长；有事实总线后保持水平，只与裁决闸门数相关">
+    <p>我们实测了它（配对实验，两臂同任务同闸门）。人肉中继随智能体数量爬升，直到<em>人饱和</em>——N=8 时中继者占墙钟 96%，成为串行瓶颈。在总线上，每个 N 的中继都是<b style="color:var(--ink)">零</b>，裁决闸门严格 6 → 6 不变：</p>
+    <svg class="curve" viewBox="0 0 560 210" role="img" aria-label="实测每轮人肉中继触点：N=2 为 52，N=4 为 80，N=8 为 64（人已饱和）；有事实总线后每个 N 的中继都为零">
       <line x1="46" y1="170" x2="530" y2="170" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
       <line x1="46" y1="170" x2="46" y2="16" stroke="rgba(255,255,255,.15)" stroke-width="1.5"/>
       <text x="288" y="196" fill="#8b887f" font-size="12" text-anchor="middle">智能体数量（N）</text>
-      <text x="20" y="95" fill="#8b887f" font-size="12" transform="rotate(-90 20 95)" text-anchor="middle">人类触点数</text>
+      <text x="20" y="95" fill="#8b887f" font-size="12" transform="rotate(-90 20 95)" text-anchor="middle">每轮中继触点数</text>
       <text x="110" y="184" fill="#8b887f" font-size="11" text-anchor="middle">2</text>
       <text x="288" y="184" fill="#8b887f" font-size="11" text-anchor="middle">4</text>
       <text x="466" y="184" fill="#8b887f" font-size="11" text-anchor="middle">8</text>
-      <path d="M 110 150 Q 288 118 380 72 T 500 22" fill="none" stroke="#f87171" stroke-width="2.5"/>
-      <text x="356" y="46" fill="#f87171" font-size="12.5">人肉中继 · O(N²)</text>
-      <path d="M 110 132 L 500 132" fill="none" stroke="#4ade80" stroke-width="2.5"/>
-      <text x="360" y="124" fill="#4ade80" font-size="12.5">事实总线 · O(裁决闸门)</text>
+      <path d="M 110 79 L 288 30 L 466 58" fill="none" stroke="#f87171" stroke-width="2.5"/>
+      <circle cx="110" cy="79" r="3.5" fill="#f87171"/><circle cx="288" cy="30" r="3.5" fill="#f87171"/><circle cx="466" cy="58" r="3.5" fill="#f87171"/>
+      <text x="96" y="70" fill="#f87171" font-size="11.5">52</text>
+      <text x="280" y="21" fill="#f87171" font-size="11.5">80</text>
+      <text x="476" y="52" fill="#f87171" font-size="11.5">64</text>
+      <text x="150" y="44" fill="#f87171" font-size="12.5">人肉中继（N=8 回落：中继者 96% 忙——已饱和）</text>
+      <path d="M 110 164 L 500 164" fill="none" stroke="#4ade80" stroke-width="2.5"/>
+      <circle cx="110" cy="164" r="3.5" fill="#4ade80"/><circle cx="288" cy="164" r="3.5" fill="#4ade80"/><circle cx="466" cy="164" r="3.5" fill="#4ade80"/>
+      <text x="330" y="152" fill="#4ade80" font-size="12.5">事实总线 · 中继 = 0，裁决 6 → 6</text>
     </svg>
-    <p class="not">这是正在进行的配对实验的评估纲领——尚非实测结果。共享黑板式协调有独立的学术支持：在共享板上自愿认领比 master-slave 编排高出 13~57%（<a href="https://arxiv.org/abs/2510.01285">arXiv:2510.01285</a>）。</p>
+    <p class="not">2026-08 实测，simulated 工作动作，人肉中继按"最省人力"脚本建模（这是下界——真人转述更慢）：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/m1m3-paired-2026-08.md">完整数据与装置</a>。共享黑板式协调有独立的学术支持：在共享板上自愿认领比 master-slave 编排高出 13~57%（<a href="https://arxiv.org/abs/2510.01285">arXiv:2510.01285</a>）。</p>
   </div>
 
   <div class="ticker" aria-hidden="true"><div>
@@ -297,7 +304,7 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
     <details><summary>它锁文件吗？</summary><p>不锁。冲突在更早的一层被消灭：智能体动手前先认领工作单元，恰好一次认领保证了唯一归属。没有人编辑同一处，就没有什么需要锁。</p></details>
     <details><summary>智能体干到一半崩溃了会怎样？</summary><p>它的认领会过期（按总线盖章的时间，不是智能体自己的时钟），任何幸存的智能体赢下重新认领并接管。恢复是确定性的：重放日志，得到同一个世界。实测：SIGKILL 后 12.2 秒链条痊愈。</p></details>
     <details><summary>哪些智能体能接入？</summary><p>原生工蚁走 <code>@antlegion/ant</code>（脚本或 LLM 驱动的 act）；任何能执行 shell 命令的（Claude Code、Cursor、Cline、Codex CLI、Windsurf、Zed……）经 <code>alctl</code> CLI；以及任何能发 HTTP 或引入 TypeScript SDK 的东西。</p></details>
-    <details><summary>能上生产吗？</summary><p>Alpha。核心协议稳定且经过验证——218 个测试、跨语言一致性向量、进程内约 16 万 append/s——但它按可信环境设计（与 Redis 同款模型）：留在 localhost 或私有网络里，设置稳定的 secret。</p></details>
+    <details><summary>能上生产吗？</summary><p>Alpha。核心协议稳定且经过验证——237 个测试、跨语言一致性向量、进程内约 16 万 append/s——但它按可信环境设计（与 Redis 同款模型）：留在 localhost 或私有网络里，设置稳定的 secret。</p></details>
     <p class="not">FAQ 没答到的？→ <a href="https://github.com/YangKGcsdms/AntLegion/discussions">去 Discussions 问</a></p>
   </div>
 

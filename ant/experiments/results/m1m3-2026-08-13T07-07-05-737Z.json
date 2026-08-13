@@ -1,0 +1,186 @@
+{
+  "ran_at": "2026-08-13T07:07:05.739Z",
+  "reqs_per_round": 6,
+  "human_model": {
+    "GLANCE_MS": 250,
+    "CARRY_MS": 750,
+    "GATE_MS": 1000,
+    "POLL_MS": 2000
+  },
+  "results": [
+    {
+      "arm": "A",
+      "n": 2,
+      "reqs": 6,
+      "elapsed_s": 44.1,
+      "touches": {
+        "feed": 6,
+        "carry": 18,
+        "glance": 34,
+        "gate": 6
+      },
+      "m1_relay": 52,
+      "m1_adjudication": 6,
+      "m2_max_gap_s": 6.3,
+      "m2_stage_span": 2,
+      "machine_checks": 24,
+      "notes": {
+        "human_model": {
+          "GLANCE_MS": 250,
+          "CARRY_MS": 750,
+          "GATE_MS": 1000,
+          "POLL_MS": 2000
+        },
+        "isolation": "one OS process + private data dir per node (≈ container); handoff via files moved by this harness only",
+        "carry_split": {
+          "feed": 6,
+          "carry": 18
+        }
+      }
+    },
+    {
+      "arm": "B",
+      "n": 2,
+      "reqs": 6,
+      "elapsed_s": 45.3,
+      "touches": {
+        "feed": 6,
+        "carry": 0,
+        "glance": 0,
+        "gate": 6
+      },
+      "m1_relay": 0,
+      "m1_adjudication": 6,
+      "m2_max_gap_s": 24.2,
+      "m2_stage_span": 3,
+      "machine_checks": 24,
+      "notes": {
+        "human_model": {
+          "GATE_MS": 1000,
+          "CARRY_MS_feed": 750
+        },
+        "facts_on_bus": 113,
+        "claims": 24,
+        "double_executions": 0,
+        "human_authored_facts": 6,
+        "gate_mode": "ANT_AUTO_GATE off — gates approved by the harness-as-human"
+      }
+    },
+    {
+      "arm": "A",
+      "n": 4,
+      "reqs": 6,
+      "elapsed_s": 46.2,
+      "touches": {
+        "feed": 6,
+        "carry": 24,
+        "glance": 56,
+        "gate": 6
+      },
+      "m1_relay": 80,
+      "m1_adjudication": 6,
+      "m2_max_gap_s": 4.8,
+      "m2_stage_span": 1,
+      "machine_checks": 24,
+      "notes": {
+        "human_model": {
+          "GLANCE_MS": 250,
+          "CARRY_MS": 750,
+          "GATE_MS": 1000,
+          "POLL_MS": 2000
+        },
+        "isolation": "one OS process + private data dir per node (≈ container); handoff via files moved by this harness only",
+        "carry_split": {
+          "feed": 6,
+          "carry": 24
+        }
+      }
+    },
+    {
+      "arm": "B",
+      "n": 4,
+      "reqs": 6,
+      "elapsed_s": 45.9,
+      "touches": {
+        "feed": 6,
+        "carry": 0,
+        "glance": 0,
+        "gate": 6
+      },
+      "m1_relay": 0,
+      "m1_adjudication": 6,
+      "m2_max_gap_s": 25.1,
+      "m2_stage_span": 3,
+      "machine_checks": 24,
+      "notes": {
+        "human_model": {
+          "GATE_MS": 1000,
+          "CARRY_MS_feed": 750
+        },
+        "facts_on_bus": 113,
+        "claims": 24,
+        "double_executions": 0,
+        "human_authored_facts": 6,
+        "gate_mode": "ANT_AUTO_GATE off — gates approved by the harness-as-human"
+      }
+    },
+    {
+      "arm": "A",
+      "n": 8,
+      "reqs": 6,
+      "elapsed_s": 40.2,
+      "touches": {
+        "feed": 6,
+        "carry": 24,
+        "glance": 40,
+        "gate": 6
+      },
+      "m1_relay": 64,
+      "m1_adjudication": 6,
+      "m2_max_gap_s": 1.8,
+      "m2_stage_span": 1,
+      "machine_checks": 24,
+      "notes": {
+        "human_model": {
+          "GLANCE_MS": 250,
+          "CARRY_MS": 750,
+          "GATE_MS": 1000,
+          "POLL_MS": 2000
+        },
+        "isolation": "one OS process + private data dir per node (≈ container); handoff via files moved by this harness only",
+        "carry_split": {
+          "feed": 6,
+          "carry": 24
+        }
+      }
+    },
+    {
+      "arm": "B",
+      "n": 8,
+      "reqs": 6,
+      "elapsed_s": 33.7,
+      "touches": {
+        "feed": 6,
+        "carry": 0,
+        "glance": 0,
+        "gate": 6
+      },
+      "m1_relay": 0,
+      "m1_adjudication": 6,
+      "m2_max_gap_s": 19.1,
+      "m2_stage_span": 3,
+      "machine_checks": 24,
+      "notes": {
+        "human_model": {
+          "GATE_MS": 1000,
+          "CARRY_MS_feed": 750
+        },
+        "facts_on_bus": 123,
+        "claims": 30,
+        "double_executions": 0,
+        "human_authored_facts": 6,
+        "gate_mode": "ANT_AUTO_GATE off — gates approved by the harness-as-human"
+      }
+    }
+  ]
+}

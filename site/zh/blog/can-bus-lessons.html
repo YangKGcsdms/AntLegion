@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>恰好一次是定理 — AntLegion</title>
+<meta name="description" content="CAN 总线教我们的多智能体协调课：恰好一次认领是全序的定理、崩溃恢复只是一次折叠、验证不需要中心验证者——全部有实测数据。">
+<link rel="canonical" href="https://antlegion.dev/zh/blog/can-bus-lessons.html">
+<link rel="alternate" hreflang="en" href="https://antlegion.dev/blog/can-bus-lessons.html">
+<link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/blog/can-bus-lessons.html">
+<link rel="alternate" hreflang="x-default" href="https://antlegion.dev/blog/can-bus-lessons.html">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://antlegion.dev/zh/blog/can-bus-lessons.html">
+<meta property="og:title" content="恰好一次是定理：CAN 总线教我们的多智能体协调课">
+<meta property="og:description" content="4 倍副本竞争双执行 0 · 崩溃接管 12.2 秒且无恢复协议 · 伪造报告拦截 8/8——协调是全序之上的读者折叠。">
+<meta property="og:image" content="https://antlegion.dev/og.png">
+<style>
+  :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
+  *{box-sizing:border-box;margin:0}
+  html{scroll-behavior:smooth}
+  body{font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.75;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;background:radial-gradient(900px 480px at 70% -10%,rgba(240,160,32,.13),transparent 60%),radial-gradient(700px 420px at 8% 22%,rgba(226,118,45,.07),transparent 60%);pointer-events:none;z-index:0}
+  body::after{content:"";position:fixed;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:28px 28px;-webkit-mask-image:linear-gradient(#000 0%,transparent 75%);mask-image:linear-gradient(#000 0%,transparent 75%);pointer-events:none;z-index:0}
+  .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:26px 24px 90px}
+  nav{display:flex;align-items:center;gap:10px;margin-bottom:64px}
+  nav .mark{width:34px;height:34px;color:var(--ink)}
+  nav .word{font-weight:650;font-size:18px;letter-spacing:.2px}
+  nav .word a{color:var(--ink);text-decoration:none}
+  nav .links{margin-left:auto;display:flex;gap:20px;font-size:14px;align-items:center;flex-wrap:wrap}
+  nav .links a{color:var(--ink2);text-decoration:none;transition:color .15s}
+  nav .links a:hover{color:var(--acc)}
+  nav .links a[aria-current]{color:var(--acc)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:6px}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:var(--acc);border:1px solid var(--line);border-radius:99px;padding:4px 12.4px 4px 14px;background:rgba(240,160,32,.06)}
+  h1{font-size:34px;line-height:1.3;letter-spacing:-.5px;margin-top:20px;font-weight:750;max-width:820px}
+  h1 .g{background:linear-gradient(92deg,#f6d38a,var(--acc) 45%,var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:17px;color:var(--ink2);margin-top:16px;max-width:680px}
+  article{margin-top:56px;max-width:720px}
+  article h2{font-size:22px;letter-spacing:-.3px;margin:52px 0 14px;font-weight:700}
+  article p{color:var(--ink2);margin:14px 0;font-size:15.5px}
+  article p strong{color:var(--ink)}
+  article em{color:var(--ink);font-style:normal;font-weight:600}
+  .tablewrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line2);border-radius:12px}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+  th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--line2);color:var(--ink2);white-space:nowrap}
+  th{color:var(--ink);font-weight:600;background:var(--card)}
+  tr:last-child td{border-bottom:none}
+  td b{color:var(--grn)}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:.92em;background:rgba(240,160,32,.08);border-radius:5px;padding:.08em .38em;color:#f3cf8f}
+  pre{background:var(--code);border:1px solid var(--line2);border-radius:12px;padding:18px 20px;overflow-x:auto;margin:20px 0}
+  pre code{background:none;padding:0;color:#d8d4c8;font-size:13.5px;line-height:1.7}
+  .callout{border-left:3px solid var(--acc);background:rgba(240,160,32,.05);border-radius:0 10px 10px 0;padding:14px 18px;margin:20px 0}
+  .callout p{margin:0;font-size:15px}
+  .closing{margin-top:48px;color:var(--ink3);font-style:italic}
+  footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink2)}
+  a{color:var(--acc)}
+  @media(max-width:760px){h1{font-size:26px}nav .links{gap:12px}}
+  @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:10px;font-size:13px}}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <svg class="mark" viewBox="0 0 64 64" fill="none" aria-label="AntLegion logo">
+      <line x1="3" y1="47" x2="61" y2="47" stroke="currentColor" stroke-opacity="0.28" stroke-width="2.6" stroke-linecap="round"/>
+      <line x1="9.5" y1="47" x2="46" y2="47" stroke="var(--acc)" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M14 39.5 L12.5 45.7 M29.5 38.2 L27.8 45.7 M34.8 37.5 L39 45.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      <circle cx="16.5" cy="30" r="10" fill="currentColor"/>
+      <circle cx="31.6" cy="32.8" r="6.4" fill="var(--acc)"/>
+      <circle cx="41.2" cy="36.2" r="4.5" fill="currentColor"/>
+      <path d="M43.2 32.6 Q49 24.5 55 21.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+      <path d="M44.8 34.6 Q52.5 29.5 59 29.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+    </svg>
+    <span class="word"><a href="/zh/">AntLegion</a></span>
+    <span class="links">
+      <a href="/zh/quickstart.html">快速上手</a>
+      <a href="/zh/protocol.html">协议</a>
+      <a href="/zh/blog/" aria-current="page">博客</a>
+      <a href="/zh/about.html">关于</a>
+      <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+      <a href="/blog/can-bus-lessons.html" lang="en">English</a>
+    </span>
+  </nav>
+
+  <span class="eyebrow">长文 · 2026-08</span>
+  <h1>恰好一次是定理：<span class="g">CAN 总线教我们的</span>多智能体协调课</h1>
+  <p class="tag">关于多智能体协调的三个断言，每个背后都有一张实测表：没有锁的恰好一次、没有协议的崩溃恢复、没有验证者的验证。</p>
+
+  <article>
+    <p>在同一个仓库上跑两个 coding agent，看看会发生什么：它们重做彼此的工作，丢失彼此的上下文，还会用两种不同的方式"修好"同一个 bug。人们伸手去拿的每一种药——文件锁、共享 markdown 便签、SQLite 信箱、负责派活的编排 prompt——治的都是症状。病根其实更简单：<strong>没有一份共享的、有序的"已发生"记录。</strong></p>
+    <p>汽车在 1980 年代就把这个问题解决了。</p>
+
+    <h2>CAN 总线做对了什么</h2>
+    <p>一辆现代汽车里有几十个 ECU——发动机控制、刹车、气囊。多数人听了会意外的是：<strong>没有任何中央电脑指挥它们。</strong>一个 ECU 从不寻址另一个 ECU。它把事实广播到共享总线上（"轮速是 X"），每个单元监听自己关心的内容、在本地条件满足时行动。刹车控制器不会<em>命令</em>仪表盘亮灯；它陈述一个事实，仪表盘自己的逻辑决定亮不亮。</p>
+    <p>四十年安全关键系统的量产使用，这条设计原则活了下来：<strong>只有事实，没有命令。</strong></p>
+    <p>AntLegion 就是把这条原则用到 AI 智能体上。它是一条只追加、内容寻址的事实总线。一个本原：全序中某个位置上的一条不可变事实。两个操作：<code>append</code> 和 <code>read</code>。总线本身无状态——它只强制一件事：全序。人们通常为之搭协调服务器的一切（认领工作、销案、信任、因果）都是<strong>每个读者都能算出同一结果的、对流的纯折叠</strong>。我们的工作单元叫 DCU，向 ECU 致敬，也继承它的纪律：DCU 从不寻址另一个 DCU。</p>
+    <p>这篇文章剩下的部分，是我们能用数字辩护的部分：当你真的去测量，全序里能推出什么。</p>
+
+    <h2>断言一：恰好一次的工作分配，不需要锁</h2>
+    <p>机制：要接一个任务，agent 往总线上追加一条引用它的认领事实。规则——在协议规范 <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md §3.1</a> 中是规范性的——<strong>序号最小的存活认领胜出。</strong>没有锁服务器，没有租约表。每个读者折叠同一个全序，所以每个读者永远算出同一个赢家。恰好一次不是被强制执行的；它是被<em>推导</em>出来的。</p>
+    <p>我们用最难看的方式测它：副本化的阶段工作单元，各自独立身份，竞争同一批输入。25 条合成需求 × 4 个流水线阶段（方案 → 开发 → 单测 → E2E）= 100 个认领单元，裁决者校验每一件产物。</p>
+    <div class="tablewrap"><table>
+      <tr><th>副本</th><th>工作单元</th><th>认领事实</th><th>竞争输入</th><th>双执行</th><th>链完成</th><th>耗时</th></tr>
+      <tr><td>×1</td><td>4</td><td>100</td><td>0</td><td><b>0</b></td><td>25/25</td><td>~57s</td></tr>
+      <tr><td>×2</td><td>8</td><td>168</td><td>68</td><td><b>0</b></td><td>25/25</td><td>80.5s</td></tr>
+      <tr><td>×4</td><td>16</td><td>285</td><td>78</td><td><b>0</b></td><td>25/25</td><td>48.1s</td></tr>
+    </table></div>
+    <p>68~78 处真实竞争，双执行为零。给个参照系：MAST 分类学报告野生多智能体系统的步骤重复率是 <strong>17.14%</strong>。差别不在于我们的 agent 更守规矩——它们在激烈地抢——而在于"谁干什么"不是 prompt 约定，是全序的定理。</p>
+    <p>注意 ×4 那一行：端到端耗时反而<em>下降</em>了（48.1s vs 80.5s）。竞争的代价只是日志上多出的 <code>_.claim</code> 事实（+117 条）。输掉一场竞速的成本是一次读；并行的收益远大于它。</p>
+
+    <h2>断言二：崩溃恢复不是协议，是一次折叠</h2>
+    <p>标准的质疑是："行，但赢家拿着认领死掉了怎么办？"</p>
+    <p>认领在<strong>总线盖戳的时间</strong>（<code>recv + Δ</code>）上过期，不看作者自报的时钟——而且过期规则是确定性的、锚定在全序本身上，所以所有读者对"认领何时死亡"的共识，和对"谁赢了"的共识来自同一处。不需要任何东西去检测崩溃，不需要通知任何人。根本没有可通知的对象。</p>
+    <p>我们在一个工作单元刚赢下认领的瞬间杀掉它（<code>kill -9</code>，受害者跑 dev 阶段，一个幸存副本，Δ = 6s）：</p>
+    <div class="tablewrap"><table>
+      <tr><th>事件</th><th>相对 kill 时刻</th></tr>
+      <tr><td>受害者赢下认领</td><td>−0.46s</td></tr>
+      <tr><td>kill -9（无人被通知，也无人可通知）</td><td>0</td></tr>
+      <tr><td>认领在总线时钟过期（+Δ）</td><td>+5.54s</td></tr>
+      <tr><td>幸存者折叠出 open、重新认领</td><td>+8.17s</td></tr>
+      <tr><td>幸存者完成并 resolve</td><td><b>+12.19s</b></td></tr>
+    </table></div>
+    <p>8/8 链全部完成，双执行 0。接管时延恰好分解为三个可预算的项——Δ + 轮询周期 + 幸存者手头的排队——没有任何隐藏的协调步骤，因为根本不存在协调步骤。</p>
+    <p>随后我们把这一枪自动化重复了 10 次（<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-extended-2026-08.md">s2-extended</a>）：过期→接管落在幸存者的轮询相位内（p50 0.03s，p95 1.0s——恰好是 1 秒轮询周期，无隐藏项），kill→resolve p50 9.98s，双执行 0/10。另加一个时钟偏移臂——让一个工作单元把自报时间戳拨错 ±5 分钟——六个折叠探针的输出与对照臂逐字节一致（sha256 全同），因为折叠只认总线盖戳的 <code>recv</code>，从不认作者自称的时间。</p>
+
+    <h2>断言三：验证不需要中心验证者</h2>
+    <p>文献对去中心化智能体系统最锋利的批评是误差放大——未经验证的"做完了！"层层传播，直到系统自信地错下去（有研究给出 17.2×，对照有中心验证的 4.4×）。通常的结论是：中间必须有一个可信验证者。</p>
+    <p>我们认为需要的是更弱也更便宜的东西：<strong>结构化证据 + 读者侧折叠。</strong>在 AntLegion 里，产物携带声明的<em>证据形状</em>——单测报告必须写明它<strong>没有</strong>覆盖什么；E2E 报告必须列出它真正检查过的页面。裁决单元（它自己也只是一个普通 DCU，不是特权服务器）折叠事实流、拒绝形状残缺的证据。</p>
+    <p>我们用一个恶意身份攻击它：注入 8 份伪造的全绿报告——缺 <code>not_covered</code> 的绿色测试摘要、伪造 <code>page_checked</code> 的 E2E 结果、类型伪造的 <code>passed:"12"</code>——外加 4 份形状完整的对照：</p>
+    <div class="tablewrap"><table>
+      <tr><th>指标</th><th>结果</th></tr>
+      <tr><td>伪造产物被拦截</td><td><b>8/8 = 100%</b></td></tr>
+      <tr><td>对照被误杀</td><td><b>0/4 = 0%</b></td></tr>
+    </table></div>
+    <p>每条拒绝都带着缺失字段清单，落在日志上，可归因到伪造者的身份。"做完了"≠"验证过了"，从此是结构，不是纪律。</p>
+
+    <h2>一个证明了定理小字的 bug</h2>
+    <p>诚实环节。我们的第一轮竞争实验出了 <strong>4 次双执行。</strong>解剖结果：一个前次实验的僵尸进程还活在同一条总线上，而且<strong>和新工作单元用同一个身份</strong>。同一身份下，"最小 seq 胜出"永远判给你自己——定理成立，但它的信任单元是<em>身份</em>，两个共享身份的进程在全序看来就是一个 agent 在跟自己抢。</p>
+    <p>这次失败教会了我们现在写进文档的运维规则：<strong>一个身份 = 一个进程。</strong>副本以独立身份注册（<code>--replicas</code> 会替你做），同一身份的重复 <code>sys.registry</code> 声明是控制台可以直接标红的部署错误信号。我们把这段留在文章里，因为它是最有教益的那类结果：机制没有失败——它忠实执行了一个被我们自己违反的前提。</p>
+
+    <h2>人的那一侧，也测了</h2>
+    <p>再补一个配对实验，因为隔离智能体之间现任的"协调介质"通常是一个在窗口之间转述状态的人。同任务、同裁决闸门、两臂对照：隔离工作单元 + 脚本化的人肉中继，对比同一批工作单元上总线。每轮中继触点：<strong>52（N=2）、80（N=4）、64（N=8）→ 总线臂在每个 N 都是 0</strong>，而裁决闸门严格 6 → 6 不变。N=8 的回落本身就是发现：中继者占墙钟 96%——计数不再爬升，是因为人饱和了。（完整装置与数据：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/m1m3-paired-2026-08.md">research/m1m3-paired-2026-08.md</a>；人肉中继按最省力脚本建模，因此这个差距是下界。）</p>
+
+    <h2>它不是什么，以及我们还没证明什么</h2>
+    <p><strong>不是消息队列</strong>（没有东西被消费），<strong>不是编排器</strong>（没有人派活），<strong>不是工作流引擎</strong>（流水线由流折叠而来，从不被存储）。</p>
+    <p>上面的实验用模拟工作动作（每阶段 2.5~4s）来隔离协调层；同一套装置跑过 100 次 LLM 驱动的阶段循环、57 秒端到端，但上面的表测的是排序，不是模型质量。</p>
+    <p>单总线全序：一个部署域一个总线进程。这是定位选择（Redis 形状的本地优先基础设施），不是分布式共识成果——我们不做多主张。信任模型：默认绑定 127.0.0.1，调用者受信；暂无鉴权（在路线图上，README 里如实写明）。</p>
+
+    <h2>复现它</h2>
+    <p>上面的一切各自只要一条命令（bus 0.4.x / ant 0.4.x，MIT）：</p>
+    <pre><code>npx @antlegion/bus demo                          # 15 秒零配置：竞速 → kill 接管 → 逐字节重放
+npx @antlegion/bus                               # 终端 1：一条真总线
+npx @antlegion/ant mvp --reqs 25 --replicas 4    # 终端 2：竞争实验本验</code></pre>
+    <p>线协议是一份规范（<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md</a>；§3 的折叠规则是规范性的），配跨语言一致性向量——TS 套件与独立 Python 验证器在 CI 里逐字节复现每一个哈希。原始实验记录：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/research/s2-experiments-2026-08.md">research/s2-experiments-2026-08.md</a>。</p>
+    <div class="callout"><p>我们最想听到的，恰恰是对"恰好一次"的怀疑性提问：<a href="https://github.com/YangKGcsdms/AntLegion">github.com/YangKGcsdms/AntLegion</a></p></div>
+
+    <p class="closing">CAN 总线从来不需要中央电脑。你的智能体们，也许同样不需要。</p>
+  </article>
+
+  <footer>
+    <a href="https://github.com/YangKGcsdms/AntLegion">GitHub</a>
+    <a href="/zh/quickstart.html">快速上手</a>
+    <a href="/zh/protocol.html">协议</a>
+    <a href="/zh/about.html">关于</a>
+    <a href="/blog/can-bus-lessons.html" lang="en">English</a>
+    <span>MIT · Carter.Yang 出品</span>
+  </footer>
+</div>
+</body>
+</html>
