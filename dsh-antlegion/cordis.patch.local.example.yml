@@ -1,0 +1,26 @@
+# Dev overlay TEMPLATE. Copy to cordis.patch.local.yml (git-ignored), put your
+# own absolute path in `name`, then:
+#   dsh --profile <name> --patch ./cordis.patch.local.yml
+#
+# Use this to point a DCU at a scratch bus without touching the profile's own
+# layer — handy for trying interests/identity changes against a throwaway bus
+# before they go into ~/.dsh/profiles/<name>/cordis.patch.yml.
+#
+# The row is inserted here by absolute path so this works even in a profile that
+# does not list @antlegion/dsh in its bundles. In a profile that DOES list it,
+# drop the `insert` and keep only the `- id: antlegion-dcu` config override.
+
+- insert:
+    - id: antlegion-dcu
+      name: '/ABSOLUTE/PATH/TO/dsh-antlegion/index.js'
+      config:
+        busUrl: http://127.0.0.1:28099
+        author: dsh-dcu-dev
+        resident: true
+        interests:
+          - task.*
+        publishes:
+          - task.done
+        pollMs: 1000
+        heartbeatSec: 10
+        maxFactsPerTurn: 2
