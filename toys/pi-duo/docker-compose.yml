@@ -1,0 +1,44 @@
+# pi-duo — two pi agents in two small containers, coordinating through the
+# bus running on YOUR HOST at :28090. Nobody talks to anybody; they read the
+# board, claim exactly-once, think via DeepSeek, and write their lines.
+#
+#   DEEPSEEK_API_KEY=sk-… docker compose up --build
+#   # feed it:
+#   npx -y -p @antlegion/bus alctl publish poem.request '{"theme":"总线上的蚂蚁"}'
+#   # watch it: http://127.0.0.1:28090/console
+#
+# The poet listens for poem.request and drafts poems; the critic listens for
+# poem.draft and reviews them mercilessly. A full causal chain per request:
+# request → draft (refs.parent) → review (refs.parent).
+
+name: pi-duo
+
+x-agent: &agent
+  build: .
+  environment: &env
+    BUS_URL: http://host.docker.internal:28090
+    DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?export DEEPSEEK_API_KEY first}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"   # linux compat; mac/OrbStack has it natively
+  restart: unless-stopped
+
+services:
+  poet:
+    <<: *agent
+    environment:
+      <<: *env
+      AGENT_NAME: poet@toy
+      LISTEN_TYPE: poem.request
+      PRODUCE_TYPE: poem.draft
+      PERSONA: 你是一位克制而深情的现代诗人。给你一个主题，写一首 4~6 行的短诗，讲究意象，不许口号。
+      OUTPUT_HINT: '{"title":"...","poem":"...(用\n分行)"}'
+
+  critic:
+    <<: *agent
+    environment:
+      <<: *env
+      AGENT_NAME: critic@toy
+      LISTEN_TYPE: poem.draft
+      PRODUCE_TYPE: poem.review
+      PERSONA: 你是一位毒舌但公道的诗歌评论家。给你一首诗，两三句话点评：一句真实的赞美，一句不留情面的批评，最后给出 1~10 分。
+      OUTPUT_HINT: '{"praise":"...","roast":"...","score":7}'

@@ -1,0 +1,9 @@
+{
+  "name": "pi-duo-toy",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@antlegion/bus": "^0.4.0",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}
