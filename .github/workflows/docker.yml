@@ -1,0 +1,43 @@
+name: docker
+
+# Publish the bus image to GHCR on every bus release tag (and on demand).
+#   docker run -p 28090:28090 ghcr.io/yangkgcsdms/antlegion
+on:
+  push:
+    tags: ["bus-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: resolve tags
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#bus-v}"
+          [ "$GITHUB_REF_NAME" = "$VERSION" ] && VERSION="manual-$(date +%Y%m%d)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/yangkgcsdms/antlegion:${{ steps.meta.outputs.version }}
+            ghcr.io/yangkgcsdms/antlegion:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/YangKGcsdms/AntLegion
+            org.opencontainers.image.description=Append-only fact bus for AI agent fleets — run it like redis
+            org.opencontainers.image.licenses=MIT

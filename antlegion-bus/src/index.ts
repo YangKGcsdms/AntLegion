@@ -14,11 +14,28 @@ import { serve } from "@hono/node-server";
 import { createServerV2 } from "./server.js";
 import { loadConfig } from "./config.js";
 
-// `antlegion demo` — the three-act demo instead of a server. Everything else
-// (no arg, or unknown args) boots the bus, preserving `npx @antlegion/bus`.
-if (process.argv[2] === "demo") {
+// Subcommands (redis-server style). No arg = foreground server, preserving
+// `npx @antlegion/bus`. `start|stop|status` = daemon lifecycle, `demo` = show.
+const sub = process.argv[2];
+if (sub === "demo") {
   const { runDemo } = await import("./demo.js");
   await runDemo(); // never returns
+} else if (sub === "start" || sub === "stop" || sub === "status") {
+  const d = await import("./daemon.js");
+  process.exit(await d[sub]());
+} else if (sub === "--help" || sub === "-h" || sub === "help") {
+  console.log(`antlegion — append-only fact bus (@antlegion/bus)
+
+  antlegion            run in the foreground (Ctrl-C flushes + exits)
+  antlegion start      run as a background daemon (pidfile + log in the data dir)
+  antlegion stop       stop the daemon (journal flushed on exit)
+  antlegion status     pid + /health + file locations
+  antlegion demo       the three-act killer demo (zero config, zero key)
+
+env: PORT (28090) · HOST (127.0.0.1) · ANTLEGION_DATA_DIR (.data-v2)
+     ANTLEGION_BUS_SECRET (set a stable one!) · ANTLEGION_FSYNC (everysec)
+docs → https://antlegion.dev`);
+  process.exit(0);
 }
 
 const cfg = loadConfig();
