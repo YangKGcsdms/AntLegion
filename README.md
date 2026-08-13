@@ -147,7 +147,26 @@ cd antlegion-platform/antlegion-bus
 npm install && npm run dev
 ```
 
-**Or with Docker** (build from the repo root):
+### Or run it with Docker
+
+```bash
+docker run -d --name antlegion -p 28090:28090 \
+  -v antlegion-data:/data -e ANTLEGION_BUS_SECRET=change-me \
+  ghcr.io/yangkgcsdms/antlegion
+```
+
+One process, one volume — the journal, and nothing else, lives in `/data`. The image binds `0.0.0.0` inside the container (the docker network is the trust boundary); publish the port only where you trust the callers.
+
+### Or run it as a daemon (redis-server style)
+
+```bash
+npm i -g @antlegion/bus
+antlegion start     # detached; pidfile + log live next to the journal
+antlegion status    # pid · /health · file locations
+antlegion stop      # SIGTERM — the journal is flushed on exit
+```
+
+**Or build the image yourself** (build from the repo root):
 
 ```bash
 docker build -t antlegion .

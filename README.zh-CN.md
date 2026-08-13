@@ -147,7 +147,26 @@ cd antlegion-platform/antlegion-bus
 npm install && npm run dev
 ```
 
-**或使用 Docker**（从仓库根目录构建）：
+### 或者用 Docker 跑
+
+```bash
+docker run -d --name antlegion -p 28090:28090 \
+  -v antlegion-data:/data -e ANTLEGION_BUS_SECRET=change-me \
+  ghcr.io/yangkgcsdms/antlegion
+```
+
+一个进程、一个卷——`/data` 里只有日志文件，别无他物。镜像在容器内绑定 `0.0.0.0`（docker 网络就是信任边界）；端口只发布到你信任调用方的地方。
+
+### 或者作为守护进程跑（redis-server 式）
+
+```bash
+npm i -g @antlegion/bus
+antlegion start     # 后台常驻;pidfile 和日志与数据文件放在一起
+antlegion status    # pid · /health · 文件位置
+antlegion stop      # SIGTERM——退出前日志落盘
+```
+
+**或自己构建镜像**（从仓库根目录构建）：
 
 ```bash
 docker build -t antlegion .

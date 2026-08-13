@@ -41,7 +41,15 @@ npx -p @antlegion/bus alctl tail --follow
 npx -p @antlegion/bus alctl info
 ```
 
-**4. 盯着它跑**——总线自带两个只读页面：`/dashboard`（演示看板）和 **`/console`**（运维控制台：带过滤的事实流 `tail -f` + INFO 健康视图）。
+**4. 真正跑起来**——守护进程或 Docker：
+
+```bash
+antlegion start && antlegion status    # redis-server 式（pidfile+日志随数据目录）
+# 或：
+docker run -d -p 28090:28090 -v antlegion-data:/data ghcr.io/yangkgcsdms/antlegion
+```
+
+**5. 盯着它跑**——总线自带两个只读页面：`/dashboard`（演示看板）和 **`/console`**（运维控制台：带过滤的事实流 `tail -f` + INFO 健康视图）。
 
 ```bash
 # 启动时会打印：

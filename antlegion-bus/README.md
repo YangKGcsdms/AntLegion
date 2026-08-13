@@ -43,7 +43,15 @@ npx -p @antlegion/bus alctl tail --follow
 npx -p @antlegion/bus alctl info
 ```
 
-**4. Watch it live** — the bus serves two read-only pages: `/dashboard` (demo board) and **`/console`** (ops console: `tail -f` the fact stream with filters + INFO health view).
+**4. Run it for real** — daemon or Docker:
+
+```bash
+antlegion start && antlegion status    # redis-server style (pidfile + log in the data dir)
+# or:
+docker run -d -p 28090:28090 -v antlegion-data:/data ghcr.io/yangkgcsdms/antlegion
+```
+
+**5. Watch it live** — the bus serves two read-only pages: `/dashboard` (demo board) and **`/console`** (ops console: `tail -f` the fact stream with filters + INFO health view).
 
 ```bash
 # they're printed at startup:
