@@ -1,7 +1,7 @@
 {
   "name": "@antlegion/bus",
-  "version": "0.3.1",
-  "description": "Append-only fact bus for autonomous agents — facts, not commands. Stateless trusted core, single total order, coordination as reader-side folds; SDK, alctl CLI, and MCP adapter included.",
+  "version": "0.4.0",
+  "description": "Append-only fact bus for autonomous agents — facts, not commands. Stateless trusted core, single total order, coordination as reader-side folds; SDK + alctl CLI (the sanctioned agent interface) included.",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
@@ -16,7 +16,6 @@
   "bin": {
     "bus": "dist/index.js",
     "antlegion": "dist/index.js",
-    "antlegion-mcp": "dist/mcp.js",
     "alctl": "dist/bin.js"
   },
   "files": [
@@ -30,7 +29,6 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "mcp": "node dist/mcp.js",
     "bench": "tsx src/bench.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -48,7 +46,7 @@
     "append-only",
     "event-log",
     "content-addressed",
-    "mcp"
+    "cli"
   ],
   "repository": {
     "type": "git",
@@ -69,7 +67,6 @@
   "license": "MIT",
   "dependencies": {
     "@hono/node-server": "^1.14.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "hono": "^4.7.0"
   },
   "devDependencies": {

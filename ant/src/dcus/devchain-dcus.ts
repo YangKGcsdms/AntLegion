@@ -155,14 +155,18 @@ export async function publishRegistry(
       domain: "devchain",
       dcu: author,
       worker: workerMode(),
+      // General capability declaration (fold.ts §7): interests = fact types this
+      // agent consumes, publishes = types it emits. Drives colony/orphan folds.
+      // Kept alongside the devchain-specific stage/listens/produces fields.
       ...(spec ? {
+        interests: [spec.listens], publishes: [spec.produces],
         stage: spec.stage, order: spec.order, listens: spec.listens,
         produces: spec.produces, gate: spec.gate, skills: spec.skills,
         evidence_required: spec.evidence.required,
       } : {}),
       ...extra,
     },
-    nonce: `registry:devchain:${author}:v1`,
+    nonce: `registry:devchain:${author}:v2`,
   });
   log(`registry ${r.deduped ? "deduped" : "published"} (seq ${r.seq})`);
 }

@@ -3,7 +3,7 @@
  *
  * Watches configured workspace roots READ-ONLY and reflects requirement
  * dirs onto the fact bus. Each root is tagged with an origin (config:
- * ecu.config.json watchRoots); every mirrored fact carries that origin:
+ * ant.config.json watchRoots); every mirrored fact carries that origin:
  *
  *   req.registered  one per requirement dir  (<yyyymmddHHMM>-<名称>/)
  *                   nonce "req:<origin>:<dirname>" — reruns dedup, and the
@@ -359,6 +359,11 @@ export interface WatcherHandle {
  * Watch the workspace for changes. fs.watch on macOS is flaky for new dirs,
  * so a full rescan runs every `rescanMs` regardless; watch events only make
  * the loop react faster. Everything is debounced into one backfill pass.
+ *
+ * `recursive: true` is supported on macOS and, since Node 20.13, on Linux too
+ * (the project requires Node ≥20). The periodic rescan below is a safety net
+ * regardless of platform, so even an older/edge runtime that drops recursive
+ * events stays correct — just slower to react (review L4).
  */
 export function startWatcher(
   root: string,

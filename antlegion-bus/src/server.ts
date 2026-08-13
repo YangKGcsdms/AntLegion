@@ -21,6 +21,11 @@ import type { ReadQuery } from "./bus.js";
 import type { FsyncPolicy } from "./log.js";
 import type { FactInput } from "./types.js";
 
+/** Hard cap on a single read window (review M2): a valid-but-huge `limit` is
+ *  clamped to this so one request can never stream an unbounded log. Readers
+ *  page through larger ranges with the `since` cursor. */
+const MAX_READ_LIMIT = 10_000;
+
 const DASHBOARD_HTML = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)), "..", "demo", "dashboard.html",
 );
@@ -89,8 +94,20 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
     const q: ReadQuery = {};
     const since = c.req.query("since");
     const limit = c.req.query("limit");
-    if (since != null) q.since = parseInt(since, 10);
-    if (limit != null) q.limit = parseInt(limit, 10);
+    // Validate cursor params (review M2). parseInt("abc")=NaN, and `?? default`
+    // does NOT catch NaN — an unvalidated NaN made `seq <= NaN` / `len >= NaN`
+    // both false, so a single junk query streamed the ENTIRE log (a DoS surface
+    // on an unauthenticated bus). Reject non-integer / out-of-range explicitly.
+    if (since != null) {
+      const n = Number(since);
+      if (!Number.isInteger(n) || n < 0) return c.json({ error: "since must be a non-negative integer" }, 400);
+      q.since = n;
+    }
+    if (limit != null) {
+      const n = Number(limit);
+      if (!Number.isInteger(n) || n < 1) return c.json({ error: "limit must be a positive integer" }, 400);
+      q.limit = Math.min(n, MAX_READ_LIMIT); // clamp: a valid-but-huge limit can't drain the whole log in one request
+    }
     const type = c.req.query("type");
     const author = c.req.query("author");
     if (type) q.type = type;

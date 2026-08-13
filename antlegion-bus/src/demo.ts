@@ -407,9 +407,9 @@ async function main(): Promise<number> {
   console.log("");
   console.log(c("bold", "  next steps"));
   console.log(`    keep a bus around      : ${c("bold", "npx @antlegion/bus")}`);
-  console.log(`    give your agents tools : ${c("bold", "claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp")}`);
+  console.log(`    give your agents the CLI: ${c("bold", "alctl publish <type> '<json>' | claim | resolve | observe")}`);
   console.log(`    resident DCU fleet     : ${c("bold", "npx @antlegion/ant chain")}`);
-  console.log(c("dim", "    docs → https://github.com/YangKGcsdms/AntLegion (Connect via MCP)"));
+  console.log(c("dim", "    docs → https://github.com/YangKGcsdms/AntLegion (agents drive the bus via alctl)"));
   console.log("");
 
   if (KEEP_BUS && PASS) {

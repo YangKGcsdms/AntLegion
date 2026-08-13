@@ -1,6 +1,6 @@
 {
   "name": "antlegion",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "AntLegion — append-only fact bus for autonomous agents. This is a convenience alias: `npx antlegion` boots @antlegion/bus (and `npx antlegion demo` runs the three-act demo).",
   "type": "module",
   "bin": {
@@ -19,7 +19,6 @@
     "blackboard",
     "stigmergy",
     "append-only",
-    "mcp",
     "antlegion"
   ],
   "repository": {
@@ -40,6 +39,6 @@
   "author": "Carter.Yang",
   "license": "MIT",
   "dependencies": {
-    "@antlegion/bus": "^0.3.0"
+    "@antlegion/bus": "^0.4.0"
   }
 }

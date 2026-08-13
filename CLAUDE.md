@@ -18,12 +18,11 @@ Run inside `antlegion-bus/`, not the repo root.
 npm install
 npm run dev             # tsx src/index.ts → http://localhost:28090
 npm run build && npm run start
-npm run mcp             # MCP stdio adapter (after build): node dist/mcp.js
 npm run bench           # throughput benchmark (redis-benchmark analog)
 node dist/bin.js <cmd>  # alctl CLI (publish/read/tail/claim/resolve/state/trust/causation/info); needs build + a running bus
 npx tsx examples/swarm-v2.ts   # multi-agent validation swarms (also scenario-{resilience,consensus,pipeline})
 
-# tests (136)
+# tests
 npm test                                    # vitest run
 npx vitest run test/fold-lifecycle.test.ts  # single file
 npx vitest run -t "exactly-once"            # by name
@@ -40,14 +39,13 @@ No lint config. `npx tsc --noEmit` typechecks.
 ```
 clients → ClientV2 (SDK, src/client.ts) ─HTTP→ server.ts → BusV2 (src/bus.ts) → JsonlLog (src/log.ts)
           alctl CLI (cli.ts/bin.ts)                              └ folds (fold.ts) run client-side
-          MCP adapter (mcp.ts, over stdio)
 ```
 
 - **`bus.ts` — stateless trusted core.** Assigns total order (`seq`), verifies the content-hash `id`, stamps a trusted receive time (`recv`) + HMAC `sig`, persists, serves a range. Its only derived indexes (seq counter, `id→seq` dedup) are pure projections of the log. **No per-fact mutable state, no state machine.**
 - **`fold.ts` — reader folds (the semantics).** `lifecycle` (claimed/resolved/dead/open), `claimWinner`/`didIWin`, `trust`, `supersededBy`/`isSuperseded`, `causationChain`. Pure functions over the fact stream.
 - **`server.ts`** — Hono wire surface: `POST /facts`, `GET /facts` (since/type/author/refs; returns `X-Max-Seq` for cursor advance), `/facts/head`, `/facts/:id`, `/info` (INFO), `POST /admin/rewrite` (BGREWRITEAOF), `/health`.
 - **`log.ts`** — append-only AOF: `appendfsync` policy (`always|everysec|no`), flush-on-close, compaction that keeps the full `{id,seq,recv,author,refs,sig}` skeleton (only payloads dropped).
-- **`client.ts`** — folding SDK over a transport (`localTransport(bus)` for in-process/tests, `httpTransport(url)` for real). `mcp.ts` wraps this same client as an MCP stdio server, so fold logic is written once.
+- **`client.ts`** — folding SDK over a transport (`localTransport(bus)` for in-process/tests, `httpTransport(url)` for real). The `alctl` CLI (`cli.ts`) drives this same client, so fold logic is written once.
 - **`canonical.ts`** — self-contained `stableJsonStringify` (Python-compatible float rendering, used by `hash.ts`) + `globMatch`.
 
 The **Fact**: `{seq, recv, id, type, author, ts, payload, refs, nonce?, sig}`. `refs` is the only relational mechanism (`parent`, `claim_of`, `resolves`, `release_of`, `vote`, `supersedes`, `subject`, `tombstones`) and always references **fact ids, never agent ids** — the structural reason there are no commands.
@@ -63,6 +61,7 @@ The **Fact**: `{seq, recv, id, type, author, ts, payload, refs, nonce?, sig}`. `
 
 ## Reference docs
 - `PROTOCOL.md` — the protocol (authoritative; §3 folds are normative). `PROTOCOL.zh-CN.md` — Chinese reader's guide.
-- `docs/QUICKSTART.md` — 60-second quickstart (server + SDK + alctl + MCP).
+- `docs/QUICKSTART.md` — 60-second quickstart (server + SDK + alctl).
+- `docs/AGENT-CLI.md` — how agents drive the bus via the `alctl` CLI.
 - `docs/EVOLUTION.md` — why the project looks like this (v0 runtime → v1 → v2 monist redesign, and why v1 was removed).
 - `README.md` — overview, positioning, repo map, validated guarantees. Every doc has a `.zh-CN.md` companion.

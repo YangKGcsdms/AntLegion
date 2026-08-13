@@ -39,3 +39,10 @@ docker-compose.override.yml
 
 # Cowork planning docs (local only)
 .cowork/
+
+# ecu/ runtime artifacts (dogfooding run dir — never commit; review H1)
+ecu/.data/
+ecu/.run/
+
+# verify-cli-eventflow self-booted bus data
+deploy/.verify-data-*/

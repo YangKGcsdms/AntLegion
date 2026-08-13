@@ -13,7 +13,7 @@ supersession, causation) emerges from a single total order and is computed
 client-side as pure **reader folds** — the bus itself stays stateless.
 
 This package is the complete implementation: the trusted core (HTTP server),
-the folding SDK, the `alctl` CLI, and the MCP stdio adapter.
+the folding SDK, and the `alctl` CLI.
 
 ## Quick start
 
@@ -23,15 +23,17 @@ the folding SDK, the `alctl` CLI, and the MCP stdio adapter.
 npx @antlegion/bus        # → http://localhost:28090
 ```
 
-**2. Give any MCP-capable agent fact-bus tools** (Claude Code, Cursor, Cline, …):
+**2. Point your agents at the bus** (Claude Code, Cursor, Codex CLI, …). Agents
+drive the bus through the `alctl` CLI — one verb per fold call:
 
 ```bash
-claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp
+export ANTLEGION_BUS_URL=http://localhost:28090    # + ANTLEGION_AUTHOR=my-agent
+npx -p @antlegion/bus alctl read --type 'task.*'   # then claim / resolve
 ```
 
-Two agents connected this way coordinate through the fact stream alone:
+Two agents driving `alctl` coordinate through the fact stream alone:
 one publishes `task.todo` facts, the other claims and resolves them —
-exactly-once, no orchestrator.
+exactly-once, no orchestrator. Full agent guide: [`../docs/AGENT-CLI.md`](../docs/AGENT-CLI.md).
 
 **3. Talk to it from the shell** with `alctl`:
 
@@ -66,7 +68,6 @@ curl http://localhost:28090/info | jq
 curl "http://localhost:28090/facts?since=0" | jq
 
 node dist/bin.js info          # alctl CLI (after build)
-npm run mcp                    # MCP stdio adapter (after build)
 npm run bench                  # throughput benchmark (~160k appends/s in-process)
 ```
 
@@ -81,13 +82,12 @@ npm run bench                  # throughput benchmark (~160k appends/s in-proces
 | `ANTLEGION_BUS_SECRET` | random per boot | HMAC signing secret; **set a stable value** so signatures verify across restarts |
 | `ANTLEGION_MAX_DEPTH` | `64` | Causation chain depth cap (§5 safety rule) |
 
-Clients (`alctl` CLI, SDK, MCP adapter):
+Clients (`alctl` CLI, SDK):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTLEGION_BUS_URL` | `http://localhost:28090` | Bus URL for the CLI / SDK / MCP adapter |
+| `ANTLEGION_BUS_URL` | `http://localhost:28090` | Bus URL for the CLI / SDK |
 | `ANTLEGION_AUTHOR` | `<os-username>@<hostname>` | CLI identity; `--author <name>` overrides per command |
-| `ANTLEGION_AGENT_NAME` | `<os-username>@<hostname>` | MCP adapter identity (printed to stderr at startup) |
 
 `alctl` prints machine-readable JSON on stdout (e.g. `{"id":…,"seq":…,"deduped":…}`,
 `{"won":…,"winner":…}`, `{"state":…,"owner":…}`) and human errors on stderr with a
@@ -112,8 +112,7 @@ python3 conformance/verify.py    # independent Python reimplementation; 0 failur
 
 ## Tech stack
 
-Node.js ≥ 18, TypeScript 5.x, Hono, `@hono/node-server`,
-`@modelcontextprotocol/sdk`, Vitest.
+Node.js ≥ 18, TypeScript 5.x, Hono, `@hono/node-server`, Vitest.
 
 ## License
 

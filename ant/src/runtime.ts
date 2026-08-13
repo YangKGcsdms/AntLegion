@@ -48,6 +48,21 @@ export interface DCUSpec {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// ── shared shutdown fan-out (review L2) ──
+// A fleet runs many DCUs in one process. Registering a SIGINT/SIGTERM pair
+// *per* runDCU meant N DCUs installed 2N listeners → Node's
+// MaxListenersExceededWarning at >10. Instead each DCU registers a stopper
+// here and the process-level handlers are attached exactly once.
+const stoppers = new Set<() => void>();
+let signalsWired = false;
+function wireSignalsOnce(): void {
+  if (signalsWired) return;
+  signalsWired = true;
+  const fanout = () => { for (const s of stoppers) s(); };
+  process.on("SIGINT", fanout);
+  process.on("SIGTERM", fanout);
+}
+
 export async function runDCU(spec: DCUSpec): Promise<void> {
   const pollMs = spec.pollMs ?? 1000;
   const pageSize = spec.pageSize ?? 500;
@@ -70,8 +85,11 @@ export async function runDCU(spec: DCUSpec): Promise<void> {
     stopping = true;
     log(`${sig} — stopping after current batch`);
   };
-  process.on("SIGINT", () => stop("SIGINT"));
-  process.on("SIGTERM", () => stop("SIGTERM"));
+  // Register this DCU's stopper with the shared process-level signal handlers
+  // (attached once, no matter how many DCUs run in this process — review L2).
+  const stopper = () => stop("signal");
+  stoppers.add(stopper);
+  wireSignalsOnce();
 
   const ctx: DCUContext = { client, busUrl: spec.busUrl, mirror, log };
 
@@ -127,5 +145,6 @@ export async function runDCU(spec: DCUSpec): Promise<void> {
     await sleep(pollMs);
   }
 
+  stoppers.delete(stopper); // don't leak this DCU's stopper after it returns
   log(`stopped — cursor ${cursor}, mirror ${mirror.length} facts`);
 }

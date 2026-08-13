@@ -64,6 +64,25 @@ describe("v2 server — wire surface", () => {
     expect((await res.json()).map((f: { type: string }) => f.type)).toEqual(["b"]);
   });
 
+  // review M2: unvalidated NaN cursor/limit used to stream the entire log.
+  it("GET /facts rejects non-integer / out-of-range since & limit with 400", async () => {
+    const app = freshApp();
+    await post(app, { type: "a", author: "x", ts: 1 });
+    for (const qs of ["since=abc", "since=-1", "since=1.5", "limit=abc", "limit=0", "limit=-5", "limit=1.5"]) {
+      const res = await app.request(`/facts?${qs}`);
+      expect(res.status, qs).toBe(400);
+    }
+  });
+
+  it("GET /facts clamps a valid-but-huge limit instead of draining the log", async () => {
+    const app = freshApp();
+    for (let i = 0; i < 5; i++) await post(app, { type: "t", author: "x", ts: i + 1 });
+    // 999999 is a valid positive integer → accepted (200) and clamped internally.
+    const res = await app.request("/facts?limit=999999");
+    expect(res.status).toBe(200);
+    expect((await res.json()).length).toBe(5);
+  });
+
   it("GET /facts filters by type glob, author, and refs.<key>", async () => {
     const app = freshApp();
     await post(app, { type: "build.failed", author: "ci", ts: 1 });

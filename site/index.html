@@ -215,9 +215,10 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
       <div class="card">
         <h3>Bring your Claude Code / Cursor sessions</h3>
         <p>Same bus, same facts — sessions stop redoing each other's work.</p>
-<pre class="cmd"><b>claude mcp add</b> antlegion -- \
-  npx -y -p @antlegion/bus antlegion-mcp</pre>
-        <p>Each session publishes facts, claims before touching work, and folds the same log. Two sessions racing for one task: one wins, one moves on.</p>
+<pre class="cmd"><b>alctl read</b> --type 'task.*'  <i># see open work</i>
+<b>alctl claim</b> &lt;id&gt;            <i># exactly-once; losers exit non-zero</i>
+<b>alctl resolve</b> &lt;id&gt;          <i># only the winner can</i></pre>
+        <p>Each session drives the bus through the <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/AGENT-CLI.md"><code>alctl</code> CLI</a> — publishing facts, claiming before touching work, folding the same log. Two sessions racing for one task: one wins, one moves on.</p>
       </div>
     </div>
     <p class="not">Alpha: the wire protocol and log format are frozen (cross-language conformance vectors); the API surface may still move. Localhost / private network only — same trust model as Redis.</p>
@@ -245,7 +246,7 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
       <tr><td>Exactly-once claiming</td><td class="n">advisory locks</td><td class="n">at-least-once</td><td class="n">—</td><td class="n">task list</td><td class="y">✓ theorem, reader-verifiable</td></tr>
       <tr><td>Causal chains</td><td class="n">—</td><td class="n">threads</td><td class="n">—</td><td class="n">—</td><td class="y">✓ first-class refs</td></tr>
       <tr><td>Local &amp; embeddable</td><td class="y">✓</td><td class="y">✓</td><td class="n">cloud only</td><td class="y">✓</td><td class="y">✓ one process, JSONL file</td></tr>
-      <tr><td>Cross-vendor</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">one vendor</td><td class="y">✓ MCP + HTTP + SDK</td></tr>
+      <tr><td>Cross-vendor</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">one vendor</td><td class="y">✓ CLI + HTTP + SDK</td></tr>
       <tr><td>Verifiable recovery</td><td class="n">—</td><td class="n">db state</td><td class="n">trust the server</td><td class="n">—</td><td class="y">✓ replay the log, HMAC-signed</td></tr>
       </tbody>
     </table>
@@ -261,13 +262,13 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
   <div class="sec">
     <span class="eyebrow">faq</span>
     <h2>Questions</h2>
-    <details><summary>How do I share state between multiple Claude Code / Cursor sessions?</summary><p>Start the bus (<code>npx antlegion</code>), then add the MCP adapter to each session (<code>claude mcp add antlegion -- npx -y -p @antlegion/bus antlegion-mcp</code>). Every session can publish facts, claim work before touching it, and fold the same log — so two sessions never grab the same task or redo each other's work.</p></details>
+    <details><summary>How do I share state between multiple Claude Code / Cursor sessions?</summary><p>Start the bus (<code>npx antlegion</code>), then have each session drive it through the <code>alctl</code> CLI (<code>alctl read</code> / <code>alctl claim</code> / <code>alctl resolve</code>; see <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/AGENT-CLI.md">docs/AGENT-CLI.md</a>). Every session can publish facts, claim work before touching it, and fold the same log — so two sessions never grab the same task or redo each other's work.</p></details>
     <details><summary>Why not just use Claude Code subagents / agent teams?</summary><p>Use them — inside one machine, one process tree, one vendor, they're great. AntLegion starts where they stop: agents on physically isolated nodes — different machines, permission domains, or vendors — where no bigger single agent exists and the fallback is a human relaying state.</p></details>
     <details id="faq-evidence"><summary>How were 8/8 forged reports intercepted?</summary><p>Every producer registers an evidence shape for its artifacts (a test report must include what it did <em>not</em> cover, an e2e report must carry deviations/defects/gaps…). An adjudicator unit folds each artifact against the registered shape and publishes accept/reject — it never trusts an agent's self-report. We injected 8 malformed "all-green" artifacts: all 8 rejected, with the missing fields named on-chain; 4 well-formed controls all passed. See <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md §3</a>.</p></details>
     <details><summary>Is this a message queue?</summary><p>No. Queues deliver commands to consumers and forget. AntLegion stores immutable facts forever (with compaction), in one total order, so any reader at any time can reconstruct who claimed what, what superseded what, and how an outcome came to be. Coordination semantics live in reader-side folds, not in the broker.</p></details>
     <details><summary>Does it lock files?</summary><p>No. Conflicts are eliminated one layer earlier: agents claim a unit of work before acting, and exactly-once claiming guarantees a single owner. If nobody edits the same thing, nothing needs locking.</p></details>
     <details><summary>What happens when an agent crashes mid-task?</summary><p>Its claim expires (bus-stamped time, not the agent's clock), and any surviving agent wins the re-claim and takes over. Recovery is deterministic: replay the log, get the same world. Measured: the chain healed 12.2s after a SIGKILL.</p></details>
-    <details><summary>Which agents can join?</summary><p>Native worker ants via <code>@antlegion/ant</code> (script or LLM-powered acts), anything MCP-speaking (Claude Code, Cursor, Cline, Codex CLI, Windsurf, Zed…), and anything that can speak HTTP or import the TypeScript SDK.</p></details>
+    <details><summary>Which agents can join?</summary><p>Native worker ants via <code>@antlegion/ant</code> (script or LLM-powered acts), any agent that can run a shell command (Claude Code, Cursor, Cline, Codex CLI, Windsurf, Zed…) via the <code>alctl</code> CLI, and anything that can speak HTTP or import the TypeScript SDK.</p></details>
     <details><summary>Is it production-ready?</summary><p>Alpha. The core protocol is stable and verified — 218 tests, cross-language conformance vectors, ~160k appends/s — but it's designed for trusted environments (like Redis): keep it on localhost or a private network, set a stable secret.</p></details>
     <p class="not">Questions the FAQ didn't answer? → <a href="https://github.com/YangKGcsdms/AntLegion/discussions">Discussions</a></p>
   </div>

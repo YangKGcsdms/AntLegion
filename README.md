@@ -8,7 +8,7 @@
 
 ![npx @antlegion/bus demo — exactly-once race, crash takeover, byte-identical replay](deploy/media/demo.gif)
 
-It doesn't lock files or serialize your agents — conflicts are eliminated at the division-of-work layer, before two units ever touch the same task. Your existing Claude Code / Cursor sessions can join the same bus as work units too, via [MCP](#connect-via-mcp).
+It doesn't lock files or serialize your agents — conflicts are eliminated at the division-of-work layer, before two units ever touch the same task. Your existing Claude Code / Cursor sessions can join the same bus as work units too, via the [`alctl` CLI](#connect-your-agents-the-alctl-cli).
 
 [![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
@@ -30,7 +30,7 @@ Think of it as **Redis for multi-agent coordination**: one persistent process, o
 - [Quickstart](#quickstart)
 - [The fact](#the-fact)
 - [Coordinate from code](#coordinate-from-code)
-- [Connect via MCP](#connect-via-mcp)
+- [Connect your agents (`alctl` CLI)](#connect-your-agents-the-alctl-cli)
 - [Validated guarantees](#validated-guarantees)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
@@ -86,7 +86,7 @@ Not a message queue (nothing is consumed), not an orchestrator (nobody assigns w
 | exactly-once claiming | ✗ (locks, hope) | ✗ (row locks) | vendor-defined | vendor-defined | ✓ theorem of the order |
 | causality / audit | ✗ | ✗ | partial | partial | ✓ `refs` + signed log |
 | local & embeddable | ✓ | ✓ | ✗ | ✗ | ✓ one process, one file |
-| cross-harness | ✓ (barely) | ✓ | agent-framework-specific | single vendor | ✓ HTTP + MCP, any agent |
+| cross-harness | ✓ (barely) | ✓ | agent-framework-specific | single vendor | ✓ HTTP + CLI + SDK, any agent |
 | open protocol | — | — | ✗ | ✗ | ✓ [PROTOCOL.md](PROTOCOL.md) + conformance vectors |
 
 ### Three mechanisms, one collaboration model
@@ -128,7 +128,7 @@ npx @antlegion/ant board      # supervision board → http://localhost:28091/dev
 
 Within ~2s `dcu-plan` claims the requirement (exactly-once, lowest seq wins), produces `plan.ready`, the adjudicator checks its evidence shape, and the chain parks at the H1 human gate — approve it on the board and dev → unittest → e2e run themselves to ✔ CHAIN DONE. No orchestrator, no unit addressing another; all coordination is reader folds over the fact stream.
 
-See [`ant/`](ant) for the DCU runtime, dev-chain, evidence adjudication, and boards. Additionally, any MCP-capable agent (Claude Code, Cursor, …) can connect to the bus for publish/claim/resolve tools — see [Connect via MCP](#connect-via-mcp).
+See [`ant/`](ant) for the DCU runtime, dev-chain, evidence adjudication, and boards. Additionally, any agent that can run a shell command (Claude Code, Cursor, …) drives the bus for publish/claim/resolve via the [`alctl` CLI](#connect-your-agents-the-alctl-cli).
 
 **Or all of it in containers, one command** — 1 bus + 3 pi-agent containers (Ubuntu 24.04), 100 LLM-acted cycles, scoreboard at the end:
 
@@ -156,7 +156,7 @@ docker run -p 28090:28090 -e ANTLEGION_BUS_SECRET=your-stable-secret antlegion
 
 ### Drive it from the terminal (`alctl` — the redis-cli analog)
 
-`npm i -g @antlegion/bus` installs three commands: `antlegion` (the server), `alctl`, and `antlegion-mcp`. Every `alctl` command prints machine-readable JSON on stdout; human errors go to stderr with a non-zero exit code.
+`npm i -g @antlegion/bus` installs two commands: `antlegion` (the server) and `alctl`. Every `alctl` command prints machine-readable JSON on stdout; human errors go to stderr with a non-zero exit code.
 
 ```bash
 alctl publish task.build '{"target":"todo-app"}' --author alice
@@ -311,72 +311,51 @@ const client = new ClientV2(localTransport(bus), "my-agent");
 // No HTTP, no network — same SDK, same folds
 ```
 
-## Connect via MCP
+## Connect your agents (the `alctl` CLI)
 
-Any MCP-capable agent — Claude Code, Cursor, Cline, Windsurf, Zed, Goose — can connect to the bus over stdio with a single line:
+A headless or PI agent — Claude Code, Cursor, Codex CLI, a shell tool, a cron job — drives the bus by shelling out to the **`alctl` CLI**. One interface, every verb mapping to exactly one fold call. See [`docs/AGENT-CLI.md`](docs/AGENT-CLI.md) for the full guide.
 
 ```bash
-claude mcp add antlegion \
-  --env ANTLEGION_BUS_URL=http://localhost:28090 \
-  --env ANTLEGION_AGENT_NAME=my-agent \
-  -- npx -y -p @antlegion/bus antlegion-mcp
+export ANTLEGION_BUS_URL=http://localhost:28090   # default
+export ANTLEGION_AUTHOR=my-agent                   # stable agent identity
+
+# read new facts, claim exactly-once, resolve with a child fact
+alctl read --type 'task.*' --since "$CURSOR"
+alctl claim <id> && alctl resolve <id>
+alctl publish task.done '{"result":"ok"}' --parent <id>
 ```
 
-or via `.mcp.json`:
+*(without a global install, prefix each command with `npx -y -p @antlegion/bus`.)*
 
-```json
-{
-  "mcpServers": {
-    "antlegion": {
-      "command": "npx",
-      "args": ["-y", "-p", "@antlegion/bus", "antlegion-mcp"],
-      "env": {
-        "ANTLEGION_BUS_URL": "http://localhost:28090",
-        "ANTLEGION_AGENT_NAME": "my-agent"
-      }
-    }
-  }
-}
-```
+`ANTLEGION_DATA_DIR` and `ANTLEGION_BUS_SECRET` (see [Configuration](#configuration)) configure the bus server itself. The CLI drives the same `ClientV2` fold SDK as the HTTP client — coordination semantics are implemented once, not per-interface.
 
-`ANTLEGION_AGENT_NAME` defaults to `<os-username>@<hostname>`; the resolved
-identity is printed to stderr at startup. `ANTLEGION_DATA_DIR` and
-`ANTLEGION_BUS_SECRET` (see [Configuration](#configuration)) configure the bus
-server itself.
+### First prompt for an agent
 
-**Seven tools** are exposed: `antlegion_publish`, `antlegion_query`, `antlegion_claim`, `antlegion_resolve`, `antlegion_observe`, `antlegion_causation`, `antlegion_state`.
+Adoption happens in the prompt, not the install. Paste this as your first message to an agent that can run shell commands:
 
-**One resource**: `antlegion://facts/recent` — the 20 most recent facts, as JSON.
-
-The MCP adapter uses the same `ClientV2` fold SDK as the HTTP client — coordination semantics are implemented once, not per-adapter.
-
-### First prompt after mounting
-
-Adoption happens in the prompt, not the install. Paste this as your first message to an agent that just got the tools:
-
-> Check the antlegion fact bus for open `task.todo` facts. If one is unclaimed, claim it before working on it; only proceed if you won the claim. When done, resolve it with a short result payload. If there are no open tasks, publish one `task.todo` describing the next thing you plan to do, so other agents can see it.
+> Check the antlegion fact bus for open `task.todo` facts (`alctl read --type task.todo`). If one is unclaimed, `alctl claim <id>` before working on it; only proceed if the claim exits 0. When done, `alctl resolve <id>` with a short result. If there are no open tasks, `alctl publish task.todo '{…}'` describing the next thing you plan to do, so other agents can see it.
 
 ### Rules snippet for CLAUDE.md / .cursorrules
 
 ```markdown
 ## Multi-agent coordination (AntLegion)
-- Before starting any task: query the fact bus; if a `task.todo` for it exists and is claimed, pick different work.
-- Claim before you work (`antlegion_claim`); proceed ONLY if you won. Losing a claim is normal — move on.
-- When finished, resolve the fact (`antlegion_resolve`) with what you produced. Never mark work done in prose only.
-- Publish significant observations as facts so other agents can react — don't hoard context.
+- Before starting any task: `alctl read` the fact bus; if a `task.todo` for it exists and is claimed, pick different work.
+- Claim before you work (`alctl claim <id>`); proceed ONLY if it exits 0. Losing a claim is normal — move on.
+- When finished, `alctl resolve <id>` with what you produced. Never mark work done in prose only.
+- Publish significant observations as facts (`alctl publish`) so other agents can react — don't hoard context.
 ```
 
 ### The two-window experiment (5 minutes)
 
-Open two Claude Code windows, mount the MCP server in both, then in **window A**:
+Open two agent shells with `alctl` on PATH, both pointed at the same bus, then in **window A**:
 
-> Publish a task.todo fact: {"title": "write a haiku about total order"} — then claim it and start working.
+> Publish a task.todo fact — `alctl publish task.todo '{"title": "write a haiku about total order"}'` — then claim it (`alctl claim <id>`) and start working.
 
 Immediately in **window B**:
 
-> Find the latest task.todo on the bus and claim it.
+> Find the latest task.todo on the bus (`alctl read --type task.todo`) and claim it.
 
-Window B loses: the claim tool reports `won: false` with A as the winner, and B moves on instead of duplicating the work. That's exactly-once with zero locks — decided by which claim landed first in the total order, computed identically by both readers.
+Window B loses: `alctl claim` exits non-zero and reports A as the winner, and B moves on instead of duplicating the work. That's exactly-once with zero locks — decided by which claim landed first in the total order, computed identically by both readers.
 
 ## Validated guarantees
 
@@ -452,17 +431,17 @@ Same trust boundary as Redis: the bus **trusts its callers**. It binds to `127.0
 
 ```
  Clients
- ┌──────────────────┐  ┌───────────────┐  ┌────────────────────┐
- │  ClientV2 (SDK)  │  │  alctl CLI    │  │  MCP stdio adapter │
- │  client.ts       │  │  cli.ts       │  │  mcp.ts            │
- │  - publish       │  │  - publish    │  │  - antlegion_*     │
- │  - claim/resolve │  │  - claim      │  │    tools (7)       │
- │  - trust/state   │  │  - tail/info  │  │                    │
- └────────┬─────────┘  └──────┬────────┘  └─────────┬──────────┘
-          │                   │                      │
-          └───────────────────┴──────────────────────┘
-                              │ HTTP (POST /facts · GET /facts)
-                              ▼
+ ┌──────────────────┐  ┌───────────────┐
+ │  ClientV2 (SDK)  │  │  alctl CLI    │
+ │  client.ts       │  │  cli.ts       │
+ │  - publish       │  │  - publish    │
+ │  - claim/resolve │  │  - claim      │
+ │  - trust/state   │  │  - tail/info  │
+ └────────┬─────────┘  └──────┬────────┘
+          │                   │
+          └─────────┬─────────┘
+                    │ HTTP (POST /facts · GET /facts)
+                    ▼
  ┌────────────────────────────────────────────────────────────────┐
  │  server.ts  (Hono, thin wire surface)                          │
  │  POST /facts · GET /facts[?since&type&author&refs.*]           │
@@ -508,7 +487,8 @@ antlegion-platform/
 ├── Dockerfile              ← docker build . && docker run -p 28090:28090 …
 ├── ant/                    ← @antlegion/ant — DCU runtime + dev-chain fleet + boards
 ├── docs/
-│   ├── QUICKSTART.md       ← step-by-step: server + SDK + CLI + MCP
+│   ├── QUICKSTART.md       ← step-by-step: server + SDK + CLI
+│   ├── AGENT-CLI.md        ← how agents drive the bus via alctl
 │   └── EVOLUTION.md        ← v0 → v1 → v2: what was tried and why it changed
 └── antlegion-bus/
     ├── src/
@@ -517,7 +497,6 @@ antlegion-platform/
     │   ├── client.ts       ← ClientV2 folding SDK
     │   ├── server.ts       ← Hono wire surface
     │   ├── log.ts          ← AOF journal
-    │   ├── mcp.ts          ← MCP stdio adapter
     │   ├── cli.ts / bin.ts ← alctl CLI
     │   ├── hash.ts         ← sha256 content address + HMAC + verifySig
     │   ├── canonical.ts    ← stableJsonStringify (Python-float compatible)
@@ -545,7 +524,7 @@ antlegion-platform/
 - [x] Append-only journal with `appendfsync always|everysec|no` + `BGREWRITEAOF`-style compaction
 - [x] Reader fold SDK: `lifecycle`, `trust`, `supersession`, `causation`
 - [x] `alctl` CLI — the `redis-cli` analog
-- [x] MCP stdio adapter — one-liner connect for any MCP-capable agent
+- [x] Agent access via `alctl` — every fold verb reachable from a headless/PI agent (`docs/AGENT-CLI.md`)
 - [x] §5 causation-depth enforcement at append time
 - [x] §4 signature verification on log recovery, `sig_failures` surfaced via `/info`
 - [x] Cross-language conformance vectors — hash + fold interop proof with independent Python verifier

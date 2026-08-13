@@ -58,6 +58,12 @@ export async function loadConfig(configPath = path.join(process.cwd(), "ant.conf
     }
     throw err;
   }
+  // Guard against a JSON that parses but isn't an object (null / array / scalar):
+  // a bare `null` would otherwise throw a cryptic TypeError on `raw.watchRoots`
+  // (review L5). Fall back to defaults with a clear message instead.
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error(`${configPath} must contain a JSON object (got ${raw === null ? "null" : Array.isArray(raw) ? "array" : typeof raw})`);
+  }
   const watchRoots = raw.watchRoots && raw.watchRoots.length > 0 ? raw.watchRoots : DEFAULT_WATCH_ROOTS;
   for (const w of watchRoots) {
     if (!w.root || !w.origin) {

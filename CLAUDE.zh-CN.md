@@ -22,12 +22,11 @@ AntLegion 是面向自治 Agent 的**事实总线**：一个只追加的不可�
 npm install
 npm run dev             # tsx src/index.ts → http://localhost:28090
 npm run build && npm run start
-npm run mcp             # MCP stdio 适配器（需先 build）：node dist/mcp.js
 npm run bench           # 吞吐 benchmark（redis-benchmark 对应物）
 node dist/bin.js <cmd>  # alctl CLI（publish/read/tail/claim/resolve/state/trust/causation/info）；需先 build 且总线在运行
 npx tsx examples/swarm-v2.ts   # 多 Agent 验证 swarm（还有 scenario-{resilience,consensus,pipeline}）
 
-# 测试（136）
+# 测试
 npm test                                    # vitest run
 npx vitest run test/fold-lifecycle.test.ts  # 单文件
 npx vitest run -t "exactly-once"            # 按名
@@ -44,14 +43,13 @@ python3 conformance/verify.py     # 独立的跨语言检查：用独立 Python 
 ```
 clients → ClientV2（SDK, src/client.ts）─HTTP→ server.ts → BusV2（src/bus.ts）→ JsonlLog（src/log.ts）
           alctl CLI（cli.ts/bin.ts）                            └ 折叠（fold.ts）在客户端侧运行
-          MCP 适配器（mcp.ts，走 stdio）
 ```
 
 - **`bus.ts` —— 无状态可信内核。** 分配全序（`seq`）、校验内容哈希 `id`、盖可信接收时间（`recv`）+ HMAC `sig`、持久化、按区间返回。仅有的派生索引（seq 计数、`id→seq` 去重）是日志的纯投影。**无 per-fact 可变状态，无状态机。**
 - **`fold.ts` —— 读者折叠（语义）。** `lifecycle`（claimed/resolved/dead/open）、`claimWinner`/`didIWin`、`trust`、`supersededBy`/`isSuperseded`、`causationChain`。对事实流的纯函数。
 - **`server.ts`** —— Hono 线面：`POST /facts`、`GET /facts`（since/type/author/refs；返回 `X-Max-Seq` 用于游标推进）、`/facts/head`、`/facts/:id`、`/info`（INFO）、`POST /admin/rewrite`（BGREWRITEAOF）、`/health`。
 - **`log.ts`** —— 只追加 AOF：`appendfsync` 策略（`always|everysec|no`）、关闭刷盘、压缩时保留完整 `{id,seq,recv,author,refs,sig}` 骨架（只丢 payload）。
-- **`client.ts`** —— 基于 transport 的折叠 SDK（`localTransport(bus)` 进程内/测试，`httpTransport(url)` 真实 HTTP）。`mcp.ts` 把同一个 client 包成 MCP stdio 服务，折叠逻辑只写一次。
+- **`client.ts`** —— 基于 transport 的折叠 SDK（`localTransport(bus)` 进程内/测试，`httpTransport(url)` 真实 HTTP）。`alctl` CLI（`cli.ts`）驱动同一个 client，折叠逻辑只写一次。
 - **`canonical.ts`** —— 自带的 `stableJsonStringify`（Python 兼容浮点渲染，供 `hash.ts`）+ `globMatch`。
 
 **Fact**：`{seq, recv, id, type, author, ts, payload, refs, nonce?, sig}`。`refs` 是唯一的关系机制（`parent`、`claim_of`、`resolves`、`release_of`、`vote`、`supersedes`、`subject`、`tombstones`），且始终引用**事实 id，绝不引用 Agent id**——这是「没有命令」的结构性原因。
@@ -69,6 +67,7 @@ clients → ClientV2（SDK, src/client.ts）─HTTP→ server.ts → BusV2（src
 ## 参考文档
 
 - `PROTOCOL.md` —— 协议（权威；§3 折叠为规范性）。`PROTOCOL.zh-CN.md` —— 完整中文版。
-- `docs/QUICKSTART.md` —— 60 秒快速上手（服务端 + SDK + alctl + MCP）。
+- `docs/QUICKSTART.md` —— 60 秒快速上手（服务端 + SDK + alctl）。
+- `docs/AGENT-CLI.md` —— agent 如何通过 `alctl` CLI 驱动总线。
 - `docs/EVOLUTION.md` —— 项目为何如此（v0 运行时 → v1 → v2 一元论重构，以及 v1 为何被移除）。
 - `README.md` —— 概览、定位、仓库地图、已验证保证。每份文档都有 `.zh-CN.md` 中文版。
