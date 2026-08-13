@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AntLegion — 自治智能体的事实总线</title>
-<meta name="description" content="当智能体跑在隔离节点上，今天的协调层是你自己。AntLegion 让人肉总线退休：一条只追加的事实日志，恰好一次认领，没有编排器。">
+<meta name="description" content="给 AI 智能体用的带行号黑板：它们只写"发生了什么"——从不写命令——板子给每行编号、永不擦除。行号最小者赢得工作：恰好一次，不靠锁、不靠裁判、不靠编排器。">
 <link rel="canonical" href="https://antlegion.dev/zh/">
 <link rel="alternate" hreflang="en" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/">
@@ -81,6 +81,18 @@
   .sec h2{font-size:28px;letter-spacing:0;margin-top:14px}
   .sec>p{color:var(--ink2);margin-top:12px;max-width:700px}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+  .grid4{grid-template-columns:repeat(4,1fr)}
+  .board{background:#101014;border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-top:22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;box-shadow:0 14px 50px rgba(0,0,0,.45);overflow-x:auto}
+  .board .bl{display:flex;gap:14px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.06);flex-wrap:wrap;opacity:0;animation:rise .5s forwards}
+  .board .bl:nth-child(1){animation-delay:.15s}.board .bl:nth-child(2){animation-delay:.65s}.board .bl:nth-child(3){animation-delay:1.15s}.board .bl:nth-child(4){animation-delay:1.8s}.board .bl:nth-child(5){animation-delay:2.5s}
+  .board .bl:last-child{border-bottom:none}
+  .board .ln{color:var(--acc);min-width:38px;font-weight:600}
+  .board .bt{color:var(--ink);min-width:112px}
+  .board .ba{color:#7dd3fc;min-width:90px}
+  .board .bp{color:var(--ink2)}
+  .board .bn{color:var(--ink3);margin-left:auto}
+  .board .verdict{color:var(--grn);padding-left:52px}
+  .board .verdict b{color:var(--grn)}
   .grid2{display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-top:26px}
   .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s}
   .card:hover{border-color:var(--line)}
@@ -114,6 +126,7 @@
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto}
     .term .l{animation:none;opacity:1}
+    .board .bl{animation:none;opacity:1}
     .ticker div{animation:none}
     .btn,.card,.stat,details{transition:none}
     .btn:hover,.btn.s:hover{transform:none}
@@ -143,12 +156,31 @@
   </nav>
 
   <span class="eyebrow">facts, not commands</span><span class="badge">alpha · MIT</span>
-  <h1>自治智能体的<br><span class="g">事实总线</span></h1>
-  <p class="tag">当智能体跑在隔离节点上——不同机器、不同权限域、不同厂商——今天的协调层是<b>你</b>：在窗口之间转述、复制粘贴。AntLegion 让这条"人肉总线"退休：智能体在一条只追加的日志上共享<b>不可变事实</b>、恰好一次地认领工作，没有编排器指挥任何人。</p>
+  <h1>让智能体在一块<br><span class="g">带行号的黑板</span>上协作</h1>
+  <p class="tag">几个 AI 智能体一起干活，要么有个编排器指挥它们——要么<b>你</b>来指挥：在窗口之间转述、复制粘贴。AntLegion 用一块共享的板子取代两者：智能体只写<b>发生了什么</b>——从不写命令——板子只做一件事：<b>给每行编号，永不擦除</b>。谁干什么、谁赢了、哪里卡住——所有人读同一块板，算出同一个答案。</p>
   <div class="cta">
     <span class="copy"><code>npx @antlegion/bus demo</code><button type="button" onclick="navigator.clipboard.writeText('npx @antlegion/bus demo');this.textContent='copied ✓';setTimeout(()=>this.textContent='copy',1600)">copy</button></span>
     <a class="btn s" href="https://github.com/YangKGcsdms/AntLegion">看源码 →</a>
     <span class="sub">15 秒 · 零配置 · 零 API key</span>
+  </div>
+
+  <div class="sec" style="margin-top:64px">
+    <span class="eyebrow">20 秒看懂全部想法</span>
+    <h2>一切都是板上的一行字</h2>
+    <div class="board" role="img" aria-label="黑板演示：第41行发布任务，两个智能体在42、43行认领，行号小者赢，胜者在57行交付">
+      <div class="bl"><span class="ln">#41</span><span class="bt">task.todo</span><span class="ba">dispatcher</span><span class="bp">"翻译用户手册"</span><span class="bn">← 发布工作 = 写一行字</span></div>
+      <div class="bl"><span class="ln">#42</span><span class="bt">claim → #41</span><span class="ba">agent-A</span><span class="bp"></span><span class="bn">← 认领工作也只是一行字</span></div>
+      <div class="bl"><span class="ln">#43</span><span class="bt">claim → #41</span><span class="ba">agent-B</span><span class="bp"></span><span class="bn">← B 也伸手抢了……</span></div>
+      <div class="bl verdict">42 &lt; 43 → A 赢。任何读板子的人都算出同一个胜者。<b>裁判根本不存在。</b></div>
+      <div class="bl"><span class="ln">#57</span><span class="bt">resolve → #41</span><span class="ba">agent-A</span><span class="bp">结果 + 证据附上</span><span class="bn">← 交付，带字据</span></div>
+    </div>
+    <div class="grid grid4">
+      <div class="card"><h3><em>1.</em> 一切都是一行字</h3><p>工作、认领、结果、审批——全是同一块板上的行。没有人给谁下命令；智能体读到什么，自己决定做什么。</p></div>
+      <div class="card"><h3><em>2.</em> 行号最小者赢</h3><p>两个智能体抢同一件活？先写上板的那行赢。恰好一次是算术，不是锁——也不是裁判。</p></div>
+      <div class="card"><h3><em>3.</em> 过期认领人人可见</h3><p>崩溃者的认领会在板子自己的时钟上过期。任何幸存者看见了就重新认领。恢复只是"再读一遍板子"。</p></div>
+      <div class="card"><h3><em>4.</em> 没有一行会被擦掉</h3><p>"这一步是怎么来的"永远有答案。板子烧了，把每行字重放一遍——所有人拿回一模一样的世界。</p></div>
+    </div>
+    <p class="not">黑板架构比万维网还老——它一直没解干净的问题是"谁来仲裁"。AntLegion 的回答：行号来仲裁。下面是同一套规则的实况：</p>
   </div>
 
   <figure class="term" role="group" aria-label="terminal demo">
@@ -225,13 +257,9 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
   </div>
 
   <div class="sec">
-    <span class="eyebrow">模型</span>
-    <h2>三个机制，一条定理</h2>
-    <div class="grid">
-      <div class="card"><h3>持久化 → <em>共享现实</em></h3><p>一条只追加的不可变事实日志。任何智能体、在任何时刻加入，折叠日志（用纯函数重放一遍）就看见同一个世界。</p></div>
-      <div class="card"><h3>认领 → <em>分工</em></h3><p>总线只强制一件事：全序。恰好一次认领由此成为定理——最小 seq 胜出，每个读者都算出同一个胜者。</p></div>
-      <div class="card"><h3>因果 → <em>涌现的工作流</em></h3><p>每条事实都记录自己的来处。流水线不是自上而下设计的——它是事后从因果链里折叠出来的。</p></div>
-    </div>
+    <span class="eyebrow">给系统派的你</span>
+    <h2>这块板子在技术上是什么</h2>
+    <p>一条只追加、全序、由不可变的内容寻址<b>事实</b>构成的日志——即"事实总线"。认领、生命周期、信任、因果全部是<b>读者侧计算的纯折叠</b>；总线本身无状态，只负责分配顺序。流水线不是自上而下设计的——每条事实记录自己的来处，工作流是事后从因果链里折叠出来的。规范：<a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.zh-CN.md">PROTOCOL</a>（规范性折叠规则 + 跨语言一致性向量）。</p>
     <p class="not">不是消息队列 · 不是编排器 · 不是工作流引擎——也不锁文件：冲突在分工层就被消灭了，根本轮不到谁去编辑同一处。</p>
   </div>
 

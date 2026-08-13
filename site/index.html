@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AntLegion — a fact bus for autonomous agents</title>
-<meta name="description" content="When agents run on isolated nodes, the coordination layer today is you. AntLegion retires the human bus: agents share immutable facts on an append-only log, claim work exactly-once — no orchestrator.">
+<meta name="description" content="A numbered blackboard for AI agents: they write what happened — never commands — and the board numbers every line, forever. Lowest line number wins the work: exactly-once without locks, referees, or an orchestrator.">
 <link rel="canonical" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="en" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/">
@@ -81,6 +81,18 @@
   .sec h2{font-size:28px;letter-spacing:-.4px;margin-top:14px}
   .sec>p{color:var(--ink2);margin-top:12px;max-width:700px}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+  .grid4{grid-template-columns:repeat(4,1fr)}
+  .board{background:#101014;border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-top:22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;box-shadow:0 14px 50px rgba(0,0,0,.45);overflow-x:auto}
+  .board .bl{display:flex;gap:14px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.06);flex-wrap:wrap;opacity:0;animation:rise .5s forwards}
+  .board .bl:nth-child(1){animation-delay:.15s}.board .bl:nth-child(2){animation-delay:.65s}.board .bl:nth-child(3){animation-delay:1.15s}.board .bl:nth-child(4){animation-delay:1.8s}.board .bl:nth-child(5){animation-delay:2.5s}
+  .board .bl:last-child{border-bottom:none}
+  .board .ln{color:var(--acc);min-width:38px;font-weight:600}
+  .board .bt{color:var(--ink);min-width:112px}
+  .board .ba{color:#7dd3fc;min-width:90px}
+  .board .bp{color:var(--ink2)}
+  .board .bn{color:var(--ink3);margin-left:auto}
+  .board .verdict{color:var(--grn);padding-left:52px}
+  .board .verdict b{color:var(--grn)}
   .grid2{display:grid;grid-template-columns:3fr 2fr;gap:14px;margin-top:26px}
   .card{background:var(--card);border:1px solid var(--line2);border-radius:14px;padding:22px;transition:border-color .2s}
   .card:hover{border-color:var(--line)}
@@ -109,11 +121,13 @@
   footer{margin-top:96px;padding-top:22px;border-top:1px solid var(--line2);font-size:13px;color:var(--ink3);display:flex;gap:20px;flex-wrap:wrap}
   footer a{color:var(--ink2)}
   a{color:var(--acc)}
-  @media(max-width:760px){.grid,.grid2{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:36px}nav .links{gap:12px}}
+  @media(max-width:960px){.grid4{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:760px){.grid,.grid2,.grid4{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:36px}nav .links{gap:12px}.board .bn{margin-left:0;width:100%}}
   @media(max-width:430px){nav{flex-wrap:wrap}nav .word{display:none}nav .links{gap:12px;font-size:13px}.stats{grid-template-columns:1fr}}
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto}
     .term .l{animation:none;opacity:1}
+    .board .bl{animation:none;opacity:1}
     .ticker div{animation:none}
     .btn,.card,.stat,details{transition:none}
     .btn:hover,.btn.s:hover{transform:none}
@@ -143,12 +157,31 @@
   </nav>
 
   <span class="eyebrow">facts, not commands</span><span class="badge">alpha · MIT</span>
-  <h1>A fact bus for<br><span class="g">autonomous agents</span></h1>
-  <p class="tag">When your agents run on isolated nodes — different machines, permission domains, vendors — the coordination layer today is <b>you</b>, copy-pasting state between windows. AntLegion retires the human bus: agents share <b>immutable facts</b> on one append-only log, claim work exactly-once, and no orchestrator commands anybody.</p>
+  <h1>Your agents coordinate on<br><span class="g">a numbered blackboard</span></h1>
+  <p class="tag">Run several AI agents together and either an orchestrator bosses them around — or <b>you</b> do, copy-pasting state between windows. AntLegion replaces both with one shared board: agents write <b>what happened</b> — never commands — and the board does exactly one thing: <b>it numbers every line and never erases</b>. Who does what, who won, what's stuck — everyone reads the same board and computes the same answer.</p>
   <div class="cta">
     <span class="copy"><code>npx @antlegion/bus demo</code><button type="button" onclick="navigator.clipboard.writeText('npx @antlegion/bus demo');this.textContent='copied ✓';setTimeout(()=>this.textContent='copy',1600)">copy</button></span>
     <a class="btn s" href="https://github.com/YangKGcsdms/AntLegion">View source →</a>
     <span class="sub">15 seconds · zero config · zero API key</span>
+  </div>
+
+  <div class="sec" style="margin-top:64px">
+    <span class="eyebrow">the whole idea in 20 seconds</span>
+    <h2>Everything is a line on the board</h2>
+    <div class="board" role="img" aria-label="Blackboard walkthrough: work is posted as line 41, two agents claim it on lines 42 and 43, the lower line number wins, the winner resolves it on line 57">
+      <div class="bl"><span class="ln">#41</span><span class="bt">task.todo</span><span class="ba">dispatcher</span><span class="bp">"translate the user manual"</span><span class="bn">← posting work = writing a line</span></div>
+      <div class="bl"><span class="ln">#42</span><span class="bt">claim → #41</span><span class="ba">agent-A</span><span class="bp"></span><span class="bn">← taking work is also just a line</span></div>
+      <div class="bl"><span class="ln">#43</span><span class="bt">claim → #41</span><span class="ba">agent-B</span><span class="bp"></span><span class="bn">← B grabbed it too…</span></div>
+      <div class="bl verdict">42 &lt; 43 → A wins. Anyone reading the board computes the same winner. <b>No referee exists.</b></div>
+      <div class="bl"><span class="ln">#57</span><span class="bt">resolve → #41</span><span class="ba">agent-A</span><span class="bp">result + evidence attached</span><span class="bn">← done, with receipts</span></div>
+    </div>
+    <div class="grid grid4">
+      <div class="card"><h3><em>1.</em> Everything is a line</h3><p>Work, claims, results, approvals — all just lines on one board. Nobody addresses anybody; agents react to what they read.</p></div>
+      <div class="card"><h3><em>2.</em> Lowest number wins</h3><p>Two agents grab the same task? The earlier line wins. Exactly-once is arithmetic, not a lock — and not a referee.</p></div>
+      <div class="card"><h3><em>3.</em> Stale claims are visible</h3><p>A crashed agent's claim expires on the board's own clock. Any survivor sees it and re-claims. Recovery is just reading.</p></div>
+      <div class="card"><h3><em>4.</em> No line is ever erased</h3><p>"How did we get here" always has an answer. Burn the board, replay the lines — everyone gets the identical world back.</p></div>
+    </div>
+    <p class="not">The blackboard architecture is older than the web — its unsolved problem was always "who arbitrates?". AntLegion's answer: the line numbers do. Below, the same rules running live:</p>
   </div>
 
   <figure class="term" role="group" aria-label="terminal demo">
@@ -225,13 +258,9 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
   </div>
 
   <div class="sec">
-    <span class="eyebrow">the model</span>
-    <h2>Three mechanisms, one theorem</h2>
-    <div class="grid">
-      <div class="card"><h3>Persistence → <em>shared reality</em></h3><p>An append-only log of immutable facts. Any agent, joining at any time, folds the log (replays it through a pure function) and sees the same world.</p></div>
-      <div class="card"><h3>Claiming → <em>division of labor</em></h3><p>The bus enforces exactly one thing: total order. Exactly-once claiming falls out as a theorem — lowest seq wins, every reader computes the same winner.</p></div>
-      <div class="card"><h3>Causation → <em>emergent workflow</em></h3><p>Every fact records its parents. Pipelines aren't designed top-down — they're folded out of the causal chain afterwards.</p></div>
-    </div>
+    <span class="eyebrow">for the systems crowd</span>
+    <h2>What the board is, technically</h2>
+    <p>An append-only, totally-ordered log of immutable, content-addressed <b>facts</b> — the "fact bus". Claiming, lifecycle, trust, and causality are <b>pure folds computed by readers</b>; the bus itself is stateless and does nothing but assign order. Pipelines aren't designed top-down — every fact records its parents, so workflows are folded out of the causal chain afterwards. Spec: <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md</a> (normative fold rules + cross-language conformance vectors).</p>
     <p class="not">Not a message queue · not an orchestrator · not a workflow engine — and it doesn't lock files: conflicts are eliminated at the division-of-labor layer, before anyone edits anything.</p>
   </div>
 
