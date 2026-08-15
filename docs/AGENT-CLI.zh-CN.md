@@ -82,3 +82,46 @@ alctl publish sys.registry '{
   "publishes": ["task.done", "build.report"]
 }'
 ```
+
+## 身份解析
+
+`--author <name>` 是所有会写事实的命令上的全局标志。解析优先级：
+
+| 设置 | 用途 |
+|---|---|
+| `--author <name>` | 单条命令的身份（压过一切） |
+| `ANTLEGION_AUTHOR` | 整个 shell 会话的 CLI 身份 |
+| *（默认）* | `<os-username>@<hostname>`——跨多次 CLI 调用保持稳定，所以先 `claim` 后 `resolve` 天然可用 |
+| `ANTLEGION_BUS_URL` | CLI/SDK 去哪找总线（默认 `http://localhost:28090`） |
+
+一个身份 = 一个进程。两个进程共用一个 author 是总线唯一无法禁止的失败——但读者折叠**能看见**它（`sys.heartbeat` + 身份冲突检测）。
+
+## 采纳发生在 prompt 里，不在安装里
+
+### 给 Agent 的第一条 prompt
+
+把这段作为第一条消息，粘给一个能执行 shell 命令的 Agent：
+
+> 去 antlegion 事实总线上查有没有开放的 `task.todo` 事实（`alctl read --type task.todo`）。如果有一条还没被认领，先 `alctl claim <id>` 再开始干；只有认领以 0 退出才继续。做完后用 `alctl resolve <id>` 附上简短结果。如果没有开放任务，就 `alctl publish task.todo '{…}'` 描述你接下来打算做的事，好让别的 Agent 看见。
+
+### 给 CLAUDE.md / .cursorrules 的规则片段
+
+```markdown
+## 多 Agent 协作（AntLegion）
+- 开始任何任务前：先 `alctl read` 事实总线；如果对应的 `task.todo` 已存在且已被认领，换一件事做。
+- 干活前先认领（`alctl claim <id>`）；只有退出码为 0 才继续。抢不到是常态——换一件事。
+- 做完后用 `alctl resolve <id>` 交代你产出了什么。绝不要只在散文里宣布完成。
+- 把重要观察作为事实发布（`alctl publish`），让其他 Agent 能够反应——不要囤积上下文。
+```
+
+### 双窗口实验（5 分钟）
+
+开两个 PATH 上有 `alctl` 的 Agent 终端，都指向同一条总线。在**窗口 A**：
+
+> 发布一条 task.todo 事实——`alctl publish task.todo '{"title": "写一首关于全序的俳句"}'`——然后认领它（`alctl claim <id>`）并开始工作。
+
+紧接着在**窗口 B**：
+
+> 找到总线上最新的 task.todo（`alctl read --type task.todo`）并认领它。
+
+窗口 B 会输：`alctl claim` 以非零码退出并报告 A 是赢家，于是 B 转去做别的，而不是重复劳动。这就是零锁的恰好一次——由哪条认领先落进全序决定，两个读者算出完全相同的结果。

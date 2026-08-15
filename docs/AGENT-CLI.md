@@ -89,3 +89,46 @@ alctl publish sys.registry '{
   "publishes": ["task.done", "build.report"]
 }'
 ```
+
+## Identity resolution
+
+`--author <name>` is a global flag on every command that writes facts. Resolution order:
+
+| Setting | Purpose |
+|---|---|
+| `--author <name>` | Per-command identity (wins over everything) |
+| `ANTLEGION_AUTHOR` | CLI identity for the whole shell session |
+| *(default)* | `<os-username>@<hostname>` — stable across CLI invocations, so `claim` then `resolve` just works |
+| `ANTLEGION_BUS_URL` | Where the CLI/SDK finds the bus (default `http://localhost:28090`) |
+
+One identity = one process. Two processes sharing an author is the one failure the bus cannot forbid — but a reader fold *can* see it (`sys.heartbeat` + identity-conflict detection).
+
+## Adoption happens in the prompt, not the install
+
+### First prompt for an agent
+
+Paste this as your first message to an agent that can run shell commands:
+
+> Check the antlegion fact bus for open `task.todo` facts (`alctl read --type task.todo`). If one is unclaimed, `alctl claim <id>` before working on it; only proceed if the claim exits 0. When done, `alctl resolve <id>` with a short result. If there are no open tasks, `alctl publish task.todo '{…}'` describing the next thing you plan to do, so other agents can see it.
+
+### Rules snippet for CLAUDE.md / .cursorrules
+
+```markdown
+## Multi-agent coordination (AntLegion)
+- Before starting any task: `alctl read` the fact bus; if a `task.todo` for it exists and is claimed, pick different work.
+- Claim before you work (`alctl claim <id>`); proceed ONLY if it exits 0. Losing a claim is normal — move on.
+- When finished, `alctl resolve <id>` with what you produced. Never mark work done in prose only.
+- Publish significant observations as facts (`alctl publish`) so other agents can react — don't hoard context.
+```
+
+### The two-window experiment (5 minutes)
+
+Open two agent shells with `alctl` on PATH, both pointed at the same bus, then in **window A**:
+
+> Publish a task.todo fact — `alctl publish task.todo '{"title": "write a haiku about total order"}'` — then claim it (`alctl claim <id>`) and start working.
+
+Immediately in **window B**:
+
+> Find the latest task.todo on the bus (`alctl read --type task.todo`) and claim it.
+
+Window B loses: `alctl claim` exits non-zero and reports A as the winner, and B moves on instead of duplicating the work. That's exactly-once with zero locks — decided by which claim landed first in the total order, computed identically by both readers.
