@@ -499,40 +499,63 @@ node dist/index.js
 
 ## 项目结构
 
+三个已发布的包，外加文档、演示和一个落地页。**顶层每一项都在这张图里**——没出现在图上的东西，就不该待在仓库里。
+
 ```
-antlegion-platform/
+AntLegion/
 ├── README.md               ← 英文文档（每份文档都有 .zh-CN.md 中文版）
 ├── README.zh-CN.md         ← 你在这里
 ├── PROTOCOL.md             ← 线协议规范——§3 折叠规则为规范性
-├── Dockerfile              ← docker build . && docker run -p 28090:28090 …
+├── CLAUDE.md               ← 给在本仓库工作的编码 agent 的指引
+├── Dockerfile              ← 构建总线镜像；build context 是仓库根
+│
+│   ── 已发布到 npm 的包 ──
+├── antlegion-bus/          ← @antlegion/bus——总线、SDK、alctl CLI（内部结构见下）
 ├── ant/                    ← @antlegion/ant——DCU 运行时 + dev-chain 舰队 + 看板
-├── docs/
-│   ├── QUICKSTART.md       ← 逐步指南：服务端 + SDK + CLI
-│   ├── AGENT-CLI.md        ← agent 如何用 alctl 驱动总线
-│   └── EVOLUTION.md        ← v0 → v1 → v2：尝试过什么、为何改变
-└── antlegion-bus/
-    ├── src/
-    │   ├── bus.ts          ← 无状态可信核心
-    │   ├── fold.ts         ← 读者折叠（语义层）
-    │   ├── client.ts       ← ClientV2 折叠 SDK
-    │   ├── server.ts       ← Hono 线协议层
-    │   ├── log.ts          ← 只追加日志
-    │   ├── cli.ts / bin.ts ← alctl CLI
-    │   ├── hash.ts         ← sha256 内容地址 + HMAC + verifySig
-    │   ├── canonical.ts    ← stableJsonStringify（兼容 Python 浮点格式）
-    │   ├── types.ts        ← Fact、FactInput、Refs、RESERVED 类型
-    │   └── config.ts       ← 环境变量配置（redis.conf 对应物）
-    ├── conformance/
-    │   ├── vectors.json    ← §4 互操作契约：7 个哈希 + 24 个折叠向量
-    │   ├── generate.ts     ← 从参考实现派生向量
-    │   └── verify.py       ← 独立的 Python §4 重新实现（跨语言证明）
-    ├── examples/
-    │   ├── swarm-v2.ts              ← 21 个 Agent 的恰好一次扇出
-    │   ├── scenario-resilience.ts  ← 崩溃 + 重派
-    │   ├── scenario-consensus.ts   ← 同行评审信任
-    │   └── scenario-pipeline.ts    ← 因果流水线 + 取代
-    └── test/               ← 147 个测试（vitest，约 1 秒）
+├── antlegion-alias/        ← antlegion——20 行别名，让 `npx antlegion` 起总线
+│
+│   ── 其余 ──
+├── docs/                   ← 指南（QUICKSTART · AGENT-CLI · FACT-MODEL · EVOLUTION ·
+│                             DOCKER-VERIFY）+ proposals/（待评审的设计方案）
+├── research/               ← 上文各项数字的第一方实测记录
+├── deploy/                 ← mvp/（docker-compose 舰队跑分）· media/（演示 gif+tape）·
+│                             verify-cli-eventflow.mjs（端到端 CLI 验证）
+├── toys/                   ← 可直接跑的小用例：hr-colony、pi-duo、pi-agent
+├── site/                   ← antlegion.dev 落地页（静态，尚未上线）
+└── dcu-workspace/          ← `ant` 默认监视的运行时工作区；
+                              需求目录仅存本地，只有 README 进版本库
 ```
+
+参考实现内部：
+
+```
+antlegion-bus/
+├── src/
+│   ├── bus.ts          ← 无状态可信核心
+│   ├── fold.ts         ← 读者折叠（语义层）
+│   ├── client.ts       ← ClientV2 折叠 SDK
+│   ├── server.ts       ← Hono 线协议层
+│   ├── log.ts          ← 只追加日志
+│   ├── cli.ts / bin.ts ← alctl CLI
+│   ├── daemon.ts       ← antlegion start|stop|status（redis-server 风格）
+│   ├── hash.ts         ← sha256 内容地址 + HMAC + verifySig
+│   ├── canonical.ts    ← stableJsonStringify（兼容 Python 浮点格式）
+│   ├── types.ts        ← Fact、FactInput、Refs、RESERVED 类型
+│   └── config.ts       ← 环境变量配置（redis.conf 对应物）
+├── conformance/
+│   ├── vectors.json    ← §4 互操作契约：7 个哈希 + 24 个折叠向量
+│   ├── generate.ts     ← 从参考实现派生向量
+│   └── verify.py       ← 独立的 Python §4 重新实现（跨语言证明）
+├── examples/
+│   ├── swarm-v2.ts              ← 21 个 Agent 的恰好一次扇出
+│   ├── scenario-resilience.ts  ← 崩溃 + 重派
+│   ├── scenario-consensus.ts   ← 同行评审信任
+│   └── scenario-pipeline.ts    ← 因果流水线 + 取代
+├── console/ · demo/    ← 服务端在 /console 与 /dashboard 提供的只读页面
+└── test/               ← 147 个测试（vitest，约 1 秒）
+```
+
+有两样东西**故意**不在树里：`.data-v2/`（总线日志，跑在哪就生成在哪）和 `.ant/`（蚁群的 pid、日志与工作记忆）。两者都是运行时状态，已在任意层级被 gitignore。
 
 ## 当前状态
 

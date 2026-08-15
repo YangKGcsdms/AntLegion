@@ -499,39 +499,62 @@ Same trust boundary as Redis: the bus **trusts its callers**. It binds to `127.0
 
 ## Repository layout
 
+Three published packages, plus docs, demos, and a landing page. Every top-level entry is listed here — if it isn't in this map, it shouldn't be in the repo.
+
 ```
-antlegion-platform/
+AntLegion/
 ├── README.md               ← you are here (每份文档都有 .zh-CN.md 中文版)
 ├── PROTOCOL.md             ← wire protocol spec — §3 fold rules are normative
-├── Dockerfile              ← docker build . && docker run -p 28090:28090 …
+├── CLAUDE.md               ← orientation for coding agents working in this repo
+├── Dockerfile              ← builds the bus image; context is the repo root
+│
+│   ── packages (published to npm) ──
+├── antlegion-bus/          ← @antlegion/bus — the bus, SDK, alctl CLI (detailed below)
 ├── ant/                    ← @antlegion/ant — DCU runtime + dev-chain fleet + boards
-├── docs/
-│   ├── QUICKSTART.md       ← step-by-step: server + SDK + CLI
-│   ├── AGENT-CLI.md        ← how agents drive the bus via alctl
-│   └── EVOLUTION.md        ← v0 → v1 → v2: what was tried and why it changed
-└── antlegion-bus/
-    ├── src/
-    │   ├── bus.ts          ← stateless trusted core
-    │   ├── fold.ts         ← reader folds (the semantics layer)
-    │   ├── client.ts       ← ClientV2 folding SDK
-    │   ├── server.ts       ← Hono wire surface
-    │   ├── log.ts          ← AOF journal
-    │   ├── cli.ts / bin.ts ← alctl CLI
-    │   ├── hash.ts         ← sha256 content address + HMAC + verifySig
-    │   ├── canonical.ts    ← stableJsonStringify (Python-float compatible)
-    │   ├── types.ts        ← Fact, FactInput, Refs, RESERVED types
-    │   └── config.ts       ← env-driven config (redis.conf analog)
-    ├── conformance/
-    │   ├── vectors.json    ← §4 interop contract: 7 hash + 24 fold vectors
-    │   ├── generate.ts     ← derive vectors from the reference implementation
-    │   └── verify.py       ← independent Python §4 reimplementation (cross-language proof)
-    ├── examples/
-    │   ├── swarm-v2.ts              ← 21-agent exactly-once fan-out
-    │   ├── scenario-resilience.ts  ← crash + re-dispatch
-    │   ├── scenario-consensus.ts   ← peer-review trust
-    │   └── scenario-pipeline.ts    ← causal pipeline + supersession
-    └── test/               ← 147 tests (vitest, ~1s)
+├── antlegion-alias/        ← antlegion — 20-line alias so `npx antlegion` boots the bus
+│
+│   ── everything else ──
+├── docs/                   ← guides (QUICKSTART · AGENT-CLI · FACT-MODEL · EVOLUTION ·
+│                             DOCKER-VERIFY) + proposals/ (design docs under review)
+├── research/               ← first-party measurements the claims above cite
+├── deploy/                 ← mvp/ (docker-compose fleet run) · media/ (demo gif+tape) ·
+│                             verify-cli-eventflow.mjs (end-to-end CLI proof)
+├── toys/                   ← small runnable use cases: hr-colony, pi-duo, pi-agent
+├── site/                   ← antlegion.dev landing page (static, not yet deployed)
+└── dcu-workspace/          ← runtime workspace `ant` watches by default;
+                              requirement dirs are local-only, only the README is tracked
 ```
+
+Inside the reference implementation:
+
+```
+antlegion-bus/
+├── src/
+│   ├── bus.ts          ← stateless trusted core
+│   ├── fold.ts         ← reader folds (the semantics layer)
+│   ├── client.ts       ← ClientV2 folding SDK
+│   ├── server.ts       ← Hono wire surface
+│   ├── log.ts          ← AOF journal
+│   ├── cli.ts / bin.ts ← alctl CLI
+│   ├── daemon.ts       ← antlegion start|stop|status (redis-server style)
+│   ├── hash.ts         ← sha256 content address + HMAC + verifySig
+│   ├── canonical.ts    ← stableJsonStringify (Python-float compatible)
+│   ├── types.ts        ← Fact, FactInput, Refs, RESERVED types
+│   └── config.ts       ← env-driven config (redis.conf analog)
+├── conformance/
+│   ├── vectors.json    ← §4 interop contract: 7 hash + 24 fold vectors
+│   ├── generate.ts     ← derive vectors from the reference implementation
+│   └── verify.py       ← independent Python §4 reimplementation (cross-language proof)
+├── examples/
+│   ├── swarm-v2.ts              ← 21-agent exactly-once fan-out
+│   ├── scenario-resilience.ts  ← crash + re-dispatch
+│   ├── scenario-consensus.ts   ← peer-review trust
+│   └── scenario-pipeline.ts    ← causal pipeline + supersession
+├── console/ · demo/    ← the read-only pages served at /console and /dashboard
+└── test/               ← 147 tests (vitest, ~1s)
+```
+
+Two things deliberately **not** in the tree: `.data-v2/` (the bus journal — wherever you run it) and `.ant/` (a colony's pid, logs, and working memory). Both are runtime state, both are gitignored at any depth.
 
 ## Status
 

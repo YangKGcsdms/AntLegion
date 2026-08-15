@@ -111,6 +111,6 @@ poll(游标) → 重建共享折叠 → 判定触发谓词 → act → 推进游
 ## 参考文档
 
 - `PROTOCOL.md` —— 协议（权威；§3 折叠为规范性）。`PROTOCOL.zh-CN.md` —— 完整中文版。
-- `docs/QUICKSTART.md` · `docs/AGENT-CLI.md`（agent 如何通过 `alctl` 驱动总线）· `docs/FACT-MODEL.md` · `docs/EVOLUTION.md`（v0 运行时 → v1 → v2 一元论重构，以及 v1 为何被移除）。
+- `docs/QUICKSTART.md` · `docs/AGENT-CLI.md`（agent 如何通过 `alctl` 驱动总线）· `docs/FACT-MODEL.md` · `docs/EVOLUTION.md`（v0 运行时 → v1 → v2 一元论重构，以及 v1 为何被移除）· `docs/DOCKER-VERIFY.md` · `docs/proposals/`（待评审的设计方案）。
 - `README.md` —— 概览、定位、仓库地图、已验证保证。`ant/README.md` —— DCU 模型、dev-chain 表格、监督看板。
 - `research/` —— README 引用的第一方实测数据（竞争下的重复执行、伪造证据拦截）。`deploy/mvp/`、`toys/` —— 容器化的多 Agent 跑法。

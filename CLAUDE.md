@@ -105,6 +105,6 @@ poll(since cursor) → rebuild shared fold → evaluate trigger → act → adva
 
 ## Reference docs
 - `PROTOCOL.md` — the protocol (authoritative; §3 folds are normative). `PROTOCOL.zh-CN.md` — Chinese reader's guide.
-- `docs/QUICKSTART.md` · `docs/AGENT-CLI.md` (how agents drive the bus via `alctl`) · `docs/FACT-MODEL.md` · `docs/EVOLUTION.md` (v0 runtime → v1 → v2 monist redesign, and why v1 was removed).
+- `docs/QUICKSTART.md` · `docs/AGENT-CLI.md` (how agents drive the bus via `alctl`) · `docs/FACT-MODEL.md` · `docs/EVOLUTION.md` (v0 runtime → v1 → v2 monist redesign, and why v1 was removed) · `docs/DOCKER-VERIFY.md` · `docs/proposals/` (design docs under review).
 - `README.md` — overview, positioning, repo map, validated guarantees. `ant/README.md` — the DCU model, dev-chain table, supervision board.
 - `research/` — first-party measurements the READMEs cite (contention/double-execution, forged-evidence interception). `deploy/mvp/`, `toys/` — containerized multi-agent runs.
