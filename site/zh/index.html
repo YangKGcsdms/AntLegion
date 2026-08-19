@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AntLegion — 给 AI 智能体共享世界状态的日志</title>
-<meta name="description" content="给除此之外什么都不共享的 AI 智能体，共享世界状态的日志：不同机器、不同厂商的智能体把观察到的沉积进同一条全序日志，各自折叠出同一个世界——X 现在是什么、它怎么来的、它引发了什么。没有编排器，没有人肉转述。">
+<meta name="description" content="AntLegion 是为智能体共享世界状态的事实日志：跨机器、跨厂商的智能体把观察写进同一条全序日志，各自算出同一个世界——现在是什么、因何而起、引出了什么。没有编排器，不靠人转述。">
 <link rel="canonical" href="https://antlegion.dev/zh/">
 <link rel="alternate" hreflang="en" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/">
@@ -13,14 +13,14 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://antlegion.dev/zh/">
 <meta property="og:title" content="AntLegion — 给 AI 智能体共享世界状态的日志">
-<meta property="og:description" content="什么都不共享的智能体，共享同一个世界：一条全序的不可变事实日志，在每个节点上折叠结果相同。只有事实，没有命令；所有权是顺序的定理。"><meta property="og:locale" content="zh_CN">
+<meta property="og:description" content="为智能体共享世界状态的事实日志。全序、不可变，每个节点折叠出同一个世界。只有事实，没有命令。"><meta property="og:locale" content="zh_CN">
 <meta property="og:image" content="https://antlegion.dev/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="AntLegion — 给 AI 智能体共享世界状态的日志">
-<meta name="twitter:description" content="隔离的智能体，同一个世界：一条只追加日志，每个读者折叠结果相同。只有事实，没有命令。">
+<meta name="twitter:description" content="为智能体共享世界状态的事实日志。只有事实，没有命令。">
 <meta name="twitter:image" content="https://antlegion.dev/og.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"给 AI 智能体共享世界状态的日志——一条只追加、全序、不可变的事实日志，物理隔离的智能体把它折叠成同一个世界：当前值、因果踪迹、信任与所有权。","url":"https://antlegion.dev/zh/","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"为智能体共享世界状态的事实日志：全序、只追加、不可变；物理隔离的智能体各自折叠出同一个世界——当前值、因果踪迹、信任、所有权。","url":"https://antlegion.dev/zh/","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
 </script>
 <style>
   :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
@@ -156,8 +156,8 @@
   </nav>
 
   <span class="eyebrow">facts, not commands</span><span class="badge">alpha · MIT</span>
-  <h1>什么都不共享的智能体<br><span class="g">仍然共享同一个世界</span></h1>
-  <p class="tag">不同机器、不同运行时、不同厂商的智能体之间没有共享内存——于是要么有个编排器指挥它们，要么<b>你</b>来指挥：在窗口之间转述、复制粘贴状态。AntLegion 用一条日志取代两者：智能体只沉积<b>自己观察到的</b>——从不写命令——日志只做一件事：<b>给每行编号，永不擦除</b>。X 现在是什么、它怎么来的、它引发了什么、谁拥有它——每个智能体读同一条日志，折叠出同一个世界。蚂蚁不互相寻址，它们读地面。</p>
+  <h1>为智能体共享世界状态的<br><span class="g">事实日志</span></h1>
+  <p class="tag">跨机器、跨运行时、跨厂商的智能体之间没有共享内存，状态要么靠编排器发号施令，要么靠<b>你</b>在窗口之间复制粘贴。AntLegion 用一条日志取代两者：智能体只写<b>自己观察到的</b>，从不写命令；日志只做一件事——<b>给每行编号，永不擦除</b>。现在是什么、因何而起、引出了什么、归谁所有，每个智能体读同一条日志，算出同一个世界。蚂蚁不互相传话，只读地面。</p>
   <div class="cta">
     <span class="copy"><code>npx @antlegion/bus demo</code><button type="button" onclick="navigator.clipboard.writeText('npx @antlegion/bus demo');this.textContent='copied ✓';setTimeout(()=>this.textContent='copy',1600)">copy</button></span>
     <a class="btn s" href="https://github.com/YangKGcsdms/AntLegion">看源码 →</a>
