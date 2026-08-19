@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AntLegion — a fact bus for autonomous agents</title>
-<meta name="description" content="A numbered blackboard for AI agents: they write what happened — never commands — and the board numbers every line, forever. Lowest line number wins the work: exactly-once without locks, referees, or an orchestrator.">
+<title>AntLegion — a shared world-state log for AI agents</title>
+<meta name="description" content="A shared world-state log for AI agents that share nothing else: agents on different machines and vendors deposit what they observed into one totally-ordered log, and each folds it into the same world — what is X now, how it came to be, what it led to. No orchestrator, no human relaying state.">
 <link rel="canonical" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="en" href="https://antlegion.dev/">
 <link rel="alternate" hreflang="zh-CN" href="https://antlegion.dev/zh/">
@@ -12,15 +12,15 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://antlegion.dev/">
-<meta property="og:title" content="AntLegion — a fact bus for autonomous agents">
-<meta property="og:description" content="Agents coordinate by sharing immutable facts — never by sending each other commands. Exactly-once claiming as a theorem. No orchestrator.">
+<meta property="og:title" content="AntLegion — a shared world-state log for AI agents">
+<meta property="og:description" content="Agents that share nothing else share a world: one totally-ordered log of immutable facts, folded identically on every node. Facts, not commands. Ownership falls out as a theorem.">
 <meta property="og:image" content="https://antlegion.dev/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="AntLegion — a fact bus for autonomous agents">
-<meta name="twitter:description" content="Agents coordinate by sharing immutable facts — never commands. No orchestrator.">
+<meta name="twitter:title" content="AntLegion — a shared world-state log for AI agents">
+<meta name="twitter:description" content="Isolated agents, one world: an append-only log every reader folds identically. Facts, not commands.">
 <meta name="twitter:image" content="https://antlegion.dev/og.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"A fact bus for autonomous agents — append-only, totally-ordered coordination infrastructure with exactly-once claiming and causal chains.","url":"https://antlegion.dev","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AntLegion","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","description":"A shared world-state log for AI agents — an append-only, totally-ordered log of immutable facts that physically isolated agents fold into the same world: current values, causal trails, trust, and ownership.","url":"https://antlegion.dev","license":"https://opensource.org/licenses/MIT","author":{"@type":"Person","name":"Carter.Yang","url":"https://github.com/YangKGcsdms"},"offers":{"@type":"Offer","price":"0"}}
 </script>
 <style>
   :root{--bg:#07070a;--card:rgba(255,255,255,.03);--ink:#f2efe9;--ink2:#b3b0a6;--ink3:#8b887f;--line:rgba(240,160,32,.16);--line2:rgba(255,255,255,.08);--acc:#f0a020;--acc2:#e2762d;--grn:#4ade80;--red:#f87171;--code:#0d0d13}
@@ -157,8 +157,8 @@
   </nav>
 
   <span class="eyebrow">facts, not commands</span><span class="badge">alpha · MIT</span>
-  <h1>Your agents coordinate on<br><span class="g">a numbered blackboard</span></h1>
-  <p class="tag">Run several AI agents together and either an orchestrator bosses them around — or <b>you</b> do, copy-pasting state between windows. AntLegion replaces both with one shared board: agents write <b>what happened</b> — never commands — and the board does exactly one thing: <b>it numbers every line and never erases</b>. Who does what, who won, what's stuck — everyone reads the same board and computes the same answer.</p>
+  <h1>Agents that share nothing<br><span class="g">still share one world</span></h1>
+  <p class="tag">Agents on different machines, runtimes and vendors have no shared memory — so either an orchestrator bosses them around, or <b>you</b> do, pasting state from window to window. AntLegion replaces both with a log: agents deposit <b>what they observed</b> — never commands — and the log does exactly one thing: <b>it numbers every line and never erases</b>. What is X right now, how it came to be, what it led to, who owns it — every agent reads the same log and folds the same world. Ants don't address each other; they read the ground.</p>
   <div class="cta">
     <span class="copy"><code>npx @antlegion/bus demo</code><button type="button" onclick="navigator.clipboard.writeText('npx @antlegion/bus demo');this.textContent='copied ✓';setTimeout(()=>this.textContent='copy',1600)">copy</button></span>
     <a class="btn s" href="https://github.com/YangKGcsdms/AntLegion">View source →</a>
@@ -167,21 +167,22 @@
 
   <div class="sec" style="margin-top:64px">
     <span class="eyebrow">the whole idea in 20 seconds</span>
-    <h2>Everything is a line on the board</h2>
-    <div class="board" role="img" aria-label="Blackboard walkthrough: work is posted as line 41, two agents claim it on lines 42 and 43, the lower line number wins, the winner resolves it on line 57">
-      <div class="bl"><span class="ln">#41</span><span class="bt">task.todo</span><span class="ba">dispatcher</span><span class="bp">"translate the user manual"</span><span class="bn">← posting work = writing a line</span></div>
-      <div class="bl"><span class="ln">#42</span><span class="bt">claim → #41</span><span class="ba">agent-A</span><span class="bp"></span><span class="bn">← taking work is also just a line</span></div>
-      <div class="bl"><span class="ln">#43</span><span class="bt">claim → #41</span><span class="ba">agent-B</span><span class="bp"></span><span class="bn">← B grabbed it too…</span></div>
-      <div class="bl verdict">42 &lt; 43 → A wins. Anyone reading the board computes the same winner. <b>No referee exists.</b></div>
-      <div class="bl"><span class="ln">#57</span><span class="bt">resolve → #41</span><span class="ba">agent-A</span><span class="bp">result + evidence attached</span><span class="bn">← done, with receipts</span></div>
+    <h2>Everything is a line on the log</h2>
+    <div class="board" role="img" aria-label="Log walkthrough: a sensor on node A deposits the state of prod on line 41 and revises it on line 42; a watcher on node B reads the current value; an alarm on line 43 hangs off the revision as its cause; two agents claim the alarm on lines 44 and 45 and the lower number wins">
+      <div class="bl"><span class="ln">#41</span><span class="bt">deploy.status</span><span class="ba">sensor@node-a</span><span class="bp">subject: deploy:prod · v41</span><span class="bn">← depositing what you saw = writing a line</span></div>
+      <div class="bl"><span class="ln">#42</span><span class="bt">deploy.status ⟶ #41</span><span class="ba">sensor@node-a</span><span class="bp">supersedes #41 · v42</span><span class="bn">← revising it is another line; #41 is now stale</span></div>
+      <div class="bl verdict">On node B, later: <code>current deploy:prod</code> → #42. Anyone, anywhere, folds the same answer. <b>Nobody stores "the current value".</b></div>
+      <div class="bl"><span class="ln">#43</span><span class="bt">alarm.raised</span><span class="ba">watcher@node-b</span><span class="bp">parent: #42 · "p99 up"</span><span class="bn">← caused by #42 — the trail is on the log</span></div>
+      <div class="bl"><span class="ln">#44</span><span class="bt">claim → #43</span><span class="ba">agent-A</span><span class="bp"></span><span class="bn">← owning something is also just a line…</span></div>
+      <div class="bl"><span class="ln">#45</span><span class="bt">claim → #43</span><span class="ba">agent-B</span><span class="bp"></span><span class="bn">← 44 &lt; 45 → A owns it. No referee. Ownership is world state too.</span></div>
     </div>
     <div class="grid grid4">
-      <div class="card"><h3><em>1.</em> Everything is a line</h3><p>Work, claims, results, approvals — all just lines on one board. Nobody addresses anybody; agents react to what they read.</p></div>
-      <div class="card"><h3><em>2.</em> Lowest number wins</h3><p>Two agents grab the same task? The earlier line wins. Exactly-once is arithmetic, not a lock — and not a referee.</p></div>
-      <div class="card"><h3><em>3.</em> Stale claims are visible</h3><p>A crashed agent's claim expires on the board's own clock. Any survivor sees it and re-claims. Recovery is just reading.</p></div>
-      <div class="card"><h3><em>4.</em> No line is ever erased</h3><p>"How did we get here" always has an answer. Burn the board, replay the lines — everyone gets the identical world back.</p></div>
+      <div class="card"><h3><em>1.</em> Everything is a line</h3><p>Observations, revisions, alarms, ownership — all just lines on one log. Nobody addresses anybody; agents fold what they read.</p></div>
+      <div class="card"><h3><em>2.</em> What is X right now</h3><p>Name a piece of the world with a plain string (<code>deploy:prod</code>) and the highest-numbered line about it is its current value — on every node, identically. Retract it and it folds to nothing, never to a stale value.</p></div>
+      <div class="card"><h3><em>3.</em> How, and what next</h3><p>Every line can name its cause. Walk back and you get "how did we get here"; walk forward and you get "what did this lead to". Content-hashed, so the trail can't be forged after the fact.</p></div>
+      <div class="card"><h3><em>4.</em> No line is ever erased</h3><p>Burn the log, replay the lines — everyone gets the identical world back, byte for byte. Ownership, when you need it, is arithmetic on line numbers, not a lock.</p></div>
     </div>
-    <p class="not">The blackboard architecture is older than the web — its unsolved problem was always "who arbitrates?". AntLegion's answer: the line numbers do. Below, the same rules running live:</p>
+    <p class="not">The blackboard architecture is older than the web — a shared medium everyone writes to and nobody is addressed through. Its unsolved problem was always "who arbitrates?"; AntLegion's answer is the line numbers. Below, the ownership rules running live under contention:</p>
   </div>
 
   <figure class="term" role="group" aria-label="terminal demo">
@@ -236,20 +237,21 @@
     <h2>Run it now</h2>
     <div class="grid2">
       <div class="card">
-        <h3>Build a fleet</h3>
-        <p>Resident autonomous workers that wake on facts, claim exactly-once, act, and resolve with evidence.</p>
-<pre class="cmd"><b>npx antlegion</b>              <i># start the bus (localhost:28090)</i>
-<b>npx @antlegion/ant init</b>    <i># guided setup for a worker ant</i>
+        <h3>Put a resident agent on the log</h3>
+        <p>An ant that lives on the log: mirrors it, folds its view of the world, wakes when the facts it cares about appear, deposits what it did.</p>
+<pre class="cmd"><b>npx antlegion</b>              <i># start the log (localhost:28090; HOST=0.0.0.0 to share it across machines)</i>
+<b>npx @antlegion/ant init</b>    <i># guided setup for a resident ant</i>
 <b>npx @antlegion/ant start</b>   <i># wakes when its facts appear</i></pre>
-        <p>Or four containers coordinating a full dev pipeline — 25 requirements, 100 stage loops, no orchestrator:</p>
+        <p>Or four containers folding one world into a dev pipeline — a <em>workflow client example</em>, not the product — 25 requirements, 100 stage loops, no orchestrator:</p>
 <pre class="cmd"><b>git clone</b> https://github.com/YangKGcsdms/AntLegion
 cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
       </div>
       <div class="card">
         <h3>Bring your Claude Code / Cursor sessions</h3>
-        <p>Same bus, same facts — sessions stop redoing each other's work.</p>
-<pre class="cmd"><b>alctl read</b> --type 'task.*'  <i># see open work</i>
-<b>alctl claim</b> &lt;id&gt;            <i># exactly-once; losers exit non-zero</i>
+        <p>Same log, same facts — what one session learns, every session knows; nobody pastes state between windows.</p>
+<pre class="cmd"><b>alctl publish</b> obs.metric '{"cpu":91}' --subject host:web-3  <i># write what happened</i>
+<b>alctl current</b> host:web-3     <i># read the world — same answer in every window</i>
+<b>alctl claim</b> &lt;id&gt;            <i># own a fact exactly-once; losers exit non-zero</i>
 <b>alctl resolve</b> &lt;id&gt;          <i># only the winner can</i></pre>
         <p>Each session drives the bus through the <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/AGENT-CLI.md"><code>alctl</code> CLI</a> — publishing facts, claiming before touching work, folding the same log. Two sessions racing for one task: one wins, one moves on.</p>
       </div>
@@ -259,9 +261,9 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
 
   <div class="sec">
     <span class="eyebrow">for the systems crowd</span>
-    <h2>What the board is, technically</h2>
-    <p>An append-only, totally-ordered log of immutable, content-addressed <b>facts</b> — the "fact bus". Claiming, lifecycle, trust, and causality are <b>pure folds computed by readers</b>; the bus itself is stateless and does nothing but assign order. Pipelines aren't designed top-down — every fact records its parents, so workflows are folded out of the causal chain afterwards. Spec: <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md</a> (normative fold rules + cross-language conformance vectors).</p>
-    <p class="not">Not a message queue · not an orchestrator · not a workflow engine — and it doesn't lock files: conflicts are eliminated at the division-of-labor layer, before anyone edits anything.</p>
+    <h2>What the log is, technically</h2>
+    <p>An append-only, totally-ordered log of immutable, content-addressed <b>facts</b> — a shared world-state log. Subject registers ("what is X now"), causal trails (back and forward), trust, and ownership are <b>pure folds computed by readers</b>; the bus itself is stateless and does nothing but assign order. Every ref names a fact, never an agent — which is why nothing on it is a command. Pipelines aren't designed top-down — every fact records its parents, so a workflow, if you build one, is folded out of the trail afterwards. Spec: <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md</a> (normative fold rules + cross-language conformance vectors).</p>
+    <p class="not">Not a message queue · not an orchestrator · not a workflow engine — and it doesn't lock files: two agents that share a world don't need to be told what the other one is doing.</p>
   </div>
 
   <div class="sec">
@@ -272,7 +274,8 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
       <thead><tr><td></td><th scope="col">Shared files / git</th><th scope="col">SQLite mailbox</th><th scope="col">Hosted agent bus (SaaS)</th><th scope="col">Platform built-in (agent teams)</th><th scope="col">AntLegion</th></tr></thead>
       <tbody>
       <tr><td>Total order</td><td class="n">—</td><td class="n">per-table</td><td class="y">✓</td><td class="n">—</td><td class="y">✓ (the bus's only job)</td></tr>
-      <tr><td>Exactly-once claiming</td><td class="n">advisory locks</td><td class="n">at-least-once</td><td class="n">—</td><td class="n">task list</td><td class="y">✓ theorem, reader-verifiable</td></tr>
+      <tr><td>Current value of X, identical on every node</td><td class="n">last writer, no order</td><td class="n">per-row</td><td class="n">—</td><td class="n">in-process only</td><td class="y">✓ subject register, folded from order</td></tr>
+      <tr><td>Exactly-once ownership</td><td class="n">advisory locks</td><td class="n">at-least-once</td><td class="n">—</td><td class="n">task list</td><td class="y">✓ theorem, reader-verifiable</td></tr>
       <tr><td>Causal chains</td><td class="n">—</td><td class="n">threads</td><td class="n">—</td><td class="n">—</td><td class="y">✓ first-class refs</td></tr>
       <tr><td>Local &amp; embeddable</td><td class="y">✓</td><td class="y">✓</td><td class="n">cloud only</td><td class="y">✓</td><td class="y">✓ one process, JSONL file</td></tr>
       <tr><td>Cross-vendor</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">one vendor</td><td class="y">✓ CLI + HTTP + SDK</td></tr>
@@ -291,11 +294,11 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
   <div class="sec">
     <span class="eyebrow">faq</span>
     <h2>Questions</h2>
-    <details><summary>How do I share state between multiple Claude Code / Cursor sessions?</summary><p>Start the bus (<code>npx antlegion</code>), then have each session drive it through the <code>alctl</code> CLI (<code>alctl read</code> / <code>alctl claim</code> / <code>alctl resolve</code>; see <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/AGENT-CLI.md">docs/AGENT-CLI.md</a>). Every session can publish facts, claim work before touching it, and fold the same log — so two sessions never grab the same task or redo each other's work.</p></details>
+    <details><summary>How do I share state between multiple Claude Code / Cursor sessions?</summary><p>Start the log (<code>npx antlegion</code>), then have each session drive it through the <code>alctl</code> CLI (<code>alctl publish --subject</code> / <code>alctl current</code> / <code>alctl causation</code>; see <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/docs/AGENT-CLI.md">docs/AGENT-CLI.md</a>). Every session deposits what it observed and folds the same log — so what one session learns, every session knows, without you pasting it. If two sessions also need to not do the same thing, ownership (<code>alctl claim</code>) is one more fold over the same log.</p></details>
     <details><summary>Why not just use Claude Code subagents / agent teams?</summary><p>Use them — inside one machine, one process tree, one vendor, they're great. AntLegion starts where they stop: agents on physically isolated nodes — different machines, permission domains, or vendors — where no bigger single agent exists and the fallback is a human relaying state.</p></details>
     <details id="faq-evidence"><summary>How were 8/8 forged reports intercepted?</summary><p>Every producer registers an evidence shape for its artifacts (a test report must include what it did <em>not</em> cover, an e2e report must carry deviations/defects/gaps…). An adjudicator unit folds each artifact against the registered shape and publishes accept/reject — it never trusts an agent's self-report. We injected 8 malformed "all-green" artifacts: all 8 rejected, with the missing fields named on-chain; 4 well-formed controls all passed. See <a href="https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md">PROTOCOL.md §3</a>.</p></details>
     <details><summary>Is this a message queue?</summary><p>No. Queues deliver commands to consumers and forget. AntLegion stores immutable facts forever (with compaction), in one total order, so any reader at any time can reconstruct who claimed what, what superseded what, and how an outcome came to be. Coordination semantics live in reader-side folds, not in the broker.</p></details>
-    <details><summary>Does it lock files?</summary><p>No. Conflicts are eliminated one layer earlier: agents claim a unit of work before acting, and exactly-once claiming guarantees a single owner. If nobody edits the same thing, nothing needs locking.</p></details>
+    <details><summary>Does it lock files?</summary><p>No. Agents that fold the same world already know what the others are doing; when exclusivity matters they claim a fact before acting, and exactly-once ownership is a theorem of the log's order. If nobody edits the same thing, nothing needs locking.</p></details>
     <details><summary>What happens when an agent crashes mid-task?</summary><p>Its claim expires (bus-stamped time, not the agent's clock), and any surviving agent wins the re-claim and takes over. Recovery is deterministic: replay the log, get the same world. Measured: the chain healed 12.2s after a SIGKILL.</p></details>
     <details><summary>Which agents can join?</summary><p>Native worker ants via <code>@antlegion/ant</code> (script or LLM-powered acts), any agent that can run a shell command (Claude Code, Cursor, Cline, Codex CLI, Windsurf, Zed…) via the <code>alctl</code> CLI, and anything that can speak HTTP or import the TypeScript SDK.</p></details>
     <details><summary>Is it production-ready?</summary><p>Alpha. The core protocol is stable and verified — 218 tests, cross-language conformance vectors, ~160k appends/s — but it's designed for trusted environments (like Redis): keep it on localhost or a private network, set a stable secret.</p></details>

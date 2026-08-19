@@ -1,20 +1,22 @@
 # AntLegion
 
-> A fact bus for autonomous agents: local, embeddable coordination infrastructure. Agents publish immutable facts to an append-only, totally-ordered log and coordinate by reading it — never by sending each other commands. No orchestrator. Exactly-once claiming is a theorem of total order (lowest-seq claim wins; every reader computes the same winner). Coordination semantics (lifecycle, trust, supersession, causation) are pure folds computed on the reader side; the bus itself is stateless apart from assigning order.
+> A shared world-state log for AI agents that share nothing else (different processes, machines, runtimes, vendors). Agents deposit immutable facts — what they observed, never commands — into one append-only, totally-ordered log, and every agent folds that log into the same world: what is X right now (subject registers, latest seq wins, retraction folds to null), how it came to be and what it led to (causal trails, backward and forward), whether to trust it (votes), and who owns it (lowest-seq live claim — ownership is world state too, and exactly-once falls out as a theorem of order). All of that is computed on the reader side; the bus is stateless apart from assigning order. Lineage: stigmergy — ants read the ground, they don't address each other.
 
 ## Quick start
 - Start the bus: `npx antlegion` (HTTP on localhost:28090; binds loopback by default)
-- Worker ants (DCUs): `npx @antlegion/ant init` then `npx @antlegion/ant start`
-- Drive agents via the `alctl` CLI: `npx -p @antlegion/bus alctl publish <type> '<json>'` / `alctl read` / `alctl claim` / `alctl resolve` (full agent guide: docs/AGENT-CLI.md)
-- Four-container demo: `deploy/mvp` in the repo, `docker compose up --build --exit-code-from mvp`
+- Share it across machines: `HOST=0.0.0.0 npx antlegion`
+- Drive agents via the `alctl` CLI: `npx -p @antlegion/bus alctl publish <type> '<json>' --subject <key>` / `alctl current <subject>` / `alctl history <subject>` / `alctl causation <id>` / `alctl descendants <id>` / `alctl claim <id>` / `alctl resolve <id>` (full agent guide: docs/AGENT-CLI.md)
+- Resident ants on the log: `npx @antlegion/ant init` then `npx @antlegion/ant start` (@antlegion/ant); DeepSeek Harness as a resident ant: @antlegion/dsh
+- Shared-view scenario (isolated nodes fold one identical world, zero claims): `npx tsx examples/scenario-shared-view.ts` in antlegion-bus/
+- Four-container workflow client example: `deploy/mvp` in the repo, `docker compose up --build --exit-code-from mvp`
 
 ## Key resources
 - Repo: https://github.com/YangKGcsdms/AntLegion
 - Protocol spec: https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md
-- npm: @antlegion/bus (the bus + CLI `alctl`), @antlegion/ant (DCU runtime), antlegion (entry alias)
+- npm: @antlegion/bus (the log + CLI `alctl`), @antlegion/ant (resident-agent runtime), @antlegion/dsh (DeepSeek Harness on the log), antlegion (entry alias)
 - License: MIT
 
 ## Positioning
-- Is: shared-fact coordination layer for physically isolated agents (different machines/runtimes/vendors); replaces the human relaying state between agent sessions
-- Is not: a message queue, an orchestrator, a workflow engine, a file lock, or an MCP tool server
-- Lineage: CAN bus broadcast discipline (no addressing) + blackboard/tuple-space persistence + event-sourcing total order
+- Is: a shared world-state log for physically isolated agents (different machines/runtimes/vendors); replaces the human relaying state between agent sessions
+- Is not: a message queue, an orchestrator, a workflow engine, a multi-agent collaboration framework, a file lock, or an MCP tool server. Multi-agent "collaboration on a task" is workflow territory — build that as a client on top if you need it (ant's dev-chain is one such example), it is not what the log is
+- Lineage: stigmergy / blackboard (shared medium, no addressing, no control component) + CAN bus broadcast discipline + event-sourcing total order + content addressing (git)
