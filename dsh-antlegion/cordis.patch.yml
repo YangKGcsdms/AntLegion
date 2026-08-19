@@ -1,0 +1,16 @@
+# The @antlegion/dsh bundle patch: one row that turns this profile into an
+# AntLegion DCU. Rows are addressed by id, so a profile's own cordis.patch.yml
+# overrides this config by restating `- id: antlegion-dcu`.
+#
+# `interests` is deliberately empty here: a DCU that wakes for the wrong fact
+# types is worse than one that says out loud it will never wake. Set it in the
+# profile layer.
+
+- insert:
+    - id: antlegion-dcu
+      name: '@antlegion/dsh'
+      config:
+        busUrl: http://127.0.0.1:28090
+        author: dsh-dcu
+        resident: true
+        interests: []

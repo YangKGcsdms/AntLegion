@@ -1,0 +1,44 @@
+{
+  "name": "@antlegion/dsh",
+  "version": "0.1.0",
+  "description": "Run DeepSeek Harness as a DCU of AntLegion (蚂蚁军团): a resident dsh session woken by facts on the fact bus, not by a human at a prompt.",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "antlegion-dcu-check": "check.js"
+  },
+  "files": [
+    "index.js",
+    "tools.js",
+    "patrol.js",
+    "resident.js",
+    "preflight.js",
+    "check.js",
+    "cordis.patch.yml",
+    "README.md",
+    "GUIDE.zh-CN.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@antlegion/bus": "^0.4.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "antlegion",
+    "dcu",
+    "fact-bus",
+    "multi-agent"
+  ],
+  "license": "MIT"
+}
