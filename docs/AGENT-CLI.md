@@ -2,11 +2,12 @@
 
 🌐 **English** · [简体中文](AGENT-CLI.zh-CN.md)
 
-AntLegion agents talk to the bus through **one interface: the `alctl` CLI**. A
+AntLegion agents talk to the log through **one interface: the `alctl` CLI**. A
 PI/headless agent (`claude -p`, `codex exec`, a shell tool, a cron job) shells
 out to `alctl`; every subcommand maps to exactly one `ClientV2` fold call, so
-exactly-once claim, trust, and causation come from a single place
-(`fold.ts`) — never re-implemented per integration.
+"what is X now", causation, trust, and exactly-once ownership come from a
+single place (`fold.ts`) — never re-implemented per integration. Two agents on
+two machines that both shell out to `alctl` fold the same world.
 
 > **Why not MCP?** A stdio MCP adapter used to ship with the bus. It was a second
 > surface wrapping the same SDK, with its own identity env, tool schema, and
@@ -37,14 +38,16 @@ export ANTLEGION_AUTHOR=my-agent                   # or pass --author on each ca
 
 | MCP tool (removed) | `alctl` command |
 |---|---|
-| `antlegion_publish` | `alctl publish <type> '<json>' [--parent id] [--subject key] [--ref k=v]` |
+| `antlegion_publish` | `alctl publish <type> '<json>' [--parent id] [--subject key] [--ref k=v]` — write what happened |
+| — | `alctl supersede <id> <type> '<json>'` — revise it (the subject register moves); `alctl tombstone <id>` — retract it |
 | `antlegion_query` | `alctl read [--type glob] [--since N] [--limit n]` |
-| `antlegion_claim` | `alctl claim <id>` (exit 0 = won, 1 = lost) |
+| — | `alctl current <subject>` — **what is X right now** (exit 1 = nothing known); `alctl history <subject>` — everything ever said about X |
+| `antlegion_causation` | `alctl causation <id>` — how it came to be; `alctl descendants <id>` — what it led to |
+| `antlegion_claim` | `alctl claim <id>` (exit 0 = won, 1 = lost) — own a fact exactly-once |
 | `antlegion_resolve` | `alctl resolve <id>` |
 | `antlegion_observe` | `alctl observe <id> corroborate\|contradict` |
-| `antlegion_causation` | `alctl causation <id>` |
 | `antlegion_state` | `alctl state <id>` |
-| — | `alctl release <id>`, `alctl trust <id>`, `alctl tail --follow`, `alctl info` |
+| — | `alctl release <id>`, `alctl trust <id>`, `alctl tail --follow`, `alctl colony`, `alctl info` |
 
 Output is machine-readable JSON on stdout (JSONL for `read`/`tail`), human
 errors on stderr, non-zero exit on failure — so an agent parses stdout and
@@ -52,15 +55,28 @@ branches on exit code.
 
 ## The agent loop, as CLI
 
-```bash
-# 1. read new facts since your cursor, react
-alctl read --type 'task.*' --since "$CURSOR"
+An agent on the log does two things: it **deposits what it observed**, and it
+**folds the world** before acting. Ownership is a third thing it does only
+when two agents must not act on the same fact.
 
-# 2. claim a unit of work exactly-once (only one agent wins)
+```bash
+# 0. what is true right now? (same answer on every machine, no one asked anyone)
+alctl current deploy:prod                        # → the current fact, or exit 1 = nothing known
+alctl read --type 'deploy.*' --since "$CURSOR"   # or tail everything new since your cursor
+
+# 1. deposit what you observed — name the piece of the world it is about
+alctl publish obs.metric '{"cpu":91}' --subject host:web-3
+alctl supersede "$PREV_ID" obs.metric '{"cpu":40}'          # revise: the register moves, history stays
+alctl publish alarm.raised '{"why":"p99 up"}' --parent "$FACT_ID"   # say what caused it
+
+# 2. explain / trace
+alctl causation "$ALARM_ID"        # how did this come to be (root → fact, with payloads)
+alctl descendants "$FACT_ID"       # what did this lead to
+
+# 3. only when two agents must not act on the same fact: own it exactly-once
 if alctl claim "$FACT_ID" >/dev/null; then
-  # 3. do the work, then resolve with a child fact (causation via --parent)
   alctl resolve "$FACT_ID"
-  alctl publish task.done '{"result":"ok"}' --parent "$FACT_ID"
+  alctl publish incident.closed '{"result":"ok"}' --parent "$FACT_ID"
 else
   echo "someone else owns it — move on"     # do NOT retry the same id
 fi
@@ -109,26 +125,30 @@ One identity = one process. Two processes sharing an author is the one failure t
 
 Paste this as your first message to an agent that can run shell commands:
 
-> Check the antlegion fact bus for open `task.todo` facts (`alctl read --type task.todo`). If one is unclaimed, `alctl claim <id>` before working on it; only proceed if the claim exits 0. When done, `alctl resolve <id>` with a short result. If there are no open tasks, `alctl publish task.todo '{…}'` describing the next thing you plan to do, so other agents can see it.
+> There is an AntLegion log at `$ANTLEGION_BUS_URL` that other agents on other machines also read and write. Before you act, read it: `alctl read --type '<what you care about>' --since <cursor>` and `alctl current <subject>` for anything whose current value matters to you. Everything you observe or produce that another agent might need, deposit as a fact: `alctl publish <type> '{…}' --subject <what it is about> [--parent <the fact that caused it>]`; revise with `alctl supersede`. Never tell another agent what to do — write what is true and let it read. If a fact must be acted on by exactly one agent, `alctl claim <id>` first and proceed only if it exits 0; when done, `alctl resolve <id>`.
 
 ### Rules snippet for CLAUDE.md / .cursorrules
 
 ```markdown
-## Multi-agent coordination (AntLegion)
-- Before starting any task: `alctl read` the fact bus; if a `task.todo` for it exists and is claimed, pick different work.
-- Claim before you work (`alctl claim <id>`); proceed ONLY if it exits 0. Losing a claim is normal — move on.
-- When finished, `alctl resolve <id>` with what you produced. Never mark work done in prose only.
-- Publish significant observations as facts (`alctl publish`) so other agents can react — don't hoard context.
+## Shared world (AntLegion)
+- The AntLegion log is the shared world between you and agents on other machines. Read it before you act (`alctl read`, `alctl current <subject>`); never assume what another agent knows — check the log.
+- Deposit what you observe and produce as facts (`alctl publish … --subject <what it is about> --parent <cause>`); revise with `alctl supersede`. Don't hoard context in prose.
+- Facts, not commands: never write "agent X should …". Write what is true; other agents fold it themselves.
+- If exactly one agent must act on a fact, `alctl claim <id>` first; proceed ONLY if it exits 0. Losing a claim is normal — move on. When done, `alctl resolve <id>`.
 ```
 
 ### The two-window experiment (5 minutes)
 
-Open two agent shells with `alctl` on PATH, both pointed at the same bus, then in **window A**:
+Open two agent shells with `alctl` on PATH — ideally on two machines, both pointed at the same log (`HOST=0.0.0.0` on the bus). In **window A**:
 
-> Publish a task.todo fact — `alctl publish task.todo '{"title": "write a haiku about total order"}'` — then claim it (`alctl claim <id>`) and start working.
+> Deposit what you know about prod — `alctl publish deploy.status '{"v":41}' --subject deploy:prod` — then revise it: `alctl supersede <id> deploy.status '{"v":42}'`.
 
-Immediately in **window B**:
+Then in **window B**, which was never told any of this:
 
-> Find the latest task.todo on the bus (`alctl read --type task.todo`) and claim it.
+> What is prod at right now? (`alctl current deploy:prod`) And how did it get there? (`alctl history deploy:prod`, `alctl causation <id>`)
 
-Window B loses: `alctl claim` exits non-zero and reports A as the winner, and B moves on instead of duplicating the work. That's exactly-once with zero locks — decided by which claim landed first in the total order, computed identically by both readers.
+B answers v42 with the full history — nothing was pasted, nobody messaged B. Now, both windows at once:
+
+> Claim the v42 fact (`alctl claim <id>`).
+
+One wins, one exits non-zero and moves on. Ownership is decided by which claim landed first in the total order, computed identically by both readers — the same fold that gave both windows the same "current".

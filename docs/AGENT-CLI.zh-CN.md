@@ -2,10 +2,11 @@
 
 [English](AGENT-CLI.md) · 🌐 **简体中文**
 
-AntLegion 的 agent 通过**唯一接口：`alctl` CLI** 与总线对话。PI/无头 agent
+AntLegion 的 agent 通过**唯一接口：`alctl` CLI** 与日志对话。PI/无头 agent
 （`claude -p`、`codex exec`、shell 工具、cron 任务）通过 shell 调用 `alctl`；每个子命令
-恰好映射到一次 `ClientV2` 折叠调用，因此恰好一次认领、信任、因果都来自同一处
-（`fold.ts`）—— 绝不按集成各实现一遍。
+恰好映射到一次 `ClientV2` 折叠调用，因此「X 现在是什么」、因果、信任、恰好一次所有权
+都来自同一处（`fold.ts`）—— 绝不按集成各实现一遍。两台机器上各自 shell 调用 `alctl`
+的两个 agent，折叠出同一个世界。
 
 > **为什么不用 MCP？** 总线过去随附一个 stdio MCP 适配器。它是包在同一套 SDK 外的
 > 第二层表面，有自己的身份环境变量、工具 schema 和传输需要同步维护。CLI 已经暴露了完整的
@@ -34,29 +35,43 @@ export ANTLEGION_AUTHOR=my-agent                   # 或每条命令加 --author
 
 | MCP 工具（已移除） | `alctl` 命令 |
 |---|---|
-| `antlegion_publish` | `alctl publish <type> '<json>' [--parent id] [--subject key] [--ref k=v]` |
+| `antlegion_publish` | `alctl publish <type> '<json>' [--parent id] [--subject key] [--ref k=v]` —— 写下发生了什么 |
+| — | `alctl supersede <id> <type> '<json>'` —— 修订它（subject 寄存器随之移动）；`alctl tombstone <id>` —— 撤回它 |
 | `antlegion_query` | `alctl read [--type glob] [--since N] [--limit n]` |
-| `antlegion_claim` | `alctl claim <id>`（退出 0 = 赢，1 = 输） |
+| — | `alctl current <subject>` —— **X 现在是什么**（退出 1 = 一无所知）；`alctl history <subject>` —— 关于 X 曾说过的一切 |
+| `antlegion_causation` | `alctl causation <id>` —— 它怎么来的；`alctl descendants <id>` —— 它引发了什么 |
+| `antlegion_claim` | `alctl claim <id>`（退出 0 = 赢，1 = 输）—— 恰好一次地拥有一条事实 |
 | `antlegion_resolve` | `alctl resolve <id>` |
 | `antlegion_observe` | `alctl observe <id> corroborate\|contradict` |
-| `antlegion_causation` | `alctl causation <id>` |
 | `antlegion_state` | `alctl state <id>` |
-| — | `alctl release <id>`、`alctl trust <id>`、`alctl tail --follow`、`alctl info` |
+| — | `alctl release <id>`、`alctl trust <id>`、`alctl tail --follow`、`alctl colony`、`alctl info` |
 
 输出在 stdout 是机器可读的 JSON（`read` / `tail` 为 JSONL），人类可读的错误走 stderr，
 失败时以非零码退出 —— 于是 agent 解析 stdout、按退出码分支。
 
 ## agent 循环，用 CLI 表达
 
-```bash
-# 1. 从你的游标读取新事实，做出反应
-alctl read --type 'task.*' --since "$CURSOR"
+日志上的 agent 做两件事：**沉积自己观察到的**，以及行动之前**折叠世界**。所有权是第三件事，
+只在两个 agent 不能对同一条事实动手时才做。
 
-# 2. 恰好一次认领一个工作单元（只有一个 agent 会赢）
+```bash
+# 0. 现在什么是真的？（每台机器同一个答案，没有人问过任何人）
+alctl current deploy:prod                        # → 当前那条事实，或退出 1 = 一无所知
+alctl read --type 'deploy.*' --since "$CURSOR"   # 或从你的游标起 tail 所有新事实
+
+# 1. 沉积你观察到的 —— 命名它所关于的那一块世界
+alctl publish obs.metric '{"cpu":91}' --subject host:web-3
+alctl supersede "$PREV_ID" obs.metric '{"cpu":40}'          # 修订：寄存器移动，历史保留
+alctl publish alarm.raised '{"why":"p99 up"}' --parent "$FACT_ID"   # 说明是什么引起了它
+
+# 2. 解释 / 追溯
+alctl causation "$ALARM_ID"        # 它是怎么来的（根 → 事实，带 payload）
+alctl descendants "$FACT_ID"       # 它引发了什么
+
+# 3. 只在两个 agent 不能对同一条事实动手时：恰好一次地拥有它
 if alctl claim "$FACT_ID" >/dev/null; then
-  # 3. 干活，然后用一条子事实解决（因果通过 --parent）
   alctl resolve "$FACT_ID"
-  alctl publish task.done '{"result":"ok"}' --parent "$FACT_ID"
+  alctl publish incident.closed '{"result":"ok"}' --parent "$FACT_ID"
 else
   echo "别人拥有它了 —— 换下一个"     # 不要对同一个 id 重试
 fi
@@ -102,26 +117,30 @@ alctl publish sys.registry '{
 
 把这段作为第一条消息，粘给一个能执行 shell 命令的 Agent：
 
-> 去 antlegion 事实总线上查有没有开放的 `task.todo` 事实（`alctl read --type task.todo`）。如果有一条还没被认领，先 `alctl claim <id>` 再开始干；只有认领以 0 退出才继续。做完后用 `alctl resolve <id>` 附上简短结果。如果没有开放任务，就 `alctl publish task.todo '{…}'` 描述你接下来打算做的事，好让别的 Agent 看见。
+> `$ANTLEGION_BUS_URL` 上有一条 AntLegion 日志，其它机器上的其它 Agent 也在读写它。动手之前先读它：`alctl read --type '<你关心的类型>' --since <游标>`，以及对任何当前值对你重要的东西 `alctl current <subject>`。你观察到或产出的、别的 Agent 可能需要的一切，都沉积为事实：`alctl publish <type> '{…}' --subject <它关于什么> [--parent <引起它的那条事实>]`；用 `alctl supersede` 修订。绝不要告诉别的 Agent 该做什么——写下什么是真的，让它自己读。如果一条事实必须恰好由一个 Agent 处理，先 `alctl claim <id>`，退出码为 0 才继续；做完后 `alctl resolve <id>`。
 
 ### 给 CLAUDE.md / .cursorrules 的规则片段
 
 ```markdown
-## 多 Agent 协作（AntLegion）
-- 开始任何任务前：先 `alctl read` 事实总线；如果对应的 `task.todo` 已存在且已被认领，换一件事做。
-- 干活前先认领（`alctl claim <id>`）；只有退出码为 0 才继续。抢不到是常态——换一件事。
-- 做完后用 `alctl resolve <id>` 交代你产出了什么。绝不要只在散文里宣布完成。
-- 把重要观察作为事实发布（`alctl publish`），让其他 Agent 能够反应——不要囤积上下文。
+## 共享世界（AntLegion）
+- AntLegion 日志是你和其它机器上的 Agent 之间的共享世界。动手前先读它（`alctl read`、`alctl current <subject>`）；不要假设别的 Agent 知道什么——查日志。
+- 把你观察到和产出的沉积为事实（`alctl publish … --subject <它关于什么> --parent <因>`）；用 `alctl supersede` 修订。不要把上下文囤在散文里。
+- 只有事实，没有命令：绝不写「Agent X 应该……」。写下什么是真的，别的 Agent 自己折叠。
+- 如果一条事实必须恰好由一个 Agent 处理，先 `alctl claim <id>`；只有退出码为 0 才继续。抢不到是常态——换一件事。做完后 `alctl resolve <id>`。
 ```
 
 ### 双窗口实验（5 分钟）
 
-开两个 PATH 上有 `alctl` 的 Agent 终端，都指向同一条总线。在**窗口 A**：
+开两个 PATH 上有 `alctl` 的 Agent 终端——最好在两台机器上——都指向同一条日志（总线用 `HOST=0.0.0.0` 起）。在**窗口 A**：
 
-> 发布一条 task.todo 事实——`alctl publish task.todo '{"title": "写一首关于全序的俳句"}'`——然后认领它（`alctl claim <id>`）并开始工作。
+> 沉积你对 prod 的了解——`alctl publish deploy.status '{"v":41}' --subject deploy:prod`——然后修订它：`alctl supersede <id> deploy.status '{"v":42}'`。
 
-紧接着在**窗口 B**：
+然后在从未被告知这一切的**窗口 B**：
 
-> 找到总线上最新的 task.todo（`alctl read --type task.todo`）并认领它。
+> prod 现在在哪个版本？（`alctl current deploy:prod`）它是怎么到那儿的？（`alctl history deploy:prod`、`alctl causation <id>`）
 
-窗口 B 会输：`alctl claim` 以非零码退出并报告 A 是赢家，于是 B 转去做别的，而不是重复劳动。这就是零锁的恰好一次——由哪条认领先落进全序决定，两个读者算出完全相同的结果。
+B 答出 v42 和完整历史——什么都没粘贴，没有人给 B 发消息。现在两个窗口同时：
+
+> 认领那条 v42 事实（`alctl claim <id>`）。
+
+一个赢，一个以非零码退出并转去做别的。所有权由哪条认领先落进全序决定，两个读者算出完全相同的结果——和让两个窗口得到同一个「当前值」的是同一个折叠。
