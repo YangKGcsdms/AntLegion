@@ -8,6 +8,8 @@
 
 > One primitive. One write. One read. Everything else is derived.
 >
+> **A shared world-state log for agents that share nothing else.**
+>
 > Designed by **Carter.Yang**. Re-derived from first principles, 2026.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **MAY** are per
@@ -17,6 +19,29 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **MAY** are per
 
 ## 0. The derivation (why v2 looks like this)
 
+### 0.0 What this is for
+
+Two agents that share **nothing** — not a process, not a machine, not a
+vendor, not a memory — need to agree on what is true. Not on what to do:
+each decides that alone. On the *world*: what happened, what the current
+value of X is, how it came to be, what it led to, and whether it can be
+trusted. Today the medium between such agents is a human pasting state from
+one window into another.
+
+This protocol is that medium. It is a **shared world-state log**: every agent
+deposits what it observed, and every agent — at its own pace, on its own
+node — folds the same log into the same world. Nothing in it is a command,
+because a command has a recipient and the log has none. The lineage is
+stigmergy: ants do not address each other; they read the ground. The ground
+here is a totally-ordered, append-only, content-addressed log, and "reading
+the ground" is a deterministic fold (§3).
+
+Everything a workflow engine or an orchestrator does is *out of scope*: this
+protocol has no steps, no assignments, no scheduler. It has one derived
+consequence that looks like coordination — ownership of a fact is itself a
+piece of world state, and total order makes it unambiguous (§3.1) — but that
+is a corollary of sharing a world, not the purpose.
+
 ### 0.1 The single primitive (一元论)
 
 There is exactly one kind of thing in this system:
@@ -24,10 +49,11 @@ There is exactly one kind of thing in this system:
 > **A Fact: an immutable, content-addressed statement, placed at a unique
 > position in a single total order.**
 
-That is the whole ontology. There are no separate "tasks," "claims," "votes,"
-"trust levels," or "states." Those words name *patterns of facts* — a fact is
-all there is. This is the monist move, and every rule below is a *consequence*
-of it, not an addition to it.
+That is the whole ontology. A fact is a unit of shared world state — a
+statement about the world, never an instruction to anyone. There are no
+separate "tasks," "claims," "votes," "trust levels," or "states." Those words
+name *patterns of facts* — a fact is all there is. This is the monist move,
+and every rule below is a *consequence* of it, not an addition to it.
 
 Two operations act on the primitive, and only two:
 
@@ -57,13 +83,16 @@ be derived. (Compare: a single signed Kafka partition, or git with a sequence.)
 
 ### 0.3 Everything else, derived
 
-| v1 concept | v2 derivation |
+Every question a reader asks about the shared world is a fold over the same
+stream. In the order a physically isolated agent needs them:
+
+| question / v1 concept | v2 derivation |
 |---|---|
-| workflow state (`published/claimed/resolved/dead`) | a **fold** over claim/resolve/tombstone facts referencing the target |
-| `epistemic_state` + quorum config | a **fold** over `vote` facts; quorum is the *reader's* policy |
-| atomic `claim` endpoint + arbitration | append a `claim` fact; **lowest `seq` referencing the target wins** — exactly-once is a theorem of total order |
-| `supersedes` / auto-supersede index | a fact carries `supersedes`; reader keeps highest `seq` per subject |
-| `causation_chain` + `causation_depth` | walk `parent` links; depth is computed, not stored |
+| **what is X right now** (`supersedes` / auto-supersede index) | a fact carries `subject` and/or `supersedes`; the reader keeps the highest `seq` per subject — a **register** folded identically on every node (§3.3) |
+| **how did this come to be / what did it lead to** (`causation_chain` + `causation_depth`) | walk `parent` links backward (chain) or forward (descendants); depth is computed, not stored (§3.4) |
+| **can it be trusted** (`epistemic_state` + quorum config) | a **fold** over `vote` facts; quorum is the *reader's* policy (§3.2) |
+| **who owns it** (`published/claimed/resolved/dead`) | a **fold** over claim/resolve/tombstone facts referencing the target (§3.1) |
+| atomic `claim` endpoint + arbitration | append a `claim` fact; **lowest `seq` referencing the target wins** — ownership is world state, and exactly-once is a theorem of total order |
 | TTL → `dead` transition | reader-side filter / compaction hint; never a server state change |
 | acceptance filter / dispatch | reader-side query predicate (server MAY offer it as a pure read optimization) |
 | event push / WebSocket | removed; read advances the cursor |
@@ -102,18 +131,22 @@ to the one place it can be written once and conformance-tested — not a deletio
 }
 ```
 
-`refs` is where every relationship lives. Defined keys:
+`refs` is where every relationship lives. Every value is a **fact id, never an
+agent id** — that is the structural reason there are no commands: a fact can
+say what it is about, it cannot say who it is for. Defined keys:
 
 | `refs` key | Value | Meaning (a reader fold interprets it) |
 |---|---|---|
-| `parent` | fact id | This fact was caused by that one. Causation = transitive `parent`. |
-| `claim_of` | fact id | Author asserts exclusive responsibility for the target. |
+| `parent` | fact id | This fact was caused by that one. Causation = transitive `parent` (§3.4). |
+| `subject` | string | Names the piece of the world this fact is about; the group key for the latest-wins **register** (§3.3). |
+| `supersedes` | fact id | The target is **replaced by a successor** (this fact). |
+| `tombstones` | fact id | A `_.tombstone` marks the target **retracted / GC'd** — distinct from `supersedes`, which means *replaced*. Folds MUST tell the two apart (§5.2). |
+| `vote` | fact id | Combine with `payload.verdict ∈ {corroborate, contradict}` (§3.2). |
+| `claim_of` | fact id | Author asserts exclusive responsibility for the target (§3.1). |
 | `resolves` | fact id | The target is considered handled; payload MAY carry the result. |
 | `release_of` | fact id | Author abandons a prior claim. |
-| `vote` | fact id | Combine with `payload.verdict ∈ {corroborate, contradict}`. |
-| `supersedes` | fact id | The target is **replaced by a successor** (this fact). |
-| `subject` | string | Group key for latest-wins supersession without naming an id. |
-| `tombstones` | fact id | A `_.tombstone` marks the target **deleted / GC'd** — distinct from `supersedes`, which means *replaced*. Folds MUST tell the two apart. |
+| `about` | fact id | `context.requested`: the fact found too thin to act on (§3.6). |
+| `answers` | fact id | `context.provided`: the `context.requested` it answers (§3.6). |
 
 A bus MUST accept unknown `refs` keys (forward compatibility) and MUST NOT
 interpret them — only readers do. The trusted core looks at `refs.parent` *only*
@@ -178,7 +211,21 @@ That is the complete bus API: **one write, one read, two read conveniences.**
 A reader replays facts in `seq` order and folds them into whatever projection
 it needs. These fold rules are **normative** — conformance lives here, not in
 the bus. Two readers that fold identically will always agree, because they
-consume the same totally-ordered, immutable stream.
+consume the same totally-ordered, immutable stream — and that is the whole
+point: two agents on two machines with no channel between them but the log
+compute the same world.
+
+The folds answer four questions about that world. Ownership (§3.1) is listed
+first because its rule is the longest, not because it is the most important;
+a stream with no `_.claim` in it is a perfectly good world (see
+`examples/scenario-shared-view.ts`).
+
+| question | fold |
+|---|---|
+| who owns F, if anyone | lifecycle §3.1 |
+| can F be trusted | trust §3.2 |
+| what is X right now | subject register §3.3 |
+| how did F come to be · what did F lead to | causation §3.4 |
 
 ### 3.1 Lifecycle of a target fact `F`
 
@@ -219,9 +266,11 @@ This is what makes crash recovery correct in both directions:
   crashed claimer's stale claim would block the recovering agent's resolve, and
   the item would be re-done forever.)
 
-**Exclusive coordination is a theorem, not a lock.** If several authors append
-`claim_of: F`, the one with the **lowest `seq` wins** — every reader computes the
-same winner from the same totally-ordered, `recv`-stamped stream. No atomic
+**Ownership is world state, and exclusivity is a theorem, not a lock.** If
+several authors append `claim_of: F`, the one with the **lowest `seq` wins** —
+every reader computes the same winner from the same totally-ordered,
+`recv`-stamped stream, exactly as every reader computes the same current value
+of a register (§3.3). No atomic
 endpoint, no leader election, no hot-path arbitration. A claimer confirms it won
 by reading `F`'s claim set back and seeing no live `claim_of: F` at a lower
 `seq`; to keep that O(claims-on-F) instead of O(log), a bus SHOULD support the
@@ -264,22 +313,65 @@ does the work, whether to proceed — MUST be built on exclusive claim
 (`seq`-deterministic, §3.1), which every reader computes identically. Trust is
 for *advice and triage*, not for arbitration.
 
-### 3.3 Supersession
+### 3.3 Supersession — the subject register ("what is X right now")
 
-For facts sharing a `refs.subject` (or linked by `refs.supersedes`), the reader
-keeps the **highest `seq`** as current and projects the rest as `superseded`.
-Latest-wins is thus a *reader policy*: a reader accumulating multi-source
-observations simply doesn't apply it. (v1's auto-supersede footgun is gone —
-there is no server index silently replacing facts.)
+A `refs.subject` names a piece of the world: `deploy:prod`, `schema:orders`,
+`belief:customer-42:churn-risk`. Every fact carrying that subject is a
+statement about it; together they form the subject's **register**. The
+register is how a value that keeps changing is shared between isolated agents
+without anyone holding it — nobody stores "the current value", every reader
+folds it:
 
-### 3.4 Causation
+```
+history(S) = facts with refs.subject == S, ascending seq        # all that was ever said about S
 
-`chain(F)` = follow `refs.parent` transitively to a root. Depth = chain length.
-Because facts are immutable and removed only by explicit `tombstone` (§5.2),
-a chain never silently loses an ancestor — a reader encountering a tombstoned
-ancestor sees the tombstone, not a gap.
+current(S):
+  if history(S) is empty                → null                  # nobody has said anything
+  cur ← highest-seq fact in history(S)                          # latest-wins within the group
+  while ∃ fact x with x.refs.supersedes == cur.id:              # explicit replacement wins over group order
+      cur ← highest-seq such x                                  #   (x need not carry the subject)
+  if ∃ _.tombstone with refs.tombstones == cur.id → null        # retracted: gone, NOT the previous value (§5.2)
+  return cur
+
+supersededBy(F) = the fact that replaced F: an explicit `supersedes: F` if any,
+                  else the next-higher-seq fact in F's subject group, else null
+```
+
+Every reader that folds `current(S)` from the same stream gets the same fact —
+on any machine, at any later time, after any replay. That is what makes a
+register a *shared* register. It is also the reason `refs.subject` is a plain
+string chosen by the writer: two agents that have never met can write to the
+same piece of the world by agreeing on a name.
+
+Latest-wins is a *reader policy*, and this fold is one policy: a reader
+accumulating multi-source observations reads `history(S)` and does not
+collapse it. (v1's auto-supersede footgun is gone — there is no server index
+silently replacing facts.) Retraction is deliberately not "roll back to the
+previous value": a tombstoned register answers *nothing is known*, because a
+reader that resurrected an older statement would be asserting something no
+author currently asserts.
+
+### 3.4 Causation — the trail
+
+`chain(F)` = follow `refs.parent` transitively to a root, returned root→F:
+*how did F come to be*. Depth = chain length.
+
+`descendants(F)` = every fact whose `parent` chain leads back to F,
+transitively, in `seq` order (F excluded): *what did F lead to*.
+
+Both are pure folds over the same stream, so a reader on another node
+reconstructs the same trail. Because facts are immutable and removed only by
+explicit `tombstone` (§5.2), a chain never silently loses an ancestor — a
+reader encountering a tombstoned ancestor sees the tombstone, not a gap. And
+because `id` is a content hash (§4), a `parent` link cannot be forged after the
+fact and a cycle cannot be constructed at all (§5) — the trail is provenance
+that holds across organizational boundaries without anyone vouching for it.
 
 ### 3.5 Colony registry & orphan facts (optional convention)
+
+When the agents on a bus are physically isolated, "who is here, listening for
+what, producing what" is itself a piece of world state nobody can see
+directly. This convention makes it foldable.
 
 Nothing above requires an agent to announce itself — coordination is stigmergic.
 But a supervisor often wants to close the loop between *what an agent listens
@@ -374,8 +466,8 @@ The bus never mutates or silently drops a stored fact. Removal is itself an
 appended `tombstone` fact (`type: "_.tombstone"`, `refs.tombstones` → target).
 Deletion gets its **own** ref key, never `supersedes`: superseding means *a
 successor replaced this*; tombstoning means *this is gone*. The folds (lifecycle
-§3.1, trust §3.2) MUST distinguish them — a GC'd fact is `dead`, not
-`superseded`. Compaction (§7) MAY then physically drop a fact's
+§3.1, trust §3.2, register §3.3) MUST distinguish them — a retracted fact is
+`dead` (its register folds to null, §3.3), never `superseded`. Compaction (§7) MAY then physically drop a fact's
 *payload*, but MUST retain its full skeleton — `{id, seq, recv, author, refs,
 sig}` — because every fold depends on it: causation walks need `refs.parent`;
 the claim winner needs `seq` + `author` + `refs.claim_of`; trust needs `author`
@@ -462,6 +554,7 @@ REST surface for legacy clients, with zero changes to the trusted core.
 
 | Source | What v2 takes |
 |---|---|
+| **Blackboard architecture / stigmergy** | a shared medium everyone writes observations to and nobody is addressed through; ants read the ground, not each other. v2 keeps the board and drops the control component: the total order arbitrates |
 | **Event sourcing / CQRS** | the log is the only truth; state is a projection |
 | **Git** | content-addressed, immutable, append-only; `fetch` by cursor |
 | **Lamport / total order** | exactly-once exclusivity as a *theorem* of order |
