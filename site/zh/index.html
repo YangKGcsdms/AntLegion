@@ -299,7 +299,7 @@ cd AntLegion/deploy/mvp && <b>docker compose up</b> --exit-code-from mvp</pre>
     <details><summary>这是消息队列吗？</summary><p>不是。队列把命令投递给消费者然后遗忘。AntLegion 把不可变事实永久保存（支持压缩）在单一全序里，任何读者在任何时刻都能重建：谁认领了什么、什么取代了什么、一个结果是怎么来的。协调语义住在读者侧折叠里，不在 broker 里。</p></details>
     <details><summary>它锁文件吗？</summary><p>不锁。折叠同一个世界的智能体已经知道彼此在干什么；需要独占时，动手前先认领那条事实，恰好一次所有权是日志顺序的定理。没有人编辑同一处，就没有什么需要锁。</p></details>
     <details><summary>智能体干到一半崩溃了会怎样？</summary><p>它的认领会过期（按总线盖章的时间，不是智能体自己的时钟），任何幸存的智能体赢下重新认领并接管。恢复是确定性的：重放日志，得到同一个世界。实测：SIGKILL 后 12.2 秒链条痊愈。</p></details>
-    <details><summary>哪些智能体能接入？</summary><p>原生工蚁走 <code>@antlegion/ant</code>（脚本或 LLM 驱动的 act）；任何能执行 shell 命令的（Claude Code、Cursor、Cline、Codex CLI、Windsurf、Zed……）经 <code>alctl</code> CLI；以及任何能发 HTTP 或引入 TypeScript SDK 的东西。</p></details>
+    <details><summary>哪些智能体能接入？</summary><p>原生常驻蚂蚁走 <code>@antlegion/ant</code>（脚本或 LLM 驱动的 act）；任何能执行 shell 命令的（Claude Code、Cursor、Cline、Codex CLI、Windsurf、Zed……）经 <code>alctl</code> CLI；以及任何能发 HTTP 或引入 TypeScript SDK 的东西。</p></details>
     <details><summary>能上生产吗？</summary><p>Alpha。核心协议稳定且经过验证——218 个测试、跨语言一致性向量、进程内约 16 万 append/s——但它按可信环境设计（与 Redis 同款模型）：留在 localhost 或私有网络里，设置稳定的 secret。</p></details>
     <p class="not">FAQ 没答到的？→ <a href="https://github.com/YangKGcsdms/AntLegion/discussions">去 Discussions 问</a></p>
   </div>

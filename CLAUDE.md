@@ -44,11 +44,11 @@ python3 conformance/verify.py     # independent cross-language check: reproduce 
 
 # ── ant/ ──  (npm install first; tests fail with "Cannot find package '@antlegion/bus/fold'" without it)
 npm test                 # vitest run
-npm run chain            # tsx src/main.ts chain — the dev-chain fleet (needs a bus on :28090)
+npm run chain            # tsx src/main.ts chain — the dev-chain DCUs, a workflow client example (needs a bus on :28090)
 npm run board            # supervision board → http://localhost:28091/devchain.html
 npm run req -- new "名称" -s slug         # publish a req.registered to drive the chain
 ANT_WORKER=simulated npx tsx src/main.ts mvp --reqs 25   # unattended throughput run, no API key
-./scripts/up.sh          # idempotent: bus + ingestor + fleet + board;  ./scripts/down.sh stops all
+./scripts/up.sh          # idempotent: bus + ingestor + dev-chain DCUs + board;  ./scripts/down.sh stops all
 ```
 
 No lint config. `npx tsc --noEmit` typechecks (both packages; it is what CI runs). CI (`.github/workflows/ci.yml`) runs three jobs: `bus` (typecheck + vitest + `conformance/verify.py`), `ant` (typecheck + vitest), and `vectors-guard`.
@@ -58,7 +58,7 @@ No lint config. `npx tsc --noEmit` typechecks (both packages; it is what CI runs
 ## Architecture
 
 ```
-ant DCU fleet (ant/src/runtime.ts)  ─┐
+ant resident DCUs (ant/src/runtime.ts) ─┐
 alctl CLI (bus src/cli.ts, bin.ts)  ─┼─HTTP→ server.ts → BusV2 (bus.ts) → JsonlLog (log.ts)
 your code → ClientV2 (client.ts)    ─┘                         └ folds (fold.ts) run client-side
 ```
@@ -83,7 +83,7 @@ A DCU is a thin deterministic supervisor loop over the bus, named after a CAN-bu
 poll(since cursor) → rebuild shared fold → evaluate trigger → act → advance
 ```
 
-- **`runtime.ts`** — the loop primitive (`runDCU`/`DCUSpec`/`DCUContext`). Keeps a mirrored stream, re-folds on every batch, resets + re-runs `init` when the bus restarts from an empty journal (`head < cursor`). Emits `sys.heartbeat` carrying a per-boot instance token. One process-level SIGINT/SIGTERM fan-out for the whole fleet, not per-DCU.
+- **`runtime.ts`** — the loop primitive (`runDCU`/`DCUSpec`/`DCUContext`). Keeps a mirrored stream, re-folds on every batch, resets + re-runs `init` when the bus restarts from an empty journal (`head < cursor`). Emits `sys.heartbeat` carrying a per-boot instance token. One process-level SIGINT/SIGTERM fan-out for all resident DCUs, not per-DCU.
 - **`folds/`** — `devchain.ts` (stage registry + evidence rules + chain fold), `chain.ts` (requirement board), `watchdog.ts` (starvation/escalation, pure), `identity.ts` (two live instance tokens under one author ⇒ `sys.identity.conflict`).
 - **`dcus/`** — the six dev-chain units (`devchain-dcus.ts` = 4 stage DCUs + adjudicator; `watchdog-dcu.ts`), the read-only workspace `ingestor-req.ts`, `scheduler-dcu.ts` (cron beats *published as facts*), `worker-spawn.ts` (headless-agent act), `workers-llm.ts` (pi-ai → DeepSeek acts), `gate-approver.ts`.
 - **`main.ts`** — the `ant` CLI. Its `HELP` string is the current command list (`chain`/`ingestor`/`board`/`req new`/`mvp`/`init`/`start [--daemon]`/`stop`/`status`/`logs`/`launchd`); `ant/README.md` predates the residency commands and still says `init`/`start` "land in 0.2".

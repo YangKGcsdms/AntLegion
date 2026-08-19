@@ -48,11 +48,11 @@ python3 conformance/verify.py     # 独立跨语言检查：逐字节复现所�
 
 # ── ant/ ──（先 npm install；否则测试报 "Cannot find package '@antlegion/bus/fold'"）
 npm test                 # vitest run
-npm run chain            # tsx src/main.ts chain —— dev-chain 舰队（需要 :28090 上有总线）
+npm run chain            # tsx src/main.ts chain —— dev-chain DCU 们，一个工作流客户端示例（需要 :28090 上有总线）
 npm run board            # 监督看板 → http://localhost:28091/devchain.html
 npm run req -- new "名称" -s slug         # 发布 req.registered 驱动整条链
 ANT_WORKER=simulated npx tsx src/main.ts mvp --reqs 25   # 无人值守吞吐跑，不需要 API key
-./scripts/up.sh          # 幂等拉起：bus + ingestor + fleet + board；./scripts/down.sh 全停
+./scripts/up.sh          # 幂等拉起：bus + ingestor + dev-chain DCU + board；./scripts/down.sh 全停
 ```
 
 无 lint 配置。`npx tsc --noEmit` 做类型检查（两个包都要，CI 就是这么跑的）。CI（`.github/workflows/ci.yml`）三个 job：`bus`（typecheck + vitest + `conformance/verify.py`）、`ant`（typecheck + vitest）、`vectors-guard`。
@@ -62,7 +62,7 @@ ANT_WORKER=simulated npx tsx src/main.ts mvp --reqs 25   # 无人值守吞吐跑
 ## 架构
 
 ```
-ant DCU 舰队（ant/src/runtime.ts）  ─┐
+ant 常驻 DCU（ant/src/runtime.ts）    ─┐
 alctl CLI（bus src/cli.ts, bin.ts） ─┼─HTTP→ server.ts → BusV2（bus.ts）→ JsonlLog（log.ts）
 你的代码 → ClientV2（client.ts）    ─┘                      └ 折叠（fold.ts）在客户端侧运行
 ```
@@ -87,7 +87,7 @@ DCU 是总线之上一个极薄的确定性监督循环，名字取自汽车 CAN
 poll(游标) → 重建共享折叠 → 判定触发谓词 → act → 推进游标
 ```
 
-- **`runtime.ts`** —— 循环原语（`runDCU`/`DCUSpec`/`DCUContext`）。维护镜像流、每批重折叠；总线从空日志重启（`head < cursor`）时重置镜像并重跑 `init`。发 `sys.heartbeat`，携带本进程的一次性启动 token。整个舰队共用一套进程级 SIGINT/SIGTERM 分发，而不是每个 DCU 各注册一套。
+- **`runtime.ts`** —— 循环原语（`runDCU`/`DCUSpec`/`DCUContext`）。维护镜像流、每批重折叠；总线从空日志重启（`head < cursor`）时重置镜像并重跑 `init`。发 `sys.heartbeat`，携带本进程的一次性启动 token。全部常驻 DCU 共用一套进程级 SIGINT/SIGTERM 分发，而不是每个 DCU 各注册一套。
 - **`folds/`** —— `devchain.ts`（阶段注册表 + 证据规则 + 链折叠）、`chain.ts`（需求看板）、`watchdog.ts`（饥饿/升级检测，纯函数）、`identity.ts`（同一 author 下两个存活 token ⇒ `sys.identity.conflict`）。
 - **`dcus/`** —— dev-chain 六单元（`devchain-dcus.ts` = 4 个阶段 DCU + 裁决者；`watchdog-dcu.ts`）、只读工作区镜像 `ingestor-req.ts`、`scheduler-dcu.ts`（cron 节拍**以事实形式发布**）、`worker-spawn.ts`（唤醒真实 headless agent 干活）、`workers-llm.ts`（pi-ai → DeepSeek）、`gate-approver.ts`。
 - **`main.ts`** —— `ant` CLI，其中的 `HELP` 字符串才是当前命令清单（`chain`/`ingestor`/`board`/`req new`/`mvp`/`init`/`start [--daemon]`/`stop`/`status`/`logs`/`launchd`）；`ant/README.md` 早于常驻功能，仍写着 `init`/`start`「0.2 落地」。
