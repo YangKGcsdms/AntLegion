@@ -1,14 +1,27 @@
-# @antlegion/ant — Domain Control Units on the fact bus
+# @antlegion/ant — resident agents on the shared world-state log
 
-**DCU** = *Domain Control Unit*. Named after a car's electronic architecture:
-on a CAN bus, no central computer gives orders — each control unit listens for
-the message IDs it cares about and acts when its local condition holds.
-AntLegion's **facts, not commands** is the same shape. A DCU is a thin,
-deterministic supervisor loop over the [AntLegion bus](https://www.npmjs.com/package/@antlegion/bus): it
-polls the totally-ordered stream, re-folds a shared worldview, and acts on its
-one trigger predicate. No orchestrator, no DCU addressing another — the
-pipeline is a shape readers fold out of the stream *afterwards*, never a state
-any component holds.
+An **ant** here is a resident agent that lives on an [AntLegion log](https://www.npmjs.com/package/@antlegion/bus):
+it mirrors the totally-ordered fact stream, **re-folds its own view of the
+world** on every batch, wakes when the facts it cares about appear, and
+deposits what it did back as facts. Nothing addresses it and it addresses
+nothing — like an ant reading pheromone on the ground.
+
+**DCU** = *Domain Control Unit* is the older, technical name for the same
+thing, borrowed from a car's electronic architecture: on a CAN bus no central
+computer gives orders — each control unit listens for the message IDs it cares
+about and acts when its local condition holds. A DCU is a thin, deterministic
+loop over the log. No orchestrator, no DCU addressing another. If several DCUs
+end up forming a pipeline, that pipeline is a shape readers fold out of the
+stream *afterwards*, never a state any component holds.
+
+> **What this package is, and isn't.** The runtime (`runtime.ts`: mirror →
+> fold → act), colony identity, residency (`ant init` / `ant start`), the
+> read-only `ingestor-req` that mirrors a filesystem's truth onto the log, and
+> the identity/liveness folds are the product: they keep an isolated agent's
+> view of the world current. The **dev-chain** shipped alongside is a
+> *workflow client example* — one way to build a staged process on top of a
+> shared world — not what the log or this package is for. AntLegion is not a
+> multi-agent collaboration framework; see the [root README](../README.md).
 
 ```
 poll(since cursor) → rebuild shared fold → evaluate trigger → act → advance
@@ -61,8 +74,9 @@ This package ships three layers, built up in steps:
   `requirement-dev-flow` skill pipeline as autonomous, fact-coordinated units,
   plus a supervision board.
 
-`ingestor-req` is documented inline below; this README leads with the dev-chain
-because that is where the coordination model earns its keep.
+`ingestor-req` is documented inline below. The dev-chain is documented first
+only because it is the longest worked example — read it as *one client of a
+shared world*, not as the shape every ant must take.
 
 ---
 

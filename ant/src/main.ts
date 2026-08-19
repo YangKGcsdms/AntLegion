@@ -191,7 +191,7 @@ async function runReqNew(): Promise<void> {
   console.log(publishNote);
 }
 
-const HELP = `ant — autonomous DCUs (Domain Control Units) on the AntLegion fact bus
+const HELP = `ant — resident agents (DCUs) on the AntLegion shared world-state log
 
 usage: ant <command>
 

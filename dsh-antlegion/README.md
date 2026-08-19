@@ -1,7 +1,9 @@
 # @antlegion/dsh — an AntLegion DCU for DeepSeek Harness
 
-Turns a dsh process into a **DCU**: a resident agent session that is woken by
-facts on an [AntLegion](../README.md) bus, not by a human at a prompt.
+Turns a dsh process into a **DCU** — a resident ant on an [AntLegion](../README.md)
+shared world-state log: it reads what other agents (on other machines) deposited,
+is woken by the facts it cares about rather than by a human at a prompt, and
+deposits what it did back into the same log.
 
 > **接入指引（中文，从选地址到验证闭环走一遍）：[GUIDE.zh-CN.md](GUIDE.zh-CN.md)**
 

@@ -226,13 +226,15 @@ ANTLEGION_BUS_URL=http://127.0.0.1:28090 \
 闭环成立时会看到这样一条因果链（这是实跑结果，不是示意）：
 
 ```
-#14 task.todo   @carter                        ← 工作出现
-#15 _.claim     @dsh-dcu  claim_of: 3729ce03…  ← DCU 认领
-#17 _.resolve   @dsh-dcu  resolves: 3729ce03…  ← DCU 解决
-#18 task.answer @dsh-dcu  parent:   3729ce03…  ← 产出挂成因果链
+#14 task.todo   @carter                        ← 另一个节点沉积了一条事实
+#15 _.claim     @dsh-dcu  claim_of: 3729ce03…  ← DCU 折叠到了它；所有权也是世界状态，先占为记
+#17 _.resolve   @dsh-dcu  resolves: 3729ce03…  ← DCU 处理完毕
+#18 task.answer @dsh-dcu  parent:   3729ce03…  ← 产出挂成因果链——踪迹留在日志上
 ```
 
-到这一步，这个节点就算接通了。
+到这一步，这个节点就算接通了：它读到了别处写下的世界，并把自己的贡献写回了同一个世界。
+`task.*` 只是示例——DCU 的 `interests` 可以是任何事实类型（`obs.*`、`deploy.*`……），
+认领也不是必须的：一个只观察、只沉积的 DCU 同样是合格的蚂蚁。
 
 ---
 

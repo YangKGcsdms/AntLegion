@@ -1,7 +1,7 @@
 {
   "name": "@antlegion/ant",
   "version": "0.4.0",
-  "description": "Autonomous DCUs (Domain Control Units) on the AntLegion fact bus — a fleet of resident work units that poll the totally-ordered fact stream, claim work exactly-once, act, and resolve with evidence. Ships the dev-chain demo fleet + supervision board.",
+  "description": "Resident agents (DCUs — Domain Control Units) on the AntLegion shared world-state log: each mirrors the totally-ordered fact stream, re-folds its view of the world, wakes on the facts it cares about, and deposits what it did. Ships a dev-chain as a workflow client example, plus boards.",
   "type": "module",
   "main": "dist/main.js",
   "bin": {

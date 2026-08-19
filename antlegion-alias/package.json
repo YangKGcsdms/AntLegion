@@ -1,7 +1,7 @@
 {
   "name": "antlegion",
   "version": "0.4.0",
-  "description": "AntLegion — append-only fact bus for autonomous agents. This is a convenience alias: `npx antlegion` boots @antlegion/bus (and `npx antlegion demo` runs the three-act demo).",
+  "description": "AntLegion — a shared world-state log for AI agents. This is a convenience alias: `npx antlegion` boots @antlegion/bus (and `npx antlegion demo` runs the three-act demo).",
   "type": "module",
   "bin": {
     "antlegion": "cli.js"

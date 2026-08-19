@@ -6,14 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-AntLegion is a **fact bus** for autonomous agents: an append-only log of immutable, content-addressed facts that agents coordinate through. The founding axiom is **facts, not commands** — agents publish/read/claim/resolve facts and never address each other; coordination emerges from the fact stream. It is **not** a message queue, orchestrator, or agent runtime, and it is positioned as local/embeddable infrastructure (Redis-shaped), not a public SaaS.
+AntLegion is a **shared world-state log for AI agents that share nothing else** (different processes / machines / vendors): an append-only, totally-ordered log of immutable, content-addressed facts. Agents deposit what they observed; every agent folds the same log into the same world — what is X right now (`subject` registers), how it came to be / what it led to (causal trail), whether to trust it, and who owns it. The founding axiom is **facts, not commands** — `refs` name fact ids, never agent ids, so nothing on the log can be addressed to anyone. Ownership / exactly-once claiming is a *corollary* of sharing a world (lowest-seq claim wins), not the purpose. It is **not** a message queue, orchestrator, workflow engine, or multi-agent collaboration framework — "agents doing a task together" is workflow territory and lives in clients (the `ant` dev-chain is one such example), never in the positioning. Local/embeddable infrastructure (Redis-shaped), not a public SaaS. Brand metaphor: **ants reading pheromone on the ground** (stigmergy) — never an army/fleet of workers; avoid fleet/swarm/spawn-as-workforce wording.
 
 Two published packages, no root `package.json` and **no npm workspace** — each is installed and tested on its own:
 
 | dir | package | what it is |
 |---|---|---|
 | `antlegion-bus/` | `@antlegion/bus` | the bus, folding SDK, `alctl` CLI, conformance vectors |
-| `ant/` | `@antlegion/ant` | DCU work units that live *on* a bus: runtime loop, dev-chain fleet, boards, colony daemon |
+| `ant/` | `@antlegion/ant` | resident agents (DCUs) that live *on* a log: mirror → fold → act runtime, colony daemon, boards; ships a dev-chain as a workflow client example |
+| `dsh-antlegion/` | `@antlegion/dsh` | DeepSeek Harness as a resident agent on the log (perception = Node patrol over the stream, decisions = LLM turns) |
 | `antlegion-alias/` | `antlegion` | 20-line alias so `npx antlegion` boots the bus |
 
 `ant` depends on the **published** `@antlegion/bus` (`^0.4.x`), not on `../antlegion-bus`. A local bus change is invisible to `ant` until it is published — or until you `npm link` it deliberately. When bumping the bus, `ant/package-lock.json` must be re-synced or CI's `ant` job fails.
@@ -65,7 +66,7 @@ your code → ClientV2 (client.ts)    ─┘                         └ folds (
 ### `antlegion-bus/src/` (flat)
 
 - **`bus.ts` — stateless trusted core.** Assigns total order (`seq`), verifies the content-hash `id`, stamps a trusted receive time (`recv`) + HMAC `sig`, persists, serves a range. Its only derived indexes (seq counter, `id→seq` dedup) are pure projections of the log. **No per-fact mutable state, no state machine.**
-- **`fold.ts` — reader folds (the semantics).** `lifecycle` (claimed/resolved/dead/open), `claimWinner`/`didIWin`, `trust`, `supersededBy`/`isSuperseded`, `causationChain`, plus the optional conventions of §3.5–§3.6: `colony`/`SYS_REGISTRY` (who is on the board), `orphanReport` (fact types nobody listens for), `contextGaps` (`context.requested`/`context.provided`). Pure functions over the fact stream.
+- **`fold.ts` — reader folds (the semantics).** `current`/`history` (the §3.3 subject register — "what is X right now"), `supersededBy`/`isSuperseded`, `causationChain`/`descendants` (§3.4 trail, both directions), `lifecycle` (claimed/resolved/dead/open), `claimWinner`/`didIWin`, `trust`, plus the optional conventions of §3.5–§3.6: `colony`/`SYS_REGISTRY` (who is on the board), `orphanReport` (fact types nobody listens for), `contextGaps` (`context.requested`/`context.provided`). Pure functions over the fact stream.
 - **`server.ts`** — Hono wire surface: `POST /facts`, `GET /facts` (since/type/author/refs; returns `X-Max-Seq` for cursor advance), `/facts/head`, `/facts/:id`, `/info` (INFO), `POST /admin/rewrite` (BGREWRITEAOF), `/health`, plus the static `/dashboard` + `/console`.
 - **`log.ts`** — append-only AOF: `appendfsync` policy (`always|everysec|no`), flush-on-close, compaction that keeps the full `{id,seq,recv,author,refs,sig}` skeleton (only payloads dropped).
 - **`client.ts`** — folding SDK over a transport (`localTransport(bus)` for in-process/tests, `httpTransport(url)` for real). `cli.ts` drives this same client, so fold logic is written once.

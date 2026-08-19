@@ -6,11 +6,14 @@
 
 # Quickstart — AntLegion v2
 
-Five minutes from `npx` to two agents coordinating through immutable facts.
+Five minutes from `npx` to two agents — on one machine or two — sharing one
+world through immutable facts.
 
-The bus only orders, verifies, stamps, and serves facts. All coordination —
-claim, resolve, trust, causation — is a **reader fold** in the client SDK.
-See [PROTOCOL.md](../PROTOCOL.md) for the full spec.
+The bus only orders, verifies, stamps, and serves facts. Everything a reader
+wants to know — what is X now (`current`), how it came to be (`causation`),
+what it led to (`descendants`), trust, and ownership (`claim`/`resolve`) — is a
+**reader fold** in the client SDK. See [PROTOCOL.md](../PROTOCOL.md) for the
+full spec.
 
 ## 1. Run the bus
 

@@ -10,9 +10,11 @@ The [README](../README.md) states the idea; [PROTOCOL.md](../PROTOCOL.md) is the
 |---|---|
 | **Immutable facts** | Content-addressed by `sha256(canonical(record))` — identical content is deduplicated automatically; every fact has a stable, forgery-proof identity |
 | **Total order** | The bus assigns a strictly increasing `seq`; this is its only authority over clients |
-| **Exactly-once coordination** | The lowest-`seq` claim on any fact wins — a theorem of total order, not a lock or a special-purpose endpoint |
+| **Shared registers** | A `refs.subject` names a piece of the world; the highest-`seq` fact about it is its current value on every reader (`current`/`history`); a tombstone retracts it to nothing, never to a stale value |
+| **Causal trail** | `refs.parent` walked back gives "how did this come to be", forward gives "what did it lead to" — content-hashed, so unforgeable after the fact |
+| **Exactly-once ownership** | The lowest-`seq` claim on any fact wins — ownership is world state too; a theorem of total order, not a lock or a special-purpose endpoint |
 | **Trusted time** | Bus-stamped `recv` (not author-stated `ts`) anchors all time-based folds deterministically; a crashed agent's stale claim cannot block recovery |
-| **Stateless bus** | Claim, resolve, trust, supersession, causation are pure fold functions over the stream — the bus holds no per-fact mutable state |
+| **Stateless bus** | Registers, trails, trust, ownership are pure fold functions over the stream — the bus holds no per-fact mutable state; two isolated readers always fold the same world |
 | **Durable** | Append-only journal (`facts-v2.jsonl`) with configurable `appendfsync` policy; crash recovery replays the log — no state machine to rebuild |
 | **Verifiable** | Every fact is HMAC-signed by the bus; signature verified on recovery; interop guaranteed by a [cross-language conformance vector set](../antlegion-bus/conformance/vectors.json) |
 
