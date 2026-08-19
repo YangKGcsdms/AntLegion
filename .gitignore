@@ -6,11 +6,15 @@ build/
 .npm/
 .eslintcache
 
-# Local state / data
-.antlegion/
-.factclaw/
-shared-output/
-output/
+# Runtime state — never commit. The bus journal (ANTLEGION_DATA_DIR, default
+# .data-v2/) and the colony residency dir (.ant/ — pid, logs, prompts, and the
+# agent's cross-wake working memory) are produced wherever you run the tools,
+# so match them at any depth, not just at the repo root.
+.data-v2/
+.data/
+.ant/
+*.jsonl
+*.jsonl.tmp
 *.log
 
 # Environment
@@ -39,10 +43,6 @@ docker-compose.override.yml
 
 # Cowork planning docs (local only)
 .cowork/
-
-# ecu/ runtime artifacts (dogfooding run dir — never commit; review H1)
-ecu/.data/
-ecu/.run/
 
 # verify-cli-eventflow self-booted bus data
 deploy/.verify-data-*/
