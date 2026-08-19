@@ -110,6 +110,49 @@ export function isSuperseded(stream: readonly Fact[], F: string): boolean {
   return supersededBy(stream, F) !== null;
 }
 
+/**
+ * The subject register (§3.3): every fact carrying `refs.subject == subject`,
+ * in seq order — the full history of "what has been said about X", oldest first.
+ * A reader accumulating multi-source observations reads this and does NOT
+ * apply latest-wins; a reader who wants the current value calls `current`.
+ */
+export function history(stream: readonly Fact[], subject: string): Fact[] {
+  return stream.filter((x) => x.refs.subject === subject).sort((a, b) => a.seq - b.seq);
+}
+
+/**
+ * "What is X right now" — the current value of a subject register (§3.3),
+ * folded identically by every reader from the same total order:
+ *
+ *   1. take the highest-seq fact in the `refs.subject` group;
+ *   2. follow explicit `refs.supersedes` links forward (explicit replacement
+ *      wins over group order, and the successor need not carry the subject);
+ *   3. if the fact reached is tombstoned (§5.2) the register is *retracted* —
+ *      the answer is null, not the previous value. Deleted is not superseded.
+ *
+ * Returns null for a subject nobody has ever written.
+ */
+export function current(stream: readonly Fact[], subject: string): Fact | null {
+  const group = history(stream, subject);
+  if (!group.length) return null;
+  const byId = new Map(stream.map((x) => [x.id, x] as const));
+  const seen = new Set<string>();
+  let cur: Fact | undefined = group[group.length - 1];
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    const id: string = cur.id;
+    const explicit = stream
+      .filter((x) => x.refs.supersedes === id)
+      .sort((a, b) => b.seq - a.seq);
+    if (!explicit.length) break;
+    cur = byId.get(explicit[0].id);
+  }
+  if (!cur) return null;
+  const F = cur.id;
+  const dead = stream.some((x) => x.type === RESERVED.TOMBSTONE && x.refs.tombstones === F);
+  return dead ? null : cur;
+}
+
 // ─────────────────────────────── §3.2 Trust ──────────────────────────────────
 
 export type TrustState =
@@ -165,7 +208,36 @@ export function causationChain(stream: readonly Fact[], F: string): Fact[] {
   return chain.reverse();
 }
 
-// ─────────────────── §7 Colony registry & orphan facts ───────────────────────
+/**
+ * Everything F caused: every fact whose `refs.parent` chain leads back to F,
+ * transitively, in seq order (F itself excluded). The forward view of §3.4 —
+ * `causationChain` answers "how did this come to be", `descendants` answers
+ * "what did this lead to". Both are pure folds over the same stream, so two
+ * readers on two machines get the same answer.
+ */
+export function descendants(stream: readonly Fact[], F: string): Fact[] {
+  const children = new Map<string, Fact[]>();
+  for (const x of stream) {
+    if (!x.refs.parent) continue;
+    const list = children.get(x.refs.parent);
+    if (list) list.push(x); else children.set(x.refs.parent, [x]);
+  }
+  const out: Fact[] = [];
+  const seen = new Set<string>([F]);
+  const queue = [F];
+  while (queue.length) {
+    const id = queue.shift()!;
+    for (const c of children.get(id) ?? []) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      out.push(c);
+      queue.push(c.id);
+    }
+  }
+  return out.sort((a, b) => a.seq - b.seq);
+}
+
+// ─────────────────── §3.5 Colony registry & orphan facts ─────────────────────
 //
 // Closes the loop between what an agent LISTENS FOR and what it PUBLISHES. An
 // agent announces itself with a `sys.registry` fact carrying `interests` (fact-
@@ -181,7 +253,7 @@ export const SYS_REGISTRY = "sys.registry";
 
 /** Types that are protocol mechanics or infrastructure, never "domain work" —
  *  excluded from orphan analysis (nobody declares interest in a `_.claim`).
- *  `context.*` is excluded for the same reason: it is the §8 clarification
+ *  `context.*` is excluded for the same reason: it is the §3.6 clarification
  *  convention, and `contextGaps` already tracks whether a request was answered
  *  — a strictly better signal than "no agent declared interest in it". */
 function isMechanicalType(t: string): boolean {
@@ -290,7 +362,7 @@ export function orphanReport(stream: readonly Fact[]): OrphanReport {
   return { orphanTypes, unmatchedInterests, silentPublishes, registeredAgents: regs.length };
 }
 
-// ───────────────── §8 Context-sufficiency loop (clarification) ────────────────
+// ──────────────── §3.6 Context-sufficiency loop (clarification) ───────────────
 //
 // A fact may assert "X is broken" without enough context for the agent that
 // cares to act. Rather than let that dead-end silently, the interested agent

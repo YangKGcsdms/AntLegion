@@ -2,7 +2,8 @@
  * v2 folding client SDK (PROTOCOL.md §3 "Where the elegance goes").
  *
  * This is the layer that keeps the client surface small (publish / query /
- * claim / resolve / observe / state) while the bus stays trivial: it appends,
+ * current / supersede / claim / resolve / observe / state / causation /
+ * descendants) while the bus stays trivial: it appends,
  * maintains a cursor-synced local mirror, and runs the reader folds so callers
  * see "claim / resolve / state" instead of "append a _.claim fact then read
  * back and fold". The alctl CLI (cli.ts) is a thin shell over this SDK and is
@@ -15,7 +16,8 @@ import type { AppendResult, Fact, FactInput, Refs } from "./types.js";
 import { RESERVED } from "./types.js";
 import type { BusV2, ReadQuery } from "./bus.js";
 import {
-  lifecycle, claimWinner, didIWin, trust, causationChain,
+  lifecycle, claimWinner, didIWin, trust, causationChain, descendants,
+  supersededBy, current, history,
   colony, orphanReport, contextGaps,
   type Lifecycle, type TrustState, type AgentRegistration, type OrphanReport, type ContextGap,
 } from "./fold.js";
@@ -207,24 +209,79 @@ export class ClientV2 {
     return trust(this.mirror, F, quorum);
   }
 
+  /** How F came to be: root→F along `refs.parent` (§3.4). */
   async causation(F: string): Promise<Fact[]> {
     await this.sync();
     return causationChain(this.mirror, F);
   }
 
-  /** §7 colony roster — latest sys.registry per agent (interests/publishes). */
+  /** What F led to: every transitive child of F, seq-ordered (§3.4, forward). */
+  async descendants(F: string): Promise<Fact[]> {
+    await this.sync();
+    return descendants(this.mirror, F);
+  }
+
+  // ── §3.3 subject registers — "what is X right now", identical on every reader ──
+
+  /** The current value of a subject register, or null (never written / retracted). */
+  async currentOf(subject: string): Promise<Fact | null> {
+    await this.sync();
+    return current(this.mirror, subject);
+  }
+
+  /** Everything ever said about a subject, oldest first (no latest-wins applied). */
+  async historyOf(subject: string): Promise<Fact[]> {
+    await this.sync();
+    return history(this.mirror, subject);
+  }
+
+  /** The id of the fact that replaced F, or null (§3.3). */
+  async supersededBy(F: string): Promise<string | null> {
+    await this.sync();
+    return supersededBy(this.mirror, F);
+  }
+
+  /**
+   * Replace F with a successor: publish `type` with `refs.supersedes: F`,
+   * inheriting F's `refs.subject` (so the register moves with it) unless the
+   * caller passes an explicit subject. Any author may supersede — the bus does
+   * not adjudicate; the reader's trust fold does (§3.2).
+   */
+  async supersede(
+    F: string,
+    type: string,
+    payload: Record<string, unknown> = {},
+    opts: { refs?: Refs; subject?: string } = {},
+  ): Promise<{ id: string; seq: number; deduped: boolean }> {
+    await this.sync();
+    const target = this.mirror.find((x) => x.id === F);
+    if (!target) throw new Error(`fact ${F} not found`);
+    const subject = opts.subject ?? target.refs.subject;
+    const refs: Refs = { ...opts.refs, supersedes: F, ...(subject ? { subject } : {}) };
+    return this.publish(type, payload, { refs, nonce: nonce() });
+  }
+
+  /** Retract F: append a `_.tombstone` (§5.2). Deleted is `dead`, never `superseded`. */
+  async tombstone(F: string): Promise<{ id: string; seq: number }> {
+    await this.sync();
+    if (!this.has(F)) throw new Error(`fact ${F} not found`);
+    const r = await this.t.append({ type: RESERVED.TOMBSTONE, author: this.author, ts: now(), refs: { tombstones: F }, nonce: nonce() });
+    return { id: r.id, seq: r.seq };
+  }
+
+  /** §3.5 colony roster — latest sys.registry per agent (interests/publishes). */
   async colony(): Promise<AgentRegistration[]> {
     await this.sync();
     return colony(this.mirror);
   }
 
-  /** §7 orphan report — fact types nobody is interested in + declaration gaps. */
+  /** §3.5 orphan report — fact types nobody is interested in + declaration gaps. */
   async orphans(): Promise<OrphanReport> {
     await this.sync();
     return orphanReport(this.mirror);
   }
 
-  /** §8 open context requests — facts an agent found too thin to act on. */
+  /** §3.6 open context requests — facts an agent found too thin to act on. */
   async contextGaps(includeAnswered = false): Promise<ContextGap[]> {
     await this.sync();
     return contextGaps(this.mirror, { includeAnswered });

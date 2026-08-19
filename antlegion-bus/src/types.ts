@@ -25,8 +25,8 @@ export interface Refs {
   supersedes?: string;  // target REPLACED by a successor (this fact)
   subject?: string;     // group key for latest-wins supersession
   tombstones?: string;  // target DELETED / GC'd (distinct from supersedes)
-  about?: string;       // context.requested: the fact found insufficient (§8)
-  answers?: string;     // context.provided: the context.requested it answers (§8)
+  about?: string;       // context.requested: the fact found insufficient (§3.6)
+  answers?: string;     // context.provided: the context.requested it answers (§3.6)
   [k: string]: string | undefined; // unknown keys accepted, not interpreted
 }
 

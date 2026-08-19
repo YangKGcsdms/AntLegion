@@ -7,22 +7,32 @@
  * Output contract: machine-readable JSON on stdout (one value or JSONL stream),
  * human-grade errors on stderr, non-zero exit on failure.
  *
+ *   # write what happened
  *   alctl publish <type> [json-payload]   [--author a] [--parent id] [--subject key] [--ref k=v]
+ *   alctl supersede <id> <type> [json]    [--author a] [--subject key]   replace a fact (register moves)
+ *   alctl tombstone <id>                  [--author a]                   retract a fact (§5.2)
+ *   # read the world
  *   alctl read   [--since N] [--type glob] [--author a] [--limit n]
  *   alctl tail   [--type glob] [--since N] [--follow]
+ *   alctl current <subject>               what is X right now (§3.3 register)
+ *   alctl history <subject>               everything ever said about X
+ *   alctl causation <id>                  how this came to be (root→fact)
+ *   alctl descendants <id>                what this led to
+ *   alctl trust  <id>
+ *   # ownership is world state too (§3.1)
  *   alctl claim  <id>                     [--author a]
  *   alctl resolve <id>                    [--author a]
  *   alctl release <id>                    [--author a]
  *   alctl observe <id> <corroborate|contradict>  [--author a]
  *   alctl state  <id>
- *   alctl trust  <id>
- *   alctl causation <id>
+ *   # who is on the board (§3.5–§3.6)
+ *   alctl colony | registry | orphans | ask-context | provide-context | context-gaps
  *   alctl info
  *
  * This CLI is the sanctioned agent↔bus interface (it replaced the removed MCP
  * adapter): a PI/headless agent shells out to `alctl` — every op below maps to
- * one ClientV2 fold call, so exactly-once / trust / causation come from one
- * place. See docs/AGENT-CLI.md.
+ * one ClientV2 fold call, so every reader — this CLI, the SDK, a DCU on another
+ * machine — folds the same stream into the same world. See docs/AGENT-CLI.md.
  *
  * `--author` is the global identity flag: it sets who you are for every command
  * that writes facts (on `read`/`tail`, which append nothing, it stays an author
@@ -52,17 +62,26 @@ function parseArgs(argv: string[]): { positionals: string[]; flags: Record<strin
 }
 
 const USAGE = [
-  "alctl — AntLegion CLI",
+  "alctl — AntLegion CLI (a shared world-state log for agents)",
+  "write what happened:",
   "  publish <type> [json]   append a fact   [--author a --parent id --subject key --ref k=v]",
+  "  supersede <id> <type> [json]  replace a fact; its subject register moves [--author a --subject key]",
+  "  tombstone <id>          retract a fact (deleted ≠ superseded, §5.2) [--author a]",
+  "read the world:",
   "  read [--since N --type glob --author a --limit n]",
   "  tail [--type glob --since N --follow]  print facts (--follow keeps polling)",
+  "  current <subject>       what is X right now — the §3.3 register, same on every reader",
+  "  history <subject>       everything ever said about X, oldest first",
+  "  causation <id>          how this came to be (chain root→fact)",
+  "  descendants <id>        what this led to (transitive children)",
+  "  trust <id>              trust state of a fact",
+  "ownership is world state too:",
   "  claim <id>              claim an exclusive fact           [--author a]",
   "  resolve <id>            resolve a claimed fact (winner only) [--author a]",
   "  release <id>            abandon your claim                [--author a]",
   "  observe <id> <corroborate|contradict>  vote on a fact     [--author a]",
   "  state <id>              lifecycle state of a fact",
-  "  trust <id>              trust state of a fact",
-  "  causation <id>          causation chain root→fact",
+  "who is on the board:",
   "  colony                  registered agents (interests/publishes)",
   "  registry                full colony directory — 板上有谁、谁听什么、谁产什么",
   "  orphans                 fact types nobody is interested in + declaration gaps",
@@ -194,7 +213,49 @@ export async function runCli(
       case "causation": {
         if (!rest[0]) { writeErr("error: causation needs an <id>"); return 1; }
         const chain = await client.causation(rest[0]);
-        write(JSON.stringify({ chain: chain.map((f) => f.id) }));
+        // `chain` (ids) is the stable shape scripts key on; `facts` carries the
+        // full skeleton+payload so a reader can see WHAT happened along the way,
+        // not just that something did.
+        write(JSON.stringify({ chain: chain.map((f) => f.id), facts: chain }));
+        return 0;
+      }
+
+      case "descendants": {
+        if (!rest[0]) { writeErr("error: descendants needs an <id>"); return 1; }
+        const kids = await client.descendants(rest[0]);
+        write(JSON.stringify({ descendants: kids.map((f) => f.id), facts: kids }));
+        return 0;
+      }
+
+      case "current": {
+        if (!rest[0]) { writeErr("error: current needs a <subject>"); return 1; }
+        const cur = await client.currentOf(rest[0]);
+        write(JSON.stringify({ subject: rest[0], current: cur }));
+        return cur ? 0 : 1; // exit 1: nothing (or no longer anything) known about X
+      }
+
+      case "history": {
+        if (!rest[0]) { writeErr("error: history needs a <subject>"); return 1; }
+        for (const f of await client.historyOf(rest[0])) write(JSON.stringify(f));
+        return 0;
+      }
+
+      case "supersede": {
+        if (!rest[0] || !rest[1]) { writeErr("error: supersede needs <id> <type> [json]"); return 1; }
+        let payload: Record<string, unknown> = {};
+        if (rest[2]) {
+          try { payload = JSON.parse(rest[2]) as Record<string, unknown>; }
+          catch (err) { writeErr(`error: invalid JSON payload: ${err instanceof Error ? err.message : String(err)}`); return 1; }
+        }
+        const r = await client.supersede(rest[0], rest[1], payload, flags.subject ? { subject: flags.subject } : {});
+        write(JSON.stringify({ id: r.id, seq: r.seq, supersedes: rest[0] }));
+        return 0;
+      }
+
+      case "tombstone": {
+        if (!rest[0]) { writeErr("error: tombstone needs an <id>"); return 1; }
+        const r = await client.tombstone(rest[0]);
+        write(JSON.stringify({ id: r.id, seq: r.seq, tombstones: rest[0] }));
         return 0;
       }
 
