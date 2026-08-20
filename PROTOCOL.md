@@ -24,9 +24,21 @@ conformance targets (§9).
 
 ## Status
 
-**Version 3.0. Stability: draft.** This version is **not wire-compatible with
-v2.0**: content addresses change (§4 adopts RFC 8785), and four reader folds
-change their output on inputs v2.0 left undefined (§3.1, §3.3, §3.4). Any v2.0
+**Version 3.0. Stability: draft.**
+
+`MAJOR` increments when the canonical record (§4), the fact shape (§1), or the
+output of any §3 fold over an existing stream changes. `MINOR` increments on a
+strictly additive change — a new fold, `refs` key, fact type, or endpoint — such
+that a `MINOR-n` reader still folds a `MINOR-n+1` stream correctly. A bus MUST
+report `protocol: "<MAJOR>.<MINOR>"` (§2.5). Every normative change lands in the
+changelog below **together with** a regenerated vector set and its cross-language
+verifier, in one commit declared as a protocol change; a normative fold added
+without a vector is not part of the contract (§9.1). Sections added after 3.0
+carry a `since` marker.
+
+This version is **not wire-compatible with v2.0**: content addresses change
+(§4 adopts RFC 8785), and several reader folds change their output on inputs
+v2.0 left undefined or left open to any writer (§3.1, §3.3, §3.4). Any v2.0
 conformance vector set MUST be regenerated.
 
 v3.0 is a re-derivation, not an edit. v2.0 was structured as a migration
@@ -46,14 +58,15 @@ verbatim in substance; what it inherited has been removed.
 | "No commands" re-argued as *no delivery semantics* rather than *addressing is unrepresentable* | §0.2 | normative clarification |
 | Canonicalization replaced by **RFC 8785 (JCS)**; the `ts`-only trailing-`.0` rule deleted | §4 | **breaking** |
 | `refs` values: empty string and `null` now rejected at append instead of silently dropped at hash time | §1, §6 | **breaking** |
-| `current(S)` simplified: successors MUST carry the subject; the forward-walk is gone | §3.1 | **breaking** |
-| `supersededBy(F)` defined as the **immediate** successor, with a stated tie-break | §3.1 | **breaking** |
+| `current(S)` simplified: successors MUST carry the subject; the forward-walk is gone; reserved-namespace facts are not register members | §3.1 | **breaking** |
+| `supersededBy(F)` defined as the **immediate** successor, with a stated tie-break; retracted and unauthorized successors excluded | §3.1 | **breaking** |
 | A fact MUST NOT carry more than one lifecycle ref; the bus rejects it | §1, §3.4, §6 | **breaking** |
-| `resolves` gate tightened to "never claimed, or authored by the current winner" | §3.4 | **breaking** |
+| `resolves` gate tightened to **the current claim winner only** — the ungated never-claimed path is removed | §3.4 | **breaking** |
 | Δ (claim timeout) is a property of the log, published by the bus; readers MUST NOT override it | §3.4, §8 | **breaking** |
 | `trust` gains a `retracted` state; `quorum` MUST be ≥ 1 | §3.3 | **breaking** |
 | Folds are defined over a **complete prefix**; filtered/partial windows are non-normative | §3 | normative clarification |
 | Dangling ancestors surface as an explicit gap instead of silent truncation | §3.2 | **breaking** |
+| `supersedes` is now gated on the target's author, closing a trust-hijack | §1.2, §3.1, §5.1 | **breaking** |
 | New: authorization model — which refs keys are self-asserted vs fold-gated | §5 | new |
 | New: value domains and hard limits for every field | §1 | new |
 | New: conformance levels and what a vector set must pin | §9 | new |
@@ -286,11 +299,11 @@ Every `refs` value names **a fact or a piece of the world. None names a party**
 |---|---|---|---|---|
 | `parent` | fact id | This fact was caused by that one; causation is transitive `parent` (§3.2). | anyone | none — see §5.2 |
 | `subject` | world name | Names the piece of the world this fact is about; the group key of the register (§3.1). | anyone | none |
-| `supersedes` | fact id | This fact **replaces** the target. | anyone | none — see §5.2 |
+| `supersedes` | fact id | This fact **replaces** the target. | the target's author only | §5.1 |
 | `tombstones` | fact id | On a `_.tombstone`: the target is **retracted**. Distinct from `supersedes` (§5.3). | target's author only | §5.1 |
 | `vote` | fact id | With `payload.verdict ∈ {corroborate, contradict}` (§3.3). | anyone but the target's author | §5.1 |
 | `claim_of` | fact id | Author asserts responsibility for the target (§3.4). | anyone | ordering (§3.4) |
-| `resolves` | fact id | The target is handled; `payload` MAY carry the result. | the current claim winner, or anyone if never claimed | §5.1 |
+| `resolves` | fact id | The target is handled; `payload` MAY carry the result. | the current claim winner only | §5.1 |
 | `release_of` | fact id | Author abandons its own prior claim. | the claiming author only | §5.1 |
 | `about` | fact id | `context.requested`: the fact found too thin to act on (§3.5). | anyone | none |
 | `answers` | fact id | `context.provided`: the request it answers (§3.5). | anyone | none |
@@ -398,6 +411,9 @@ canonical access pattern — closer to `git fetch` than to a queue.
   window was indistinguishable from an exhausted one, which silently lost facts.)
 - `limit` defaults to 100 and MUST be clamped to an implementation maximum
   (default 10 000, §8). A bus MUST NOT return more than `limit`.
+- A bus MUST **reject** a malformed `since` or `limit` with `400`, and MUST NOT
+  coerce it to a default. Coercing a non-numeric `since` to zero turns one junk
+  query into a full-log read.
 
 **Filters are a transport optimization and nothing more.** They change which
 facts are returned, never their meaning or order. A bus MAY ignore `type`,
@@ -429,11 +445,16 @@ Exactly two metacharacters, matched against the whole `type` string:
 - `*` matches zero or more characters.
 - `?` matches exactly one character.
 
-No character classes, no escaping, no alternation, no `**`. Every other
-character matches itself literally. A conforming implementation MUST match in
-time linear in `len(pattern) + len(text)`; a backtracking regex translation is
-non-conforming, because a pattern is attacker-supplied and appears in both
-`GET /facts?type=` and `sys.registry.interests` (§3.5).
+`*` spans `.` like any other character. No character classes, no escaping, no
+alternation, no `**`. Every other character matches itself literally.
+
+A conforming implementation MUST match in time bounded by
+`O(len(pattern) × len(text))` — a two-pointer matcher — and MUST NOT compile the
+pattern to a backtracking regular expression. This is normative because both
+sides are attacker-supplied: the pattern arrives in `GET /facts?type=` and in
+`sys.registry.interests` (§3.5), and the text is any fact's `type`. A
+backtracking translation is exponential, so two well-formed facts are enough to
+stall every reader that folds §3.5 and to block the bus's own event loop.
 
 ### 2.5 Endpoints outside the protocol
 
@@ -495,25 +516,32 @@ value that keeps changing is shared between isolated agents without anyone
 holding it: nobody stores "the current value", every reader folds it.
 
 ```
-history(S) = [ f ∈ prefix : f.refs.subject == S ], ascending seq
+retracted(x) = ∃ t ∈ prefix : t.type == "_.tombstone"
+                              and t.refs.tombstones == x.id
+                              and t.author == x.author            # §5.1
+
+history(S) = [ f ∈ prefix : f.refs.subject == S
+                            and f.type is not in a reserved namespace (§1.4) ],
+             ascending seq
 
 current(S):
-  if history(S) is empty                              → null
+  if history(S) is empty              → null
   h ← the highest-seq fact in history(S)
-  if ∃ t ∈ prefix : t.type == "_.tombstone"
-                    and t.refs.tombstones == h.id     → null      # retracted (§5.3)
-  return h
+  return retracted(h) ? null : h                                  # §5.3: nothing is known
 
 supersededBy(F):                        # the fact that IMMEDIATELY replaced F
-  E ← [ x ∈ prefix : x.refs.supersedes == F.id ]                  # explicit successors
-  G ← [ x ∈ history(F.refs.subject) : x.seq > F.seq ]             # next in the register, if F has one
+  E ← [ x ∈ prefix : x.refs.supersedes == F.id                    # explicit successors,
+                     and x.author == F.author                     #   authorized (§5.1)
+                     and not retracted(x) ]
+  G ← [ x ∈ history(F.refs.subject) : x.seq > F.seq               # next in the register
+                     and not retracted(x) ]
   C ← E ∪ G
   return C is empty ? null : the LOWEST-seq member of C
 
 isSuperseded(F) = supersededBy(F) != null
 ```
 
-Three rules make this deterministic where v2.0 was not:
+Six rules make this deterministic where v2.0 was not:
 
 1. **`current(S)` ranges over `history(S)` only.** A fact that wants to become
    the current value of S MUST carry `refs.subject: S`. In v2.0 an explicit
@@ -526,10 +554,30 @@ Three rules make this deterministic where v2.0 was not:
    statement; the latest statement is `current(S)`. Following `supersededBy`
    repeatedly walks the register forward one step at a time.
 
-3. **Ties are broken by `seq`,** which is total, so there is never a choice. Two
-   authors may both write `supersedes: F`; the lower `seq` is the successor and
-   the other is an ordinary fact that also claims to replace F. A reader that
-   cares about such forks can enumerate `E` itself.
+3. **Ties are broken by `seq`,** which is total, so there is never a choice. If
+   two authorized successors exist, the lower `seq` is the successor and the
+   other is an ordinary fact that also claims to replace F. A reader that cares
+   about such forks can enumerate `E` itself.
+
+4. **Only an author may supersede their own fact** (§5.1). Replacement says
+   *"my earlier statement is out of date"*; a third party observing staleness
+   contradicts (§3.3) or writes to the register, and does not get to retire
+   someone else's statement. This costs the register nothing — progression there
+   happens by group order, not by explicit `supersedes` — and it closes a
+   hijack: because `superseded` outranks every vote in §3.3, an ungated
+   `supersedes` let any author silence any fact's trust state with one append.
+
+5. **A retracted successor supersedes nothing.** If the fact that replaced F is
+   itself later tombstoned, `supersededBy(F)` falls back to the next candidate
+   and then to `null`. Otherwise retracting a bad replacement would leave the
+   original permanently `superseded` — with nothing current in its place.
+
+6. **Reserved-namespace facts are not register members.** Tagging a
+   `_.tombstone` with `refs.subject` is a natural mistake, and without this rule
+   the retraction itself becomes `current(S)` and simultaneously supersedes the
+   fact it retracts — violating both "nothing is known" above and §5.3's
+   requirement that a retracted fact is never `superseded`. A tombstone retracts
+   through `refs.tombstones` alone.
 
 **Retraction is not rollback.** A tombstoned register head folds to `null` —
 *nothing is currently known* — and not to the previous value. Resurrecting an
@@ -556,7 +604,10 @@ depth(F)       = |chain(F)|            # a fact with no parent has depth 1
 ```
 
 Both are pure folds over the same prefix, so a reader on another node
-reconstructs the same trail.
+reconstructs the same trail. For an `F` that is not in the prefix, `chain(F)` is
+empty and `descendants(F)` returns the facts naming `F` as parent — the trail
+below an unseen fact is still knowable, the trail above it is not. An
+implementation MUST NOT report the absent `F` as a root.
 
 **Gaps are explicit.** A `refs.parent` MAY name a fact that is not in the prefix —
 because it has not arrived yet, or was filtered out, or never existed (§5.2). When
@@ -592,6 +643,7 @@ trust(F, quorum):                        # quorum is the READER's policy; MUST b
   if isSuperseded(F) (§3.1)   → superseded    # freshness beats confidence
   V ← for each author a ≠ F.author, that author's highest-seq _.vote on F
       whose payload.verdict ∈ {corroborate, contradict}
+      and which its own author has not retracted (§5.3)
   C ← |{ v ∈ V : verdict == corroborate }|
   X ← |{ v ∈ V : verdict == contradict }|
   if X ≥ quorum   → refuted
@@ -612,6 +664,15 @@ that author's earlier valid one.
 To evaluate self-votes a reader needs `F` itself. If `F` is not in the prefix the
 reader MUST NOT return a `trust` result; this is the domain rule of §3 restated,
 and it is why a filtered window is not foldable.
+
+**A quorum counts distinct `author` strings, so trust is worth exactly what
+`author` is worth.** `author` is self-asserted and this protocol does not
+authenticate it (§5.4). On a deployment that does not authenticate writers, one
+writer manufactures any trust state at any quorum in either direction, and the
+self-vote MUST above buys nothing — it is defeated by a second string. This is
+the only fold whose result depends on authors being *distinct principals*
+(§3.4's ordering results do not), and a reader on an unauthenticated bus MUST
+treat every state above `asserted` as unverified.
 
 **Trust has no global value, so never coordinate on it.** Because `quorum` is the
 reader's choice, two readers can legitimately disagree about whether F is
@@ -639,24 +700,21 @@ whether the work was `resolved` at all.
 
 ```
 ownership(F):                            # facts referencing F, ascending seq
-  active     ← []                        # live claims: {author, seq, recv}
-  everClaimed ← false
+  active ← []                            # live claims: {author, seq, recv}
   for fact in [ x ∈ prefix : x has a lifecycle ref naming F ], ascending seq:
 
-    if fact is a _.tombstone on F                → return dead                # terminal
+    if fact is a _.tombstone on F, authored by F.author  → return dead        # terminal §5.1
 
     active ← [ c ∈ active : fact.recv ≤ c.recv + Δ ]     # deterministic expiry, keyed on recv
 
     if   fact.refs.claim_of   == F.id:
-         active.push(fact); everClaimed ← true
+         active.push(fact)
     elif fact.refs.release_of == F.id and fact.author ∈ active.authors:
          drop fact.author from active
     elif fact.refs.resolves   == F.id:
          owner ← lowest-seq author in active, or null
          if owner != null and fact.author == owner  → return resolved(owner)   # terminal
-         if owner == null and not everClaimed       → return resolved(null)    # terminal
-         # otherwise: a resolve from a non-owner, or from a stranger after a
-         # claim lapsed — NOT honoured; F still needs doing.
+         # otherwise NOT honoured: only the current claim winner may resolve.
 
   active ← [ c ∈ active : now ≤ c.recv + Δ ]              # trailing expiry only
   return active ? claimed(lowest-seq author in active) : open
@@ -674,10 +732,16 @@ ordered, `recv`-stamped prefix:
 > (§1.3). Remove any of those three and it is false.
 
 No atomic endpoint, no leader election, no hot-path arbitration. A claimant
-confirms it won by reading F's claim set back and seeing no live `claim_of: F` at
-a lower `seq`; to keep that O(claims on F), a bus SHOULD support the
-`?refs.claim_of=<id>` filter — but note §2.2: the confirmation read is a *lookup*,
-and the fold that decides the winner still needs the prefix.
+confirms it won by folding `ownership(F)` over **every** fact referencing F — `claim_of`, `release_of`, `resolves`, and any `_.tombstone`
+naming F.
+
+> A single-key filter such as `?refs.claim_of=<id>` is **not** sufficient for
+> that confirmation, and a bus SHOULD NOT be described as making it cheap. The
+> window hides releases, resolves and tombstones, so it returns the wrong answer
+> in both directions: it reports a winner whose claim was already released, and
+> it reports work as claimable that is already resolved or dead. The filter is
+> useful for *finding* the claims on F; deciding the winner is §3's fold, over a
+> complete prefix.
 
 **Why expiry keys on `recv`.** A claim times out when time has provably advanced
 past `claim.recv + Δ`. Wherever a later fact exists, the proof is that fact's own
@@ -691,13 +755,23 @@ Only a *trailing* claim with no successor falls back to wall-clock `now`.
 > fact, which settles it for everyone at once. v2.0 claimed this branch "only
 > affects the advisory hint"; that was true of the state and false of the owner.
 
-**Why a resolve is gated.** A `resolves: F` is honoured only from F's current
-claim winner, or from anyone if F was **never** claimed (a broadcast fact that
-anyone may close, lowest `seq` winning). It is *not* honoured from a stranger
-merely because an earlier claim has lapsed: a lapsed claim means the work needs
-re-dispatch, and letting a passer-by mark it done is how work silently
-disappears. v2.0's pseudocode said "never-claimed" and its implementation
-accepted "no live claim"; this version says, and means, never-claimed.
+**To resolve, first claim.** A `resolves: F` is honoured **only** from F's
+current claim winner. There is no ungated path.
+
+v2.0 had one: a fact that had never been claimed could be resolved by any
+author, as a convenience for "broadcast" facts anyone may close. That
+convenience is a denial primitive. `resolved` is terminal, so a single
+well-formed fact from any writer closes any never-claimed item permanently, and
+nothing in the fold can distinguish it from a real completion. Meanwhile the
+implementation had widened the branch further, honouring a stranger's resolve
+whenever no claim was *live* — so a lapsed claim, which means the work needs
+re-dispatch, could be closed by a passer-by.
+
+Requiring a claim costs one append and states exactly the right thing: *I am
+taking responsibility for this.* It also simplifies the fold — there is no
+"was it ever claimed" flag to carry, and a `resolved` fact always names the
+author who resolved it, where v2.0 returned `resolved(null)` and discarded the
+resolver's identity on precisely the branch it blessed.
 
 This is what makes crash recovery correct in both directions:
 
@@ -718,7 +792,7 @@ Accessors, for interoperability:
 
 ```
 lifecycle(F)     = ownership(F)                            → open | claimed | resolved | dead
-claimWinner(F)   = the author in claimed(a) or resolved(a); null for open, dead, resolved(null)
+claimWinner(F)   = the author in claimed(a) or resolved(a); null for open and dead
 didIWin(F, me)   = claimWinner(F) == me
 ```
 
@@ -866,12 +940,13 @@ it says what its author believes, and readers weigh it.
 
 | ref | gate a reader MUST apply |
 |---|---|
-| `resolves` | Honour only from the current claim winner, or from any author if the target was never claimed (§3.4). |
+| `resolves` | Honour only from the target's current claim winner. There is no ungated path — to resolve, first claim (§3.4). |
 | `release_of` | Honour only from an author holding a live claim on the target. |
 | `tombstones` | Honour only when `fact.author == target.author`. A tombstone by any other author MUST NOT retract the target; a reader MAY surface it as a *requested* retraction. |
 | `vote` | Ignore when `vote.author == target.author` (§3.3). |
 | `claim_of` | Not gated by identity — gated by **order**. The lowest live `seq` wins (§3.4). |
-| `parent`, `supersedes`, `subject`, `about`, `answers` | Not gated. Self-asserted. |
+| `supersedes` | Honour only when `fact.author == target.author` (§3.1). A third party expresses staleness by contradicting (§3.3) or by writing to the register, not by retiring someone else's statement. |
+| `parent`, `subject`, `about`, `answers` | Not gated. Self-asserted. |
 
 The tombstone gate is new in v3.0 and it closes a real hole. In v2.0 any author
 could tombstone any fact, and the effect was unusually destructive: the target's
@@ -885,20 +960,28 @@ modelled as a fact. It is an out-of-band operation on the log, subject to §7.2.
 
 ### 5.2 Self-asserted links are claims, not proofs
 
-`parent` and `supersedes` are ungated on purpose: a third party observing that
-one fact replaces another, or that one event followed from another, is making a
-legitimate and useful statement. But a reader MUST NOT read them as verified:
+`parent` and `subject` stay ungated on purpose, and a reader MUST NOT read either
+as verified:
 
-- `parent: P` asserts *"I was caused by P"*. It proves only that P exists as
-  named (§3.2).
-- `supersedes: F` asserts *"this replaces F"*. Anyone may say it about anyone's
-  fact, and it flips `trust(F)` to `superseded` (§3.3).
+- `parent: P` asserts *"I was caused by P"*. It proves only that P exists exactly
+  as named (§3.2). Any author may graft a fact onto any other author's trail.
+- `subject: S` asserts *"this is about S"*. Anyone may write to any register;
+  that is the point of a shared world, and the register's own ordering decides
+  what is current.
 
-A reader that needs a stronger notion — "superseded *by its own author*" — can
-compute it, since `author` is on both facts. This specification does not gate
-either key, because doing so would make third-party correction impossible, which
-is worse. Note the interaction with §7.2: because `supersedes` is ungated,
-supersession alone MUST NOT make a payload eligible for destruction.
+Gating either would break the thing they are for — third-party observation — so
+they are self-asserted and readers weigh them. The two keys that *retire* another
+author's fact are gated instead (`supersedes`, `tombstones`, §5.1), because
+retirement is not an observation about the world, it is an edit to someone's
+statement.
+
+The dividing line is worth stating plainly, since it is what makes the ungated
+keys safe:
+
+> **Adding to the world is open. Retiring someone else's statement is not.**
+
+A reader that wants the stronger notion for an ungated key can compute it: both
+facts carry `author`, so "child and parent share an author" is one comparison.
 
 ### 5.3 Deletion is a fact
 
@@ -1051,13 +1134,25 @@ single-writer with failover (e.g. Raft replicating the append position), **not**
 multi-master: there is no way to merge two independent orders without losing
 §3.4. Reads scale out freely across replicas.
 
-A deployment that genuinely needs multi-region writes must shard into independent
-buses — by `type` or by `subject` — each with its own order. Cross-shard
-coordination is then a client concern, and §3.4 does not hold across shards.
+A deployment that genuinely needs multi-region writes must shard into
+independent buses. A shard key is safe only if it keeps every fact together with
+every fact that references it. **`type` is not such a key**: a `_.claim` carries
+its own type, so a claim and its target land in different shards and §3.4 breaks
+*inside* every shard, not merely across them — the same is true of `_.vote` and
+§3.3, and of `_.tombstone` and §3.1. Sharding by `subject` is safe only for
+facts that carry one, which excludes every lifecycle fact. In practice, shard by
+a durable partition of the world that the writers agree on out of band, keep each
+target and all facts referencing it in one shard, and accept that no §3 result
+holds across shards.
 
-A bus MAY serve a **materialized view** of a §3 fold as a cache. Such a view MUST
-be bit-identical to a from-scratch fold over the same prefix and is never a second
-source of truth (§2.5).
+A bus MAY serve a **materialized view** of a §3 fold as a cache. There is no
+such thing as "the" fold, though: `trust` takes the reader's quorum and
+`ownership` takes a wall clock, so a view MUST be parameterized by the values it
+was computed with and MUST be byte-identical to a client-side fold **using those
+same parameters** over the same prefix. A bus MUST NOT publish a view under
+implicit defaults, because a reader cannot tell whose policy it is looking at,
+and a served-by-default fold is the adjudication §0.6 forbids. A view is never a
+second source of truth (§2.5).
 
 ---
 
@@ -1073,6 +1168,8 @@ source of truth (§2.5).
 | Max `refs` keys | 64 | the operator | §1.1. |
 | Max `type` / `author` / `subject` | 256 B each | the operator | §1.1. |
 | Max `nonce` | 128 B | the operator | §1.1. |
+| Max glob pattern | 256 B | the operator | §2.4. Rejected with `400`; the pattern is attacker-supplied. |
+| Max `interests` / `publishes` entries | 64 each | the operator | §3.5. Each entry is a glob every reader evaluates. |
 | Durability | fsync per append | the operator | §7.1. A relaxed policy (per-batch, per-second) MAY be offered and MUST be reported via `/info`, because it changes what a `201` means. |
 | Admission rate | none | the operator | §6.3. No protocol default. |
 
