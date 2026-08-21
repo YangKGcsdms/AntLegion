@@ -195,6 +195,8 @@ Two things deliberately **not** in the tree: `.data-v2/` (the journal) and `.ant
 > [!IMPORTANT]
 > **v3.0 is wire-breaking, and it has landed.** The spec, the bus, the folding SDK and the [conformance vectors](antlegion-bus/conformance/vectors.json) all speak v3.0; canonicalization is now **RFC 8785 (JCS)**, which changes every `id`. A v2.0 log fails `id` verification on every record under a v3.0 reader — there is no migration path and none is offered. Start a new log; archive a v2.0 one and read it with a v2.0 reader. Full change list: [§C](PROTOCOL.md).
 
+The two satellite packages have **not** moved yet: `ant` and `@antlegion/dsh` still install the published `@antlegion/bus@^0.4.x`, whose folds are v2.0. Run them against a v3.0 bus and appends work, but their reader folds will disagree with it — they still honour a stranger's tombstone and a stranger's `supersedes`. They get bumped once `@antlegion/bus@0.5.0` is published.
+
 Done: stateless trusted core · append-only journal with `appendfsync`, torn-tail recovery and fold-preserving compaction · reader-fold SDK (registers, trails, trust, ownership) with the §10.1 authorization gates · `alctl` CLI · cross-language conformance vectors whose independent Python verifier checks **folds, not just hashes** (204 assertions) · shared-view + ownership scenarios · Docker image · ~160k appends/s in-process · 244 tests · npm packages · resident agents (`ant init` / `ant start`, `@antlegion/dsh`).
 
 Next: multi-language client SDKs (Go, Python, Rust — the [conformance vectors](antlegion-bus/conformance/vectors.json) are the test target) · auth + rate limiting for exposed deployments ([§10.3](PROTOCOL.md)) · replication/HA ([§11.3](PROTOCOL.md)) · length-prefixed `sig` fields ([§5.10](PROTOCOL.md)).

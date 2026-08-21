@@ -195,6 +195,8 @@ AntLegion/
 > [!IMPORTANT]
 > **v3.0 破坏 wire，而且已经落地。** 规范、总线、折叠 SDK 与[合规向量](antlegion-bus/conformance/vectors.json)现在说的都是 v3.0；规范化改成了 **RFC 8785（JCS）**，这改掉了每一个 `id`。v3.0 的读者读一条 v2.0 日志，每条记录的 `id` 验证都会失败 —— 没有迁移路径，也不提供。请开一条新日志；要保留的 v2.0 日志请归档，并用 v2.0 的读者去读。完整变更清单：[§C](PROTOCOL.md)。
 
+两个卫星包**还没有**跟上：`ant` 与 `@antlegion/dsh` 装的仍是已发布的 `@antlegion/bus@^0.4.x`，其折叠是 v2.0。拿它们对着一个 v3.0 总线跑，追加没问题，但它们的读者折叠会与总线不一致 —— 它们仍然采纳陌生人的墓碑和陌生人的 `supersedes`。等 `@antlegion/bus@0.5.0` 发布之后再升。
+
 已完成：无状态可信核心 · 带 `appendfsync`、撕裂尾恢复与「不改变折叠结果」压缩的只追加日志 · 读者折叠 SDK（寄存器、踪迹、信任、所有权）含 §10.1 授权门控 · `alctl` CLI · 跨语言合规向量，其独立 Python 校验器检查的是**折叠而不只是哈希**（204 条断言）· 共享视图 + 所有权场景 · Docker 镜像 · 进程内约 160k 追加/秒 · 244 个测试 · npm 包 · 常驻 Agent（`ant init` / `ant start`、`@antlegion/dsh`）。
 
 下一步：多语言客户端 SDK（Go、Python、Rust——[合规向量](antlegion-bus/conformance/vectors.json)是测试目标）· 面向暴露部署的鉴权与限流（[§10.3](PROTOCOL.md)）· 复制/高可用（[§11.3](PROTOCOL.md)）· 给 `sig` 的字段加长度前缀（[§5.10](PROTOCOL.md)）。
