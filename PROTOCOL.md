@@ -1232,9 +1232,27 @@ isSuperseded(F) = supersededBy(F) != null
    earlier statement is out of date"*; a third party observing staleness
    contradicts (§8.3) or writes to the register, and does not get to retire
    someone else's statement. This costs the register nothing — progression there
-   happens by group order, not by explicit `supersedes` — and it closes a
-   hijack: because `superseded` outranks every vote in §8.3, an ungated
-   `supersedes` let any author silence any fact's trust state with one append.
+   happens by group order, not by explicit `supersedes`.
+
+   **What the gate is worth, precisely.** It protects a fact that is *not* a
+   register member. For such a fact, `supersedes` is the only route to
+   `superseded`, so gating it stops any author from silencing another author's
+   trust state — §8.3 ranks `superseded` above every vote — with a single
+   append.
+
+   It does **not** protect a fact carrying a `subject`, and cannot. A register
+   is a piece of shared world state that anyone may write to; that is what makes
+   it shared (§5.4). The next member supersedes the previous one by group order,
+   with no author gate anywhere in that path. So a stranger still moves a
+   register head, and the displaced fact still folds to `superseded` — by the
+   very route this rule names one sentence above as the sanctioned alternative.
+
+   The consequence for readers is the part worth stating plainly: **inside a
+   register, `superseded` is a statement about the register, not about the
+   fact.** It means only *something later was said about X*, which any writer
+   may cause. A reader weighing whether to believe a fact's content MUST read
+   §8.3's vote states and MUST NOT treat `superseded` as evidence that the
+   content was wrong.
 5. **A retracted successor supersedes nothing.** If the fact that replaced F is
    itself later tombstoned, `supersededBy(F)` falls back to the next candidate
    and then to `null`. Otherwise retracting a bad replacement would leave the

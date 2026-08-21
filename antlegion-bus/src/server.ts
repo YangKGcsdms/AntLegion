@@ -33,7 +33,9 @@ const CONSOLE_HTML = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)), "..", "console", "console.html",
 );
 
-export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy; maxDepth?: number }) {
+export function createServerV2(opts?: {
+  secret?: string; dataDir?: string; fsync?: FsyncPolicy; maxDepth?: number; claimTimeout?: number;
+}) {
   const bus = new BusV2(opts);
   const app = new Hono();
   app.use("*", cors());
