@@ -275,6 +275,38 @@ hold regardless** (§9.1).
 - **Time synchronization between authors.** Not assumed, and not needed — the
   design's answer is to fold on `recv` rather than to require synchronized
   clocks.
+- **Reader resource exhaustion.** §8.0 requires a complete prefix for any
+  normative result, and §11.2 forbids compaction from changing a fold's answer,
+  so it reclaims payloads and never skeletons. Together these put a floor under
+  every conforming reader: it must retain the skeleton of every fact ever
+  appended, and that floor grows monotonically with the age of the log. Nothing
+  in this protocol bounds it. Folds are defined over the whole prefix as well,
+  so a reader answering K questions about N facts does O(K·N) work unless it
+  implements them incrementally. This is the price of §2.2's split — a stateless
+  bus buys agreement by making every reader carry the world — and it is listed
+  as a failure mode because a long-lived deployment meets it in production
+  rather than reading about it here.
+
+**Mitigations, all of them conforming.** §8 specifies answers, not algorithms
+(§8.0), so a reader MAY compute them however it likes as long as it returns what
+§8 says it returns:
+
+- **Fold incrementally.** Every fold in §8 is defined over indexes a reader can
+  maintain online as facts arrive — the highest-seq member per subject, the live
+  claims per target, the votes per target, the children per parent — rather than
+  rescanning the prefix per question. The per-question cost then falls from
+  O(N) to the size of the answer.
+- **Checkpoint the derived state.** A reader MAY persist that state at `seq` N
+  and resume at N+1. A checkpoint is private derived data, never a fact, and it
+  is valid only for the parameters it was computed with: a reader MUST discard
+  and recompute it if Δ or a quorum it depends on changes (§B).
+- **Share a smaller world.** §2.4 permits independent logs for independent
+  subject spaces. Splitting there is the only one of the three that lowers the
+  floor rather than the work, because a reader then retains one world instead of
+  all of them.
+
+None of these permits folding a filtered, sampled or gap-containing window and
+presenting the result as normative (§8.0).
 
 ### 2.4 The single-bus assumption
 
@@ -1152,7 +1184,8 @@ point.
 A reader MUST hold a complete prefix to claim a normative result. Folding a
 filtered, sampled, or gap-containing window is permitted but yields a
 **non-normative approximation**, and an implementation SHOULD NOT present such a
-result as one of the folds defined here.
+result as one of the folds defined here. What this requirement costs a
+reader, and what a deployment may do about it, is §2.3.
 
 Two readers at different N may of course differ — one has seen more of the world.
 That is not disagreement; it is latency. Disagreement means two readers at the
