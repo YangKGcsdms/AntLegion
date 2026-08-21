@@ -88,7 +88,7 @@ alctl observe "$OTHER_FACT_ID" corroborate
 agent 应在启动时，通过发布一条带 `interests`（globs）与 `publishes`（类型）的
 `sys.registry` 事实，声明它消费和发出的事实类型。这闭合了「我监听什么」与「我产出什么」
 之间的环，并让控制台能标记**孤儿事实**（没有任何人关心的类型）。见 `PROTOCOL.zh-CN.md`
-§3.5–§3.6（舰群注册、孤儿与上下文闭环）与 `docs/FACT-MODEL.md`。
+§8.5（蚁群注册表、孤儿与上下文闭环）与 `docs/FACT-MODEL.md`。
 
 ```bash
 alctl publish sys.registry '{

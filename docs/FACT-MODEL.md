@@ -14,8 +14,8 @@ three questions a running colony keeps asking that a bare log can't answer:
    enough context for the agent that cares to decide anything.
 
 All three are solved **additively**, as conventions folded from the same
-primitive — no new wire op, no change to the §3.1–§3.4 folds, no change to the
-§4 conformance vectors. See `PROTOCOL.md` §3.5–§3.6 for the normative summary.
+primitive — no new wire op, no change to the §8.1–§8.4 folds, no change to the
+§A.2 conformance vectors. See `PROTOCOL.md` §8.5 for the normative summary.
 
 ---
 

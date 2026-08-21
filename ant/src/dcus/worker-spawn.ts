@@ -21,7 +21,7 @@ import { spawn } from "node:child_process";
 import { promises as fs, createWriteStream } from "node:fs";
 import path from "node:path";
 import type { Fact } from "@antlegion/bus/types";
-import { causationChain } from "@antlegion/bus/fold";
+import { causationChain, isGap } from "@antlegion/bus/fold";
 import type { SpawnConfig } from "../config.js";
 import type { DCUContext } from "../runtime.js";
 import type { StageSpec } from "../folds/devchain.js";
@@ -84,8 +84,15 @@ export interface SpawnActArgs {
 }
 
 export function buildPromptFile(a: SpawnActArgs, artifactFile: string): string {
+  // §8.2: an ancestor that is not in the mirror comes back as an explicit gap,
+  // and it has to reach the prompt as one. Silently dropping it would tell the
+  // agent that the next line is where this began — "I could not see the origin"
+  // rendered as "this is the origin" — which is exactly the wrong thing to hand
+  // something that is about to act on the trail.
   const chain = causationChain(a.ctx.mirror, a.inputFact.id);
-  const chainLines = chain.map((f) => `- seq ${f.seq} · ${f.type} · by ${f.author}`);
+  const chainLines = chain.map((n) => (isGap(n)
+    ? `- ⋯ 上游有一条本地未见的事实（${n.missing.slice(0, 12)}…）——这条链在此处不完整，不要当作起点`
+    : `- seq ${n.seq} · ${n.type} · by ${n.author}`));
   const evidence = Object.entries(a.spec.evidence.required)
     .map(([k, desc]) => `- \`${k}\` — ${desc}`);
   return [

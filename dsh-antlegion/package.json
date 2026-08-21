@@ -24,7 +24,7 @@
     }
   },
   "dependencies": {
-    "@antlegion/bus": "^0.4.1"
+    "@antlegion/bus": "^0.5.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -40,5 +40,8 @@
     "fact-bus",
     "multi-agent"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  }
 }

@@ -66,6 +66,17 @@ export async function probeBus(busUrl, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) 
     ok: true,
     url: base,
     protocol: info.protocol,
+    // The bus answered, but does it speak the protocol this DCU folds with?
+    // A v2.0 bus is reachable and appendable from here, and every fold would
+    // still be wrong: it honours a stranger's tombstone and a stranger's
+    // `supersedes`, and it lets a passer-by resolve a never-claimed fact. That
+    // is not a connectivity failure, so it is not `ok: false` — it is a
+    // mismatch the operator has to see before wiring an agent to it.
+    protocolMismatch: majorOf(info.protocol) !== majorOf(SPEAKS_PROTOCOL),
+    speaks: SPEAKS_PROTOCOL,
+    // Δ is the log's (§8.4). Surfacing it here is how an operator checks that
+    // every reader on this bus is folding with the same number.
+    claimTimeout: typeof info.claim_timeout === 'number' ? info.claim_timeout : null,
     headSeq: info.head_seq,
     facts: info.facts,
     uptimeSeconds: info.uptime_seconds,
@@ -74,6 +85,11 @@ export async function probeBus(busUrl, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) 
     latencyMs,
   }
 }
+
+/** The protocol version this package's folds implement. */
+export const SPEAKS_PROTOCOL = '3.0'
+
+const majorOf = (version) => String(version ?? '').split('.')[0]
 
 /** Turn a fetch rejection into an actionable kind + sentence. */
 function classify(error, timeoutMs) {
@@ -95,7 +111,12 @@ function classify(error, timeoutMs) {
 export function renderProbe(verdict) {
   if (verdict.ok) {
     const age = verdict.uptimeSeconds >= 0 ? `, up ${formatDuration(verdict.uptimeSeconds)}` : ''
-    return `bus OK — ${verdict.url} protocol ${verdict.protocol}, head seq ${verdict.headSeq}, ${verdict.facts} facts${age} (${verdict.latencyMs}ms)`
+    const delta = verdict.claimTimeout === null ? '' : `, Δ ${verdict.claimTimeout}s`
+    const head = `bus OK — ${verdict.url} protocol ${verdict.protocol}, head seq ${verdict.headSeq}, ${verdict.facts} facts${delta}${age} (${verdict.latencyMs}ms)`
+    if (!verdict.protocolMismatch) return head
+    return `${head}\n` +
+      `  ⚠ PROTOCOL MISMATCH — this bus speaks ${verdict.protocol}, these folds implement ${verdict.speaks}.\n` +
+      `    Appends will work and every fold will be wrong. Upgrade the bus, or point this DCU elsewhere.`
   }
   return `bus UNREACHABLE — ${verdict.url}: ${verdict.detail}`
 }

@@ -143,6 +143,7 @@ describe("runSpawnAct", () => {
   const ctx = (): DCUContext => ({
     client, busUrl: "local", mirror: [...bus.all()] as Fact[],
     log: (m) => logs.push(m),
+    claimTimeout: 600,   // §8.4: the log's Δ, carried in the context
   });
 
   /** Seed a trigger fact, claim it as AUTHOR, return the fact. */
@@ -240,7 +241,10 @@ describe("runSpawnAct", () => {
     const input = bus.get(r.id)!;
 
     await runSpawnAct(actArgs(input, "ok 5000", {
-      ctx: { client: shortClient, busUrl: "local", mirror: [...bus.all()] as Fact[], log: (m) => logs.push(m) },
+      ctx: {
+        client: shortClient, busUrl: "local", mirror: [...bus.all()] as Fact[],
+        log: (m) => logs.push(m), claimTimeout: 2,
+      },
       claimDeltaSec: 2,
     }));
 

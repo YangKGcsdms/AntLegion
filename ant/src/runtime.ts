@@ -24,6 +24,15 @@ export interface DCUContext {
   /** Full mirrored stream since boot (or since last bus-restart reset). */
   mirror: Fact[];
   log: (msg: string) => void;
+  /**
+   * Δ, the claim timeout in seconds, **as published by the bus** (`/info`).
+   *
+   * PROTOCOL.md §8.4 makes this a property of the log rather than of the
+   * reader: a DCU that folds with its own Δ is non-conforming, and it does not
+   * merely disagree about who holds a claim — it disagrees about whether the
+   * work was resolved at all. Every fold in this package takes it from here.
+   */
+  claimTimeout: number;
 }
 
 export interface DCUSpec {
@@ -74,16 +83,46 @@ function wireSignalsOnce(): void {
   process.on("SIGTERM", fanout);
 }
 
+/** §B default, used only until the bus's `/info` answers. */
+const PROTOCOL_DEFAULT_DELTA = 600;
+
+/**
+ * Take Δ from the bus (§8.4, §7.5). A failure here is not fatal — the DCU loop
+ * retries the bus anyway — so we fall back to the §B default and say so.
+ *
+ * `ANT_CLAIM_DELTA` used to set Δ per reader. v3.0 forbids that: two readers
+ * folding one stream with different Δ disagree about whether work is resolved.
+ * The knob moved to the bus, so an operator who still sets it is told where.
+ */
+export async function adoptClaimTimeout(
+  ctx: DCUContext, busUrl: string, log: (msg: string) => void,
+): Promise<void> {
+  if (process.env.ANT_CLAIM_DELTA) {
+    log("ANT_CLAIM_DELTA is ignored — since protocol v3.0 (§8.4) Δ is a property " +
+        "of the log, not of the reader. Set it on the bus instead.");
+  }
+  try {
+    const res = await fetch(`${busUrl.replace(/\/$/, "")}/info`);
+    if (!res.ok) throw new Error(`info → ${res.status}`);
+    const info = (await res.json()) as { claim_timeout?: unknown };
+    if (typeof info.claim_timeout === "number" && Number.isFinite(info.claim_timeout) && info.claim_timeout > 0) {
+      ctx.claimTimeout = info.claim_timeout;
+      return;
+    }
+    log(`bus published no usable Δ — folding with the §B default of ${PROTOCOL_DEFAULT_DELTA}s`);
+  } catch (err) {
+    log(`could not read Δ from the bus (${err instanceof Error ? err.message : String(err)}) — ` +
+        `folding with the §B default of ${PROTOCOL_DEFAULT_DELTA}s`);
+  }
+}
+
 export async function runDCU(spec: DCUSpec): Promise<void> {
   const pollMs = spec.pollMs ?? 1000;
   const pageSize = spec.pageSize ?? 500;
-  // ANT_CLAIM_DELTA (seconds): claim-expiry Δ for every fold this DCU runs.
-  // Shorter Δ = faster crash takeover; must exceed the longest act duration.
-  const delta = process.env.ANT_CLAIM_DELTA ? parseFloat(process.env.ANT_CLAIM_DELTA) : NaN;
-  const client = new ClientV2(
-    httpTransport(spec.busUrl), spec.author,
-    Number.isFinite(delta) && delta > 0 ? { claimTimeout: delta } : undefined,
-  );
+  // Δ is the log's, not ours (§8.4). The client adopts the published value on
+  // its first sync; `ctx.claimTimeout` below carries the same number to the
+  // folds this package runs directly, so the two can never drift apart.
+  const client = new ClientV2(httpTransport(spec.busUrl), spec.author);
   const log = (msg: string) => console.error(`[${spec.name}] ${new Date().toISOString()} ${msg}`);
 
   let cursor = 0;
@@ -108,7 +147,11 @@ export async function runDCU(spec: DCUSpec): Promise<void> {
   stoppers.add(stopper);
   wireSignalsOnce();
 
-  const ctx: DCUContext = { client, busUrl: spec.busUrl, mirror, log };
+  const ctx: DCUContext = {
+    client, busUrl: spec.busUrl, mirror, log,
+    claimTimeout: PROTOCOL_DEFAULT_DELTA, // replaced by the bus's value below
+  };
+  await adoptClaimTimeout(ctx, spec.busUrl, log);
 
   // Cold start happens once the bus is reachable; retried inside the loop.
   let initialized = false;

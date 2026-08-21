@@ -34,16 +34,20 @@ if (sub === "demo") {
 
 env: PORT (28090) · HOST (127.0.0.1) · ANTLEGION_DATA_DIR (.data-v2)
      ANTLEGION_BUS_SECRET (set a stable one!) · ANTLEGION_FSYNC (everysec)
+     ANTLEGION_CLAIM_TIMEOUT (600) — the log's \u0394; every reader folds with it
 docs → https://antlegion.dev`);
   process.exit(0);
 }
 
 const cfg = loadConfig();
 
-const { app, bus } = createServerV2({ dataDir: cfg.dataDir, fsync: cfg.fsync, secret: cfg.secret, maxDepth: cfg.maxDepth });
+const { app, bus } = createServerV2({
+  dataDir: cfg.dataDir, fsync: cfg.fsync, secret: cfg.secret,
+  maxDepth: cfg.maxDepth, claimTimeout: cfg.claimTimeout,
+});
 
 const server = serve({ fetch: app.fetch, port: cfg.port, hostname: cfg.host }, (info) => {
-  console.log(`[antlegion-v2] append-only fact bus on http://${cfg.host}:${info.port} (fsync=${cfg.fsync})`);
+  console.log(`[antlegion-v2] append-only fact bus on http://${cfg.host}:${info.port} (fsync=${cfg.fsync}, \u0394=${cfg.claimTimeout}s)`);
   console.log(`[antlegion-v2] dashboard → http://${cfg.host}:${info.port}/dashboard · console → http://${cfg.host}:${info.port}/console`);
   if (cfg.host !== "127.0.0.1" && cfg.host !== "localhost") {
     console.log(`[antlegion-v2] listening beyond loopback (HOST=${cfg.host}) — the bus trusts its callers; keep it inside your trust boundary`);

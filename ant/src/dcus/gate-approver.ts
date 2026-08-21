@@ -52,7 +52,7 @@ export function gateApproverDCU(busUrl: string, identity?: IdentityConfig): DCUS
       ctx.log(`registry ${r.deduped ? "deduped" : "published"} (seq ${r.seq})`);
     },
     onBatch: async (_batch, ctx) => {
-      for (const req of foldDevchain(ctx.mirror, foldOpts())) {
+      for (const req of foldDevchain(ctx.mirror, foldOpts(ctx))) {
         for (const stage of req.stages) {
           if (stage.state !== "gated" || !stage.inputId || approved.has(stage.inputId)) continue;
           // Publish FIRST, mark the in-session dedup Set only on success. Marking

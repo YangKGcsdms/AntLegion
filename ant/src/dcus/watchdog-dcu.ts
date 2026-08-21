@@ -44,7 +44,7 @@ export function watchdogDCU(
       }, ctx.log, identity);
     },
     onBatch: async (_batch, ctx) => {
-      const views = foldDevchain(ctx.mirror, foldOpts());
+      const views = foldDevchain(ctx.mirror, foldOpts(ctx));
       const reported = alreadyReported(ctx.mirror);
       const nowSec = Date.now() / 1000;
 

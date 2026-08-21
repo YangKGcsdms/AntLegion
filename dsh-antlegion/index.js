@@ -57,7 +57,15 @@ export const Config = z.object({
    * specifically (ant's identity-conflict watchdog).
    */
   heartbeatSec: z.number().default(0),
-  /** Claim-expiry Δ in seconds for this DCU's folds; 0 uses the §8 default. */
+  /**
+   * Fallback Δ in seconds, used only while the bus has not published one.
+   *
+   * Since protocol v3.0 Δ is a property of the log, not of the reader (§8.4):
+   * the patrol reads it from the bus's `/info` and folds with that. Two readers
+   * folding one stream with different Δ do not merely disagree about who holds
+   * a claim — they disagree about whether the work was resolved at all. 0 uses
+   * the §B default of 600.
+   */
   claimTimeoutSec: z.number().default(0),
   /** Most facts briefed into one turn; the rest wait for the next. */
   maxFactsPerTurn: z.number().default(5),
@@ -89,11 +97,11 @@ export function apply(ctx, config) {
   const claimTimeout = config.claimTimeoutSec > 0 ? config.claimTimeoutSec : undefined
   // One client for the whole plugin: the tools the model calls and the patrol
   // that wakes it read the same stream through the same mirror.
-  const client = new ClientV2(
-    httpTransport(config.busUrl),
-    config.author,
-    claimTimeout === undefined ? {} : { claimTimeout },
-  )
+  //
+  // No Δ is passed: the client adopts the bus-published value on its first sync
+  // (§8.4). Handing it one here would pin it and make this DCU non-conforming —
+  // `claimTimeoutSec` is only the patrol's fallback for a bus that publishes none.
+  const client = new ClientV2(httpTransport(config.busUrl), config.author)
 
   ctx.effect(() => {
     const disposeTools = registerBusTools(ctx, client, config.busUrl)

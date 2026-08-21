@@ -136,11 +136,14 @@ async function main() {
     return [...byHead.values()].every((s) => s.size === 1);
   })();
 
-  // ── (3) retraction: tombstone one current reading; must fold to null everywhere ──
-  const retractor = client("retractor@ops");
+  // ── (3) retraction: the AUTHOR takes back one current reading; folds to null
+  //        everywhere. §5.1 gates retraction on the target's own author, so an
+  //        ops account cannot retract a sensor's reading — retraction is taking
+  //        back your own statement, not deleting someone else's. ──
   const victim = subjects[0];
-  const cur = await retractor.currentOf(victim);
-  if (cur) await retractor.tombstone(cur.id);
+  const observer = client("observer@ops");
+  const cur = await observer.currentOf(victim);
+  if (cur) await client(cur.author).tombstone(cur.id);
   const afterRetract = await Promise.all(Array.from({ length: 3 }, (_, j) => client(`post-${j}`).currentOf(victim)));
   const retractedEverywhere = afterRetract.every((x) => x === null);
 

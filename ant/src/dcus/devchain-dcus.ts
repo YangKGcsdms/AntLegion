@@ -42,11 +42,14 @@ export const workerMode = (): "simulated" | "llm" | "spawn" =>
   process.env.ANT_WORKER === "llm" ? "llm"
     : process.env.ANT_WORKER === "spawn" ? "spawn" : "simulated";
 
-/** Fold options honoring ANT_CLAIM_DELTA (see runtime.ts) — the stage
- * predicate must expire stale claims at the same Δ the client uses. */
-export function foldOpts(): { claimTimeout?: number } {
-  const d = process.env.ANT_CLAIM_DELTA ? parseFloat(process.env.ANT_CLAIM_DELTA) : NaN;
-  return Number.isFinite(d) && d > 0 ? { claimTimeout: d } : {};
+/**
+ * Fold options for every stage predicate, carrying the bus-published Δ
+ * (§8.4). The stage predicate MUST expire stale claims at the same Δ the
+ * client folds with — and since v3.0 that number belongs to the log, so both
+ * take it from one place: the context.
+ */
+export function foldOpts(ctx: DCUContext): { claimTimeout: number } {
+  return { claimTimeout: ctx.claimTimeout };
 }
 
 // ── workers ──
@@ -220,7 +223,7 @@ export function stageDCU(
         replica > 0 ? { replica_of: spec.dcu } : {}, ctx.log, opts.identity);
     },
     onBatch: async (_batch, ctx) => {
-      const views = foldDevchain(ctx.mirror, foldOpts());
+      const views = foldDevchain(ctx.mirror, foldOpts(ctx));
       for (const req of views) {
         const mine = req.stages.find((s) => s.stage === stage);
         if (!mine || mine.state !== "open" || !mine.inputId) continue;
@@ -253,7 +256,7 @@ export function stageDCU(
           void runSpawnAct({
             stage, spec, req: { slug: req.slug, name: req.name },
             inputFact, ctx, colonyRoot, cfg: opts.spawn,
-            claimDeltaSec: foldOpts().claimTimeout ?? 600,
+            claimDeltaSec: ctx.claimTimeout,
           })
             .catch((err) => ctx.log(`spawn act crashed: ${err instanceof Error ? err.message : String(err)}`))
             .finally(() => { actInFlight = false; });

@@ -41,7 +41,8 @@
 
 import type { ClientV2 } from "./client.js";
 import type { ReadQuery } from "./bus.js";
-import { CONTEXT_REQUESTED, CONTEXT_PROVIDED } from "./fold.js";
+import { CONTEXT_REQUESTED, CONTEXT_PROVIDED, isGap } from "./fold.js";
+import type { Fact } from "./types.js";
 
 type Writer = (line: string) => void;
 
@@ -215,8 +216,15 @@ export async function runCli(
         const chain = await client.causation(rest[0]);
         // `chain` (ids) is the stable shape scripts key on; `facts` carries the
         // full skeleton+payload so a reader can see WHAT happened along the way,
-        // not just that something did.
-        write(JSON.stringify({ chain: chain.map((f) => f.id), facts: chain }));
+        // not just that something did. An unresolved ancestor appears in both as
+        // an explicit gap (§3.2) — never as a silently shorter chain, which
+        // would read as "this is the origin".
+        const gaps = chain.filter(isGap);
+        write(JSON.stringify({
+          chain: chain.map((n) => (isGap(n) ? { gap: true, missing: n.missing } : n.id)),
+          facts: chain.filter((n): n is Fact => !isGap(n)),
+          ...(gaps.length ? { gaps: gaps.map((g) => g.missing) } : {}),
+        }));
         return 0;
       }
 

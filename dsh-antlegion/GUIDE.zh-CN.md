@@ -57,7 +57,7 @@ node check.js http://127.0.0.1:28090 --roster
 通了：
 
 ```
-bus OK — http://127.0.0.1:28090 protocol 2.0, head seq 2, 2 facts, up 1h (31ms)
+bus OK — http://127.0.0.1:28090 protocol 3.0, head seq 2, 2 facts, Δ 600s, up 1h (31ms)
 
 colony roster: empty — no agent has announced itself yet.
 ```
@@ -180,7 +180,7 @@ dsh --profile dcu
 正常启动长这样，四行各是一个检查点：
 
 ```
-[antlegion-dcu] … bus OK — http://127.0.0.1:28099 protocol 2.0, head seq 0, 0 facts, up 8s (18ms)
+[antlegion-dcu] … bus OK — http://127.0.0.1:28099 protocol 3.0, head seq 0, 0 facts, Δ 600s, up 8s (18ms)
 [antlegion-dcu] … resident session session-antlegion-dcu-624a7110-… up on deepseek-official/deepseek-v4-pro
 [antlegion-dcu] … patrol starting — bus http://127.0.0.1:28099, author dsh-dcu, poll 1000ms
 [antlegion-dcu] … registered — interests [task.*], publishes [task.done], ttl 300s
@@ -247,7 +247,7 @@ ANTLEGION_BUS_URL=http://127.0.0.1:28090 \
 | 启动时警告 "`interests` is empty" | 没配关注 | 配上，否则它永远不醒 |
 | 它一直自己触发自己 | 不会发生 | 自己发的事实被硬性排除；若真见到，说明有另一个进程用了同一个 `author` |
 | 同一条事实被两个 DCU 都做了 | claim 之前就开工了 | 让模型严格先 `antlegion_claim`，`won=false` 直接跳过 |
-| `resolve` 报 "not the claim winner" | claim 过期了（Δ 默认 600s）或本来就没赢 | 调 `claimTimeoutSec`，必须大于单条事实的最长处理时间 |
+| `resolve` 报 "not the claim winner" | claim 过期了或本来就没赢 | Δ 现在归总线管（§8.4），`node check.js` 会打印它；要调就在总线上调，必须大于单条事实的最长处理时间 |
 | roster 里同一个 author 有两个 instance | 同一身份起了两份 | 停掉一个，或给其中一个换 `author` |
 | 日志一片空白 | 该看 stderr | 插件的运行日志直接写 stderr；后台跑就 `> dcu.log 2>&1` |
 
@@ -318,7 +318,7 @@ refs:    { subject: "liveness:<author>" }
 | `pollMs` | `1000` | 巡检间隔 |
 | `livenessTtlSec` | `300` | 一次注册的有效期；到一半时才续，且自己发过事实就不续 |
 | `heartbeatSec` | `0` | 旧的固定频率心跳；除非有专门折叠心跳的读端，否则别开 |
-| `claimTimeoutSec` | `0` | claim 过期 Δ，`0` 用协议默认 600s |
+| `claimTimeoutSec` | `0` | **兜底** Δ，仅在总线没有发布 Δ 时生效。v3.0 起 Δ 属于日志（§8.4），巡逻从 `/info` 读；`0` 用 §B 默认 600s |
 | `maxFactsPerTurn` | `5` | 一轮最多简报几条，其余排队 |
 | `sessionId` | `''` | 固定会话 id；空则每次启动新建 |
 | `cwd` | `''` | 常驻会话的工作目录；空则用进程 cwd |

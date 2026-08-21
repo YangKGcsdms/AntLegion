@@ -24,10 +24,18 @@ describe("v2 core — identity & integrity", () => {
     expect(computeId({ ...base, nonce: "n1" })).not.toBe(computeId({ ...base, nonce: "n2" }));
   });
 
-  it("empty refs/nonce do not affect the id", () => {
+  it("an empty refs object is omitted from the record, so it does not affect the id", () => {
     const a = computeId({ type: "t", author: "x", ts: 1, payload: {} });
-    const b = computeId({ type: "t", author: "x", ts: 1, payload: {}, refs: {}, nonce: "" });
+    const b = computeId({ type: "t", author: "x", ts: 1, payload: {}, refs: {} });
     expect(a).toBe(b);
+  });
+
+  it('an empty-string refs value or nonce is REJECTED, not silently dropped', () => {
+    // §1.1. v2.0 dropped these while hashing, which made the content address
+    // depend on a normalization rule no second implementation could have known.
+    const { bus } = freshBus();
+    expect(() => bus.append({ type: "t", author: "x", ts: 1, refs: { parent: "" } })).toThrow(/non-empty string/);
+    expect(() => bus.append({ type: "t", author: "x", ts: 1, nonce: "" })).toThrow(/non-empty string/);
   });
 });
 

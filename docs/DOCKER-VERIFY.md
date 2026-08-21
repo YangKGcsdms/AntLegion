@@ -11,7 +11,7 @@ docker build -t antlegion .                      # from the repo root
 docker run -d --name antlegion-bus -p 28090:28090 \
   -e ANTLEGION_BUS_SECRET=your-stable-secret \
   -v antlegion-data:/data antlegion
-curl -sf localhost:28090/health                  # {"status":"ok","protocol":"2.0",…}
+curl -sf localhost:28090/health                  # {"status":"ok","protocol":"3.0",…}
 open http://localhost:28090/console               # ops console (stream / colony / health)
 ```
 

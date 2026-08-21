@@ -17,10 +17,10 @@ const post = (app: ReturnType<typeof freshApp>, body: unknown) =>
   });
 
 describe("v2 server — wire surface", () => {
-  it("health reports protocol 2.0", async () => {
+  it("health reports protocol 3.0", async () => {
     const res = await freshApp().request("/health");
     expect(res.status).toBe(200);
-    expect((await res.json()).protocol).toBe("2.0");
+    expect((await res.json()).protocol).toBe("3.0");
   });
 
   it("POST /facts appends and returns seq/recv/sig (201)", async () => {
@@ -45,9 +45,11 @@ describe("v2 server — wire surface", () => {
     expect((await (await app.request("/facts/head")).json()).head_seq).toBe(1);
   });
 
-  it("a mismatched client id is rejected 409", async () => {
+  it("a mismatched client id is rejected 400", async () => {
+    // §2.1: a client-supplied id the bus does not recompute is a well-formedness
+    // failure, not a conflict — nothing in the log is in the way.
     const res = await post(freshApp(), { type: "demo", author: "a", ts: 1, id: "deadbeef" });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
   });
 
   it("missing required fields → 400", async () => {

@@ -12,7 +12,7 @@ describe("R2 — INFO (the redis INFO analog)", () => {
     const bus = new BusV2({ secret: "s", dataDir: tmp(), fsync: "everysec" });
     bus.append({ type: "a", author: "x", ts: 1 });
     const info = bus.info();
-    expect(info.protocol).toBe("2.0");
+    expect(info.protocol).toBe("3.0");
     expect(info.head_seq).toBe(1);
     expect(info.facts).toBe(1);
     expect(info.fsync).toBe("everysec");
@@ -34,7 +34,7 @@ describe("R2 — INFO (the redis INFO analog)", () => {
   it("a server exposes /info and /admin/rewrite", async () => {
     const { app } = createServerV2({ secret: "s", dataDir: tmp() });
     const info = await (await app.request("/info")).json();
-    expect(info.protocol).toBe("2.0");
+    expect(info.protocol).toBe("3.0");
     const rw = await (await app.request("/admin/rewrite", { method: "POST" })).json();
     expect(typeof rw.stripped).toBe("number");
   });
@@ -80,14 +80,41 @@ describe("R3 — fsync policy + durability ergonomics", () => {
     bus2.close();
   });
 
-  it("rewrite() strips the payload of a tombstoned fact but keeps its skeleton", () => {
+  it("rewrite() strips the payload of a RETRACTED fact but keeps its skeleton", () => {
     const dir = tmp();
     const bus = new BusV2({ secret: "s", dataDir: dir });
     const a = bus.append({ type: "doomed", author: "x", ts: 1, payload: { big: "data" } });
-    bus.append({ type: "_.tombstone", author: "gc", ts: 2, refs: { tombstones: a.id }, nonce: "1" });
+    bus.append({ type: "_.tombstone", author: "x", ts: 2, refs: { tombstones: a.id }, nonce: "1" });
     expect(bus.rewrite()).toBe(1); // one payload stripped
     expect(bus.get(a.id)!.payload).toEqual({});
-    expect(bus.get(a.id)!.author).toBe("x"); // skeleton kept
+    expect(bus.get(a.id)!.author).toBe("x");     // skeleton kept
+    expect(bus.get(a.id)!.compacted).toBe(true); // §7.2: marked unverifiable, not tampered
+    bus.close();
+  });
+
+  it("a stranger's tombstone does NOT license destroying a payload", () => {
+    // §5.1/§7.2. In v2.0 any writer could tombstone any fact and compaction was
+    // then entitled to drop its payload — a protocol-sanctioned data-destruction
+    // primitive available to everyone.
+    const dir = tmp();
+    const bus = new BusV2({ secret: "s", dataDir: dir });
+    const a = bus.append({ type: "doomed", author: "x", ts: 1, payload: { big: "data" } });
+    bus.append({ type: "_.tombstone", author: "mallory", ts: 2, refs: { tombstones: a.id }, nonce: "1" });
+    expect(bus.rewrite()).toBe(0);
+    expect(bus.get(a.id)!.payload).toEqual({ big: "data" });
+    bus.close();
+  });
+
+  it("supersession alone is NOT grounds for dropping a payload", () => {
+    // §7.2. v2.0's compactor stripped every non-head member of every register,
+    // destroying exactly the use case §3.1 recommends — a reader accumulating
+    // multi-source observations over history(S).
+    const dir = tmp();
+    const bus = new BusV2({ secret: "s", dataDir: dir });
+    const a = bus.append({ type: "obs", author: "x", ts: 1, payload: { v: 1 }, refs: { subject: "k" } });
+    bus.append({ type: "obs", author: "x", ts: 2, payload: { v: 2 }, refs: { subject: "k" } });
+    expect(bus.rewrite()).toBe(0);
+    expect(bus.get(a.id)!.payload).toEqual({ v: 1 });
     bus.close();
   });
 });

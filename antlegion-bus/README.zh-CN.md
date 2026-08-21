@@ -66,7 +66,7 @@ npm run build && npm run start
 
 ```bash
 curl http://localhost:28090/health
-# {"status":"ok","protocol":"2.0","head_seq":0}
+# {"status":"ok","protocol":"3.0","head_seq":0}
 
 curl http://localhost:28090/info | jq
 # head_seq, facts, log_bytes, fsync, dedup_hits, sig_failures, max_depth, uptime_seconds

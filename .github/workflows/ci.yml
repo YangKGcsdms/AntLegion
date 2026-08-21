@@ -23,17 +23,47 @@ jobs:
         with: { python-version: "3.12" }
       - run: python3 conformance/verify.py
 
+  # Both satellites are tested against the bus IN THIS COMMIT, not against the
+  # published one. `npm ci` cannot do that while their package.json asks for a
+  # version that is not on npm yet, so the local bus is built, packed, and
+  # installed over the top. `npm install --no-save <tgz>` resolves the rest of
+  # the tree normally and rewrites neither package.json nor the lockfile.
   ant:
     runs-on: ubuntu-latest
-    defaults:
-      run: { working-directory: ant }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm, cache-dependency-path: ant/package-lock.json }
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npm test
+        with: { node-version: 20 }
+      - name: build and pack the bus from this commit
+        working-directory: antlegion-bus
+        run: npm ci && npm run build && npm pack --pack-destination "$RUNNER_TEMP"
+      - name: install ant against it
+        working-directory: ant
+        run: npm install --no-save --no-audit --no-fund "$RUNNER_TEMP"/antlegion-bus-*.tgz
+      - name: typecheck
+        working-directory: ant
+        run: npx tsc --noEmit
+      - name: test
+        working-directory: ant
+        run: npm test
+
+  dsh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: build and pack the bus from this commit
+        working-directory: antlegion-bus
+        run: npm ci && npm run build && npm pack --pack-destination "$RUNNER_TEMP"
+      # --legacy-peer-deps: the @deepseek-ai/* peers are the DSH host, which is
+      # not installed here and not needed to exercise the bus-facing code.
+      - name: install dsh against it
+        working-directory: dsh-antlegion
+        run: npm install --no-save --no-audit --no-fund --legacy-peer-deps "$RUNNER_TEMP"/antlegion-bus-*.tgz
+      - name: test
+        working-directory: dsh-antlegion
+        run: npm test
 
   # Guardrail: a changed conformance/vectors.json is wire-breaking. It must
   # be an intentional protocol change, declared in the commit message.
