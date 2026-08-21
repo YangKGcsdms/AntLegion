@@ -1,219 +1,220 @@
 /**
- * v2 reader folds (PROTOCOL.md §3) — where meaning lives.
+ * Reader folds (PROTOCOL.md §3) — where meaning lives.
  *
  * Pure functions over the totally-ordered fact stream (bus.all()). Two readers
  * folding identically always agree, because they consume the same immutable,
  * recv-stamped, seq-ordered stream. The bus stores none of this.
+ *
+ * **Domain.** Every fold here is a function of a *complete prefix* of the log:
+ * all facts with 1 ≤ seq ≤ N. Folding a filtered, sampled or gap-containing
+ * window is permitted but yields a non-normative approximation, and this module
+ * does not distinguish the two — the caller must.
+ *
+ * The four questions of §0.7, in the order an isolated agent actually asks them:
+ * what is X right now (§3.1), how did it come to be and what did it lead to
+ * (§3.2), should I believe it (§3.3), who is responsible for it (§3.4).
+ * Ownership is last because it is a corollary, not the purpose.
  */
 
 import type { Fact } from "./types.js";
-import { RESERVED } from "./types.js";
+import { RESERVED, isReservedType } from "./types.js";
 import { globMatch } from "./canonical.js";
 
-export type LifecycleState = "open" | "claimed" | "resolved" | "dead";
-export interface Lifecycle {
-  state: LifecycleState;
-  owner: string | null; // claim winner / resolver
-}
-
-export interface FoldOpts {
-  now?: number;          // evaluation wall-clock (unix s); defaults to real now
-  claimTimeout?: number; // Δ seconds; default 600 (§8)
-}
-
-/** Facts whose refs touch F in any lifecycle-relevant way. */
-function relevant(stream: readonly Fact[], F: string): Fact[] {
-  return stream
-    .filter(
-      (f) =>
-        f.refs.claim_of === F ||
-        f.refs.resolves === F ||
-        f.refs.release_of === F ||
-        (f.type === RESERVED.TOMBSTONE && f.refs.tombstones === F),
-    )
-    .sort((a, b) => a.seq - b.seq);
-}
-
-interface ActiveClaim { author: string; seq: number; recv: number }
-
 /**
- * Core ownership fold (§3.1): maintain the set of active claims with recv-anchored
- * deterministic expiry. `resolved`/`dead` are terminal. Only a trailing claim
- * with no successor uses wall-clock `now`.
+ * A fold was asked for a normative result it cannot compute from the prefix it
+ * was given (§3, preamble). Returning a plausible answer instead would be the
+ * worse failure: it is indistinguishable from a real one.
  */
-function ownership(stream: readonly Fact[], F: string, opts: FoldOpts): Lifecycle {
-  const now = opts.now ?? Date.now() / 1000;
-  const delta = opts.claimTimeout ?? 600;
-  let active: ActiveClaim[] = [];
-
-  for (const fact of relevant(stream, F)) {
-    if (fact.type === RESERVED.TOMBSTONE) return { state: "dead", owner: null };
-    // deterministic expiry: a claim is gone once a later fact's recv passes recv+Δ
-    active = active.filter((c) => fact.recv <= c.recv + delta);
-    if (fact.refs.claim_of === F) {
-      active.push({ author: fact.author, seq: fact.seq, recv: fact.recv });
-    } else if (fact.refs.release_of === F) {
-      active = active.filter((c) => c.author !== fact.author);
-    } else if (fact.refs.resolves === F) {
-      const owner = active.length ? [...active].sort((a, b) => a.seq - b.seq)[0].author : null;
-      if (owner === null || fact.author === owner) return { state: "resolved", owner };
-    }
+export class FoldDomainError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FoldDomainError";
   }
-
-  active = active.filter((c) => now <= c.recv + delta); // trailing expiry vs wall clock
-  if (active.length) return { state: "claimed", owner: [...active].sort((a, b) => a.seq - b.seq)[0].author };
-  return { state: "open", owner: null };
 }
 
-/** The author currently holding F's exclusive claim, or null. (§3.1) */
-export function claimWinner(stream: readonly Fact[], F: string, opts: FoldOpts = {}): string | null {
-  const o = ownership(stream, F, opts);
-  return o.state === "claimed" || o.state === "resolved" ? o.owner : null;
-}
-
-/** Lifecycle state of F (§3.1). */
-export function lifecycle(stream: readonly Fact[], F: string, opts: FoldOpts = {}): Lifecycle {
-  return ownership(stream, F, opts);
-}
-
-/** Did `author` win the exclusive claim on F? (read-back confirmation, §3.1) */
-export function didIWin(stream: readonly Fact[], F: string, author: string, opts: FoldOpts = {}): boolean {
-  return claimWinner(stream, F, opts) === author;
-}
-
-// ───────────────────────────── §3.3 Supersession ─────────────────────────────
+const bySeq = (a: Fact, b: Fact): number => a.seq - b.seq;
 
 /**
- * The id of the fact that supersedes F (replaced it), or null. Explicit
- * (`refs.supersedes == F`) takes precedence; otherwise latest-wins within F's
- * `refs.subject` group. Tombstones (`refs.tombstones`) are NOT supersession —
- * a deleted fact is `dead`, not `superseded` (§5.2).
+ * Retraction (§5.3): a `_.tombstone` naming `x`, **from x's own author**.
+ *
+ * The author gate is the whole point. In v2.0 any author could tombstone any
+ * fact, and the effect was unusually destructive — the target's lifecycle went
+ * `dead` (terminal), its register folded to null, and compaction was then
+ * entitled to destroy its payload. That is a protocol-sanctioned data-
+ * destruction primitive available to every writer. Retraction is now what it
+ * should be: taking back your own statement.
+ *
+ * A stranger's tombstone is not nothing — a reader MAY surface it as a
+ * *requested* retraction — but it does not retract.
+ */
+export function retracted(stream: readonly Fact[], x: Fact): boolean {
+  return stream.some(
+    (t) => t.type === RESERVED.TOMBSTONE && t.refs.tombstones === x.id && t.author === x.author,
+  );
+}
+
+/** `retracted` by id, for callers holding an id rather than a fact. */
+export function isRetracted(stream: readonly Fact[], F: string): boolean {
+  const target = stream.find((x) => x.id === F);
+  return target ? retracted(stream, target) : false;
+}
+
+// ─────────────────── §3.1 What is X right now — the register ──────────────────
+
+/**
+ * The subject register (§3.1): every fact carrying `refs.subject == subject`,
+ * in seq order — the full history of what has been said about X, oldest first.
+ *
+ * Reserved-namespace facts (§1.4) are **not** members. Tagging a `_.tombstone`
+ * with `refs.subject` is a natural mistake, and without this rule the retraction
+ * itself becomes `current(S)` and simultaneously supersedes the fact it
+ * retracts. A tombstone retracts through `refs.tombstones` alone.
+ *
+ * Latest-wins is one reader policy, not the only one: a reader accumulating
+ * multi-source observations reads `history` and does not collapse it.
+ */
+export function history(stream: readonly Fact[], subject: string): Fact[] {
+  return stream
+    .filter((x) => x.refs.subject === subject && !isReservedType(x.type))
+    .sort(bySeq);
+}
+
+/**
+ * "What is X right now" — the current value of a subject register (§3.1):
+ * the highest-seq member of `history(S)`, or null if that member has been
+ * retracted by its author.
+ *
+ * **Retraction is not rollback.** A retracted head folds to null — *nothing is
+ * currently known* — never to the previous value. Resurrecting an older
+ * statement would assert something no author currently asserts.
+ *
+ * A fact that wants to become the current value of S MUST carry
+ * `refs.subject: S`. v2.0 let an explicit successor become `current(S)` without
+ * carrying the subject, so `current(S) ∉ history(S)` was reachable and the two
+ * folds disagreed about which facts were live. To say what X is now, say it
+ * *about X*.
+ */
+export function current(stream: readonly Fact[], subject: string): Fact | null {
+  const group = history(stream, subject);
+  if (!group.length) return null;
+  const head = group[group.length - 1];
+  return retracted(stream, head) ? null : head;
+}
+
+/**
+ * The fact that **immediately** replaced F, or null (§3.1).
+ *
+ * Candidates are the authorized explicit successors (`refs.supersedes == F`
+ * from F's own author) union the next members of F's register; the winner is
+ * the **lowest** seq among them, not the newest. "What replaced F" is the next
+ * statement; the latest statement is `current(S)`. Following `supersededBy`
+ * repeatedly walks the register forward one step at a time.
+ *
+ * Three gates, each closing something v2.0 left open:
+ *
+ * - **Only an author may supersede their own fact.** Because `superseded`
+ *   outranks every vote in §3.3, an ungated `supersedes` let any author silence
+ *   any fact's trust state with a single append.
+ * - **A retracted successor supersedes nothing** — otherwise retracting a bad
+ *   replacement would leave the original permanently superseded with nothing
+ *   current in its place.
+ * - **Ties break by `seq`,** which is total, so there is never a choice.
+ *
+ * Returns null when F is not in the prefix (the author gate cannot be evaluated
+ * without F, and guessing is worse than declining), and null when F has been
+ * retracted (§5.3: retracted and superseded are different, and a fold MUST NOT
+ * blur them).
  */
 export function supersededBy(stream: readonly Fact[], F: string): string | null {
-  const explicit = stream
-    .filter((x) => x.refs.supersedes === F)
-    .sort((a, b) => a.seq - b.seq);
-  if (explicit.length) return explicit[explicit.length - 1].id;
-
   const target = stream.find((x) => x.id === F);
-  const subject = target?.refs.subject;
-  if (target && subject) {
-    const newer = stream
-      .filter((x) => x.refs.subject === subject && x.seq > target.seq)
-      .sort((a, b) => b.seq - a.seq);
-    if (newer.length) return newer[0].id;
-  }
-  return null;
+  if (!target) return null;
+  // A retracted fact is never `superseded` (§5.3): the two are different things
+  // and folds MUST tell them apart. Its author took it back — nothing replaced
+  // it, and reporting a successor would let a reader show a retraction as a
+  // hand-off.
+  if (retracted(stream, target)) return null;
+
+  const explicit = stream.filter(
+    (x) => x.refs.supersedes === F && x.author === target.author && !retracted(stream, x),
+  );
+  const subject = target.refs.subject;
+  const next = subject
+    ? history(stream, subject).filter((x) => x.seq > target.seq && !retracted(stream, x))
+    : [];
+
+  const candidates = new Map<string, Fact>();
+  for (const x of [...explicit, ...next]) candidates.set(x.id, x);
+  if (candidates.size === 0) return null;
+  return [...candidates.values()].sort(bySeq)[0].id;
 }
 
 export function isSuperseded(stream: readonly Fact[], F: string): boolean {
   return supersededBy(stream, F) !== null;
 }
 
-/**
- * The subject register (§3.3): every fact carrying `refs.subject == subject`,
- * in seq order — the full history of "what has been said about X", oldest first.
- * A reader accumulating multi-source observations reads this and does NOT
- * apply latest-wins; a reader who wants the current value calls `current`.
- */
-export function history(stream: readonly Fact[], subject: string): Fact[] {
-  return stream.filter((x) => x.refs.subject === subject).sort((a, b) => a.seq - b.seq);
-}
+// ──────────── §3.2 How did this come to be, what did it lead to ───────────────
 
 /**
- * "What is X right now" — the current value of a subject register (§3.3),
- * folded identically by every reader from the same total order:
+ * An unresolved `refs.parent` reached while walking a trail (§3.2). Surfaced
+ * explicitly, never silently skipped: a truncated chain that looks complete
+ * turns "I could not see the origin" into "this is the origin".
+ */
+export interface TrailGap {
+  gap: true;
+  /** The parent id that is not in this prefix. */
+  missing: string;
+}
+
+export type TrailNode = Fact | TrailGap;
+
+export const isGap = (n: TrailNode): n is TrailGap => (n as TrailGap).gap === true;
+
+/**
+ * Walk `refs.parent` from F to its root, returned root→F (§3.2). If the walk
+ * reaches a parent that is not in the prefix, the chain begins with a
+ * `TrailGap` naming it, so a caller can tell an unseen origin from a real root.
  *
- *   1. take the highest-seq fact in the `refs.subject` group;
- *   2. follow explicit `refs.supersedes` links forward (explicit replacement
- *      wins over group order, and the successor need not carry the subject);
- *   3. if the fact reached is tombstoned (§5.2) the register is *retracted* —
- *      the answer is null, not the previous value. Deleted is not superseded.
+ * For an F that is not in the prefix the chain is empty — the trail above an
+ * unseen fact is not knowable, and F MUST NOT be reported as a root.
  *
- * Returns null for a subject nobody has ever written.
+ * Bounded by a visited set: §6.2's argument that cycles are unconstructible
+ * holds for facts appended through a conforming bus, and folds also run over
+ * exported, replicated and hand-repaired logs.
  */
-export function current(stream: readonly Fact[], subject: string): Fact | null {
-  const group = history(stream, subject);
-  if (!group.length) return null;
+export function causationChain(stream: readonly Fact[], F: string): TrailNode[] {
   const byId = new Map(stream.map((x) => [x.id, x] as const));
-  const seen = new Set<string>();
-  let cur: Fact | undefined = group[group.length - 1];
-  while (cur && !seen.has(cur.id)) {
-    seen.add(cur.id);
-    const id: string = cur.id;
-    const explicit = stream
-      .filter((x) => x.refs.supersedes === id)
-      .sort((a, b) => b.seq - a.seq);
-    if (!explicit.length) break;
-    cur = byId.get(explicit[0].id);
-  }
-  if (!cur) return null;
-  const F = cur.id;
-  const dead = stream.some((x) => x.type === RESERVED.TOMBSTONE && x.refs.tombstones === F);
-  return dead ? null : cur;
-}
-
-// ─────────────────────────────── §3.2 Trust ──────────────────────────────────
-
-export type TrustState =
-  | "asserted" | "corroborated" | "consensus" | "contested" | "refuted" | "superseded";
-
-/**
- * Trust of F folded from votes (§3.2). Ignores self-votes and counts only each
- * author's latest (highest-seq) vote. `superseded` (freshness) beats all.
- * `quorum` is the reader's policy — trust has no global value, so never use it
- * for coordination (§3.2); use exclusive claim (§3.1) for that.
- */
-export function trust(stream: readonly Fact[], F: string, quorum = 2): TrustState {
-  if (isSuperseded(stream, F)) return "superseded";
-
-  const target = stream.find((x) => x.id === F);
-  const latestByAuthor = new Map<string, Fact>();
-  for (const v of stream.filter((x) => x.refs.vote === F).sort((a, b) => a.seq - b.seq)) {
-    if (target && v.author === target.author) continue; // no self-votes
-    latestByAuthor.set(v.author, v); // later seq overwrites → latest wins
-  }
-
-  let C = 0, X = 0;
-  for (const v of latestByAuthor.values()) {
-    const verdict = (v.payload as { verdict?: string }).verdict;
-    if (verdict === "corroborate") C++;
-    else if (verdict === "contradict") X++;
-  }
-
-  if (X >= quorum) return "refuted";
-  if (X > 0) return "contested";
-  if (C >= quorum) return "consensus";
-  if (C > 0) return "corroborated";
-  return "asserted";
-}
-
-// ───────────────────────────── §3.4 Causation ────────────────────────────────
-
-/**
- * Walk `refs.parent` from F to its root, returned root→F. A compacted ancestor
- * keeps its skeleton (§5.2), so the chain shows a payload-stripped fact, never a
- * silent gap. Cycle-guarded (the bus rejects cycles at append, §5).
- */
-export function causationChain(stream: readonly Fact[], F: string): Fact[] {
-  const byId = new Map(stream.map((x) => [x.id, x] as const));
-  const chain: Fact[] = [];
+  const chain: TrailNode[] = [];
   const seen = new Set<string>();
   let cur = byId.get(F);
   while (cur && !seen.has(cur.id)) {
     chain.push(cur);
     seen.add(cur.id);
-    cur = cur.refs.parent ? byId.get(cur.refs.parent) : undefined;
+    const parentId = cur.refs.parent;
+    if (!parentId) break;
+    const parent = byId.get(parentId);
+    if (!parent) { chain.push({ gap: true, missing: parentId }); break; }
+    cur = parent;
   }
   return chain.reverse();
 }
 
+/** The facts of a chain, gaps dropped — for callers that only want the ancestry. */
+export function causationFacts(stream: readonly Fact[], F: string): Fact[] {
+  return causationChain(stream, F).filter((n): n is Fact => !isGap(n));
+}
+
+/** `|chain(F)|` counting facts only; a fact with no parent has depth 1 (§3.2). */
+export function depth(stream: readonly Fact[], F: string): number {
+  return causationFacts(stream, F).length;
+}
+
 /**
- * Everything F caused: every fact whose `refs.parent` chain leads back to F,
- * transitively, in seq order (F itself excluded). The forward view of §3.4 —
- * `causationChain` answers "how did this come to be", `descendants` answers
- * "what did this lead to". Both are pure folds over the same stream, so two
- * readers on two machines get the same answer.
+ * Everything F caused: every fact whose `refs.parent` chain reaches F,
+ * transitively, in seq order (F itself excluded). The forward view of §3.2.
+ *
+ * Defined even for an F that is not in the prefix — the facts naming F as
+ * parent are still knowable. The trail below an unseen fact is visible; the
+ * trail above it is not.
  */
 export function descendants(stream: readonly Fact[], F: string): Fact[] {
   const children = new Map<string, Fact[]>();
@@ -234,7 +235,185 @@ export function descendants(stream: readonly Fact[], F: string): Fact[] {
       queue.push(c.id);
     }
   }
-  return out.sort((a, b) => a.seq - b.seq);
+  return out.sort(bySeq);
+}
+
+// ─────────────────────── §3.3 Should I believe it — trust ─────────────────────
+
+export type TrustState =
+  | "asserted" | "corroborated" | "consensus" | "contested" | "refuted"
+  | "superseded" | "retracted";
+
+const VERDICTS = new Set(["corroborate", "contradict"]);
+
+/**
+ * Trust of F folded from `_.vote` facts (§3.3). Self-votes are ignored and only
+ * each author's **latest** vote counts, so a voter who changes their mind is
+ * never double-counted.
+ *
+ * Three v2.0 defects are closed here:
+ *
+ * - `retracted` is a distinct state. v2.0 had none, so a tombstoned fact could
+ *   fold to `consensus`.
+ * - `quorum` MUST be ≥ 1. `quorum = 0` made every unvoted fact `refuted`.
+ * - A vote whose `verdict` is missing or unrecognized is excluded from the
+ *   tally **entirely**, rather than occupying its author's slot. In v2.0 a later
+ *   junk vote silently cancelled that author's earlier valid one.
+ *
+ * **Trust has no global value, so never coordinate on it.** `quorum` is the
+ * reader's policy, so two readers may legitimately disagree; the bus does not
+ * adjudicate. Anything all participants must agree on is built on §3.4.
+ *
+ * A quorum counts distinct `author` strings, and `author` is self-asserted
+ * (§5.4): on a bus that does not authenticate writers, one writer manufactures
+ * any state at any quorum, and a reader MUST treat every state above `asserted`
+ * as unverified.
+ *
+ * @throws FoldDomainError if F is not in the prefix — self-votes cannot be
+ *   identified without F, which is why a filtered window is not foldable.
+ */
+export function trust(stream: readonly Fact[], F: string, quorum = 2): TrustState {
+  if (!Number.isInteger(quorum) || quorum < 1) {
+    throw new RangeError(`trust: quorum MUST be an integer ≥ 1, got ${quorum}`);
+  }
+  const target = stream.find((x) => x.id === F);
+  if (!target) {
+    throw new FoldDomainError(`trust: ${F} is not in the prefix; a trust result MUST NOT be returned`);
+  }
+
+  if (retracted(stream, target)) return "retracted";   // the author took it back
+  if (isSuperseded(stream, F)) return "superseded";    // freshness beats confidence
+
+  const latestByAuthor = new Map<string, Fact>();
+  for (const v of stream.filter((x) => x.type === RESERVED.VOTE && x.refs.vote === F).sort(bySeq)) {
+    if (v.author === target.author) continue;                       // no self-votes
+    if (!VERDICTS.has((v.payload as { verdict?: string }).verdict ?? "")) continue; // junk never takes the slot
+    if (retracted(stream, v)) continue;                             // a taken-back vote is no vote
+    latestByAuthor.set(v.author, v);                                // later seq overwrites
+  }
+
+  let C = 0, X = 0;
+  for (const v of latestByAuthor.values()) {
+    if ((v.payload as { verdict: string }).verdict === "corroborate") C++;
+    else X++;
+  }
+
+  if (X >= quorum) return "refuted";
+  if (X > 0) return "contested";
+  if (C >= quorum) return "consensus";
+  if (C > 0) return "corroborated";
+  return "asserted";
+}
+
+// ────────────────── §3.4 Who is responsible for it — ownership ────────────────
+
+export type LifecycleState = "open" | "claimed" | "resolved" | "dead";
+export interface Lifecycle {
+  state: LifecycleState;
+  owner: string | null; // claim winner / resolver
+}
+
+export interface FoldOpts {
+  /** Evaluation wall-clock (unix s); defaults to real now. Advisory branch only. */
+  now?: number;
+  /**
+   * Δ in seconds. **A property of the log, not the reader** (§3.4, §8): take it
+   * from the bus's `/info` and do not substitute your own. A reader that folds
+   * with a different Δ is non-conforming and the exclusivity guarantee does not
+   * hold for it — in v2.0 Δ was a per-reader knob, and two readers with
+   * different values disagreed not only about who held a claim but about
+   * whether the work was resolved at all.
+   */
+  claimTimeout?: number;
+}
+
+/** Facts whose refs touch F in any lifecycle-relevant way, in seq order. */
+function relevant(stream: readonly Fact[], F: string): Fact[] {
+  return stream
+    .filter(
+      (f) =>
+        f.refs.claim_of === F ||
+        f.refs.resolves === F ||
+        f.refs.release_of === F ||
+        (f.type === RESERVED.TOMBSTONE && f.refs.tombstones === F),
+    )
+    .sort(bySeq);
+}
+
+interface ActiveClaim { author: string; seq: number; recv: number }
+
+const lowestSeq = (claims: ActiveClaim[]): ActiveClaim | null =>
+  claims.length ? [...claims].sort((a, b) => a.seq - b.seq)[0] : null;
+
+/**
+ * The ownership fold (§3.4): maintain the set of live claims with recv-anchored
+ * deterministic expiry. `resolved` and `dead` are terminal.
+ *
+ * **Why expiry keys on `recv`.** A claim times out when time has provably
+ * advanced past `claim.recv + Δ`, and wherever a later fact exists the proof is
+ * that fact's own bus-stamped `recv` — identical for every reader, so the fold
+ * is deterministic. Only a *trailing* claim with no successor falls back to
+ * wall-clock `now`, and that branch is **advisory**: it can turn `claimed(a)`
+ * into `open` and, where several claims trail, change which author is reported.
+ * A reader needing a stable answer waits for the next fact, which settles it for
+ * everyone at once.
+ *
+ * **To resolve, first claim.** A `resolves: F` is honoured only from F's current
+ * claim winner. v2.0's ungated path — anyone may resolve a never-claimed fact —
+ * was a denial primitive: `resolved` is terminal, so one well-formed fact from
+ * any writer closed any never-claimed item permanently, and the fold could not
+ * tell it from a real completion.
+ */
+function ownership(stream: readonly Fact[], F: string, opts: FoldOpts): Lifecycle {
+  const now = opts.now ?? Date.now() / 1000;
+  const delta = opts.claimTimeout ?? 600;
+  const target = stream.find((x) => x.id === F);
+  let active: ActiveClaim[] = [];
+
+  for (const fact of relevant(stream, F)) {
+    // Retraction is terminal — but only from the target's own author (§5.1).
+    // A stranger's tombstone is not a retraction and must not kill the fact.
+    if (fact.type === RESERVED.TOMBSTONE) {
+      if (target && fact.author === target.author) return { state: "dead", owner: null };
+      continue;
+    }
+
+    // Deterministic expiry: a claim is gone once a later fact's recv passes recv+Δ.
+    active = active.filter((c) => fact.recv <= c.recv + delta);
+
+    if (fact.refs.claim_of === F) {
+      active.push({ author: fact.author, seq: fact.seq, recv: fact.recv });
+    } else if (fact.refs.release_of === F) {
+      // Honoured only from an author actually holding a live claim (§5.1).
+      if (active.some((c) => c.author === fact.author)) {
+        active = active.filter((c) => c.author !== fact.author);
+      }
+    } else if (fact.refs.resolves === F) {
+      const owner = lowestSeq(active);
+      if (owner && fact.author === owner.author) return { state: "resolved", owner: owner.author };
+      // otherwise NOT honoured: only the current claim winner may resolve.
+    }
+  }
+
+  active = active.filter((c) => now <= c.recv + delta); // trailing expiry, advisory
+  const winner = lowestSeq(active);
+  return winner ? { state: "claimed", owner: winner.author } : { state: "open", owner: null };
+}
+
+/** Lifecycle state of F (§3.4). */
+export function lifecycle(stream: readonly Fact[], F: string, opts: FoldOpts = {}): Lifecycle {
+  return ownership(stream, F, opts);
+}
+
+/** The author currently holding F's exclusive claim, or null (§3.4). */
+export function claimWinner(stream: readonly Fact[], F: string, opts: FoldOpts = {}): string | null {
+  const o = ownership(stream, F, opts);
+  return o.state === "claimed" || o.state === "resolved" ? o.owner : null;
+}
+
+/** Did `author` win the exclusive claim on F? (read-back confirmation, §3.4) */
+export function didIWin(stream: readonly Fact[], F: string, author: string, opts: FoldOpts = {}): boolean {
+  return claimWinner(stream, F, opts) === author;
 }
 
 // ─────────────────── §3.5 Colony registry & orphan facts ─────────────────────

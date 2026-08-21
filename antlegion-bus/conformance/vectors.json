@@ -1,6 +1,6 @@
 {
-  "version": "2.0",
-  "description": "AntLegion Protocol v2 conformance vectors. hash[] = canonical/id (§4); folds = normative reader folds (§3). A conforming implementation MUST reproduce every value byte-for-byte.",
+  "version": "3.0",
+  "description": "AntLegion Protocol v3.0 conformance vectors. hash[] = JCS canonical string + content address (§4.1); folds[] = the normative reader folds of §3. A conforming implementation MUST reproduce every value byte-for-byte. Fold coverage is the point: a verifier that reproduces every id while checking no fold result gives no evidence about §3, which is where all the meaning is.",
   "secret": "conformance-secret",
   "defaults": {
     "claimTimeout": 600,
@@ -9,17 +9,19 @@
   "hash": [
     {
       "name": "minimal",
+      "note": "no refs, no nonce — both omitted from the record",
       "input": {
         "type": "build.failed",
         "author": "claude-code",
         "ts": 1748300000,
         "payload": {}
       },
-      "canonical": "{\"author\": \"claude-code\", \"payload\": {}, \"ts\": 1748300000.0, \"type\": \"build.failed\"}",
-      "id": "db64979e46661a2e0574b6cc597db98203e335c9b6d404676d9b4a8e8de4254a"
+      "canonical": "{\"author\":\"claude-code\",\"payload\":{},\"ts\":1748300000,\"type\":\"build.failed\"}",
+      "id": "dfabb4f28ee049de6cc2a43ad62cbb2392265c68605fbd0d0fd5dac5f5ce285c"
     },
     {
       "name": "with-refs",
+      "note": "refs present ⇒ included",
       "input": {
         "type": "_.claim",
         "author": "alice",
@@ -29,11 +31,12 @@
           "claim_of": "abc123"
         }
       },
-      "canonical": "{\"author\": \"alice\", \"payload\": {}, \"refs\": {\"claim_of\": \"abc123\"}, \"ts\": 1748300001.5, \"type\": \"_.claim\"}",
-      "id": "6ffbe7e45ff925109ee42a79d4ec1d75458d347f0ec95c53d040eb46a4310c0a"
+      "canonical": "{\"author\":\"alice\",\"payload\":{},\"refs\":{\"claim_of\":\"abc123\"},\"ts\":1748300001.5,\"type\":\"_.claim\"}",
+      "id": "76047569caa78b58afe7c77c49210a6bf86608603045b548320d748c9f471de0"
     },
     {
       "name": "with-nonce",
+      "note": "nonce present ⇒ included",
       "input": {
         "type": "_.claim",
         "author": "bob",
@@ -44,11 +47,25 @@
         },
         "nonce": "k7x9"
       },
-      "canonical": "{\"author\": \"bob\", \"nonce\": \"k7x9\", \"payload\": {}, \"refs\": {\"claim_of\": \"abc123\"}, \"ts\": 1.0, \"type\": \"_.claim\"}",
-      "id": "f96b54c25f991e0ab33c044e9409bd4d9bffafe648e032f56313fb090cf62a52"
+      "canonical": "{\"author\":\"bob\",\"nonce\":\"k7x9\",\"payload\":{},\"refs\":{\"claim_of\":\"abc123\"},\"ts\":1,\"type\":\"_.claim\"}",
+      "id": "db979b8f7aeb8872995ff1880d6e815fa6c0def53ba35ebbf3ea59ecd290e38b"
+    },
+    {
+      "name": "empty-refs-omitted",
+      "note": "refs {} ⇒ key absent from the record, same id as `minimal`-shaped input",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 4,
+        "payload": {},
+        "refs": {}
+      },
+      "canonical": "{\"author\":\"u\",\"payload\":{},\"ts\":4,\"type\":\"t\"}",
+      "id": "0a4aa8d48d8fe50424c6c0d3c8a65808636f44e5f04e812f03a0f5d3d5f5d084"
     },
     {
       "name": "nested-payload-key-sort",
+      "note": "sorting is recursive; arrays keep their order",
       "input": {
         "type": "t",
         "author": "u",
@@ -66,64 +83,143 @@
           ]
         }
       },
-      "canonical": "{\"author\": \"u\", \"payload\": {\"a\": {\"b\": 2, \"d\": 4}, \"m\": [3, 1, 2], \"z\": 1}, \"ts\": 2.0, \"type\": \"t\"}",
-      "id": "e5014ff8c6b330cbf4e75b90c8fe1fb777248d3863088e09015e6bcd6afcc707"
+      "canonical": "{\"author\":\"u\",\"payload\":{\"a\":{\"b\":2,\"d\":4},\"m\":[3,1,2],\"z\":1},\"ts\":2,\"type\":\"t\"}",
+      "id": "0d8d59a669e6ea29e4040fe28aa5d7569ea7ad31b5fc52e506b7a006584d64f8"
     },
     {
-      "name": "whole-number-ts-renders-float",
+      "name": "non-bmp-key-sort",
+      "note": "THE hazard: sorted by UTF-16 code unit, the astral key precedes U+FF3A. Python's bare sorted() orders by code point and gets the opposite answer.",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 1,
+        "payload": {
+          "😀": 1,
+          "Ｚ": 2,
+          "a": 3,
+          "Z": 4
+        }
+      },
+      "canonical": "{\"author\":\"u\",\"payload\":{\"Z\":4,\"a\":3,\"😀\":1,\"Ｚ\":2},\"ts\":1,\"type\":\"t\"}",
+      "id": "0b65d888e18047e320f4c82a2dfbb0d5025f8672d41526a06de2f8f91ebe0f5b"
+    },
+    {
+      "name": "number-exponent-boundaries",
+      "note": "ECMAScript Number::toString switches notation at these points: 1e-7 and 1e21 render exponential, 1e-6 and 1e16 do not",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 1,
+        "payload": {
+          "a": 1e-7,
+          "b": 0.000001,
+          "c": 10000000000000000,
+          "d": 1e+21
+        }
+      },
+      "canonical": "{\"author\":\"u\",\"payload\":{\"a\":1e-7,\"b\":0.000001,\"c\":10000000000000000,\"d\":1e+21},\"ts\":1,\"type\":\"t\"}",
+      "id": "f65d6c6b19b97b597933d845d5bb1d6d36336f9987e66a2d36fb3ce3b1175bd4"
+    },
+    {
+      "name": "integer-beyond-2-53",
+      "note": "not representable exactly as a double; both languages must emit the SAME rounded value",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 1,
+        "payload": {
+          "n": 9007199254740992
+        }
+      },
+      "canonical": "{\"author\":\"u\",\"payload\":{\"n\":9007199254740992},\"ts\":1,\"type\":\"t\"}",
+      "id": "8a1a9712609df9a898911465f2fb9d82bb96e3aa5edbd9cde05c44e2dcd410f7"
+    },
+    {
+      "name": "whole-number-ts",
+      "note": "JCS renders 100 as 100 — v2.0's trailing `.0` rule is gone",
       "input": {
         "type": "t",
         "author": "u",
         "ts": 100,
         "payload": {}
       },
-      "canonical": "{\"author\": \"u\", \"payload\": {}, \"ts\": 100.0, \"type\": \"t\"}",
-      "id": "c1751bb0d5944e1f0d0239de26b2a63884c1edcb5dc5dbe3bb57f4015bfc3c2b"
+      "canonical": "{\"author\":\"u\",\"payload\":{},\"ts\":100,\"type\":\"t\"}",
+      "id": "1bebc410ea7d8385d8344f5bb4001b3004826aca83e8196071e7cfcc14d592f2"
+    },
+    {
+      "name": "negative-zero-ts",
+      "note": "-0 serializes as 0 (JCS/ECMAScript), so ts:-0 and ts:0 are the same fact",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 0,
+        "payload": {}
+      },
+      "canonical": "{\"author\":\"u\",\"payload\":{},\"ts\":0,\"type\":\"t\"}",
+      "id": "dbafd6700ac516f650e2e5551b54b591a2914bf37ba734c1a2006838628ac6c9"
     },
     {
       "name": "unicode-payload",
+      "note": "non-ASCII passes through unescaped; only JSON's mandatory escapes are applied",
       "input": {
-        "type": "事实",
+        "type": "shi.shi",
         "author": "张三",
         "ts": 3,
         "payload": {
           "msg": "你好, world ✅"
         }
       },
-      "canonical": "{\"author\": \"张三\", \"payload\": {\"msg\": \"你好, world ✅\"}, \"ts\": 3.0, \"type\": \"事实\"}",
-      "id": "bcb1e5bbb903e2f6f76a6c668053591c30eacb84b9ca344999a3073a624a22d2"
+      "canonical": "{\"author\":\"张三\",\"payload\":{\"msg\":\"你好, world ✅\"},\"ts\":3,\"type\":\"shi.shi\"}",
+      "id": "2b2ad04097d1da1829e213a5fedfa4207d5ca352ab72b8c0f57ce2becbf091b5"
     },
     {
-      "name": "empty-refs-omitted-from-canonical",
+      "name": "escapes-required",
+      "note": "quote, backslash, and control characters take their short or \\u00XX form",
       "input": {
         "type": "t",
         "author": "u",
-        "ts": 4,
-        "payload": {},
-        "refs": {}
+        "ts": 1,
+        "payload": {
+          "s": "a\"b\\c\t\u0001"
+        }
       },
-      "canonical": "{\"author\": \"u\", \"payload\": {}, \"ts\": 4.0, \"type\": \"t\"}",
-      "id": "0dd3567fad419937c823d6a9a7601cdf3c89a1e47e1a8ca2bd2aa8d6c822f724"
+      "canonical": "{\"author\":\"u\",\"payload\":{\"s\":\"a\\\"b\\\\c\\t\\u0001\"},\"ts\":1,\"type\":\"t\"}",
+      "id": "c97d6566340cae753ba05a9a9859778fe789b3b3fd0444f0be6f55d9ca9b26ab"
+    },
+    {
+      "name": "lone-surrogate",
+      "note": "an unpaired surrogate is emitted as \\udXXX (well-formed JSON.stringify)",
+      "input": {
+        "type": "t",
+        "author": "u",
+        "ts": 1,
+        "payload": {
+          "s": "\ud800"
+        }
+      },
+      "canonical": "{\"author\":\"u\",\"payload\":{\"s\":\"\\ud800\"},\"ts\":1,\"type\":\"t\"}",
+      "id": "cad0ab409ec88bd142fffd5a22c27b2f9e77d278aeb265d8d3876922f08053d4"
     }
   ],
   "folds": {
     "lifecycle": [
       {
         "name": "open",
+        "note": "nothing references F",
         "stream": [
           {
             "seq": 1,
             "recv": 100,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
             "type": "task",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
           }
         ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
         "opts": {
           "now": 150,
           "claimTimeout": 600
@@ -131,38 +227,40 @@
         "expect": {
           "state": "open",
           "owner": null
-        }
+        },
+        "claimWinner": null
       },
       {
         "name": "claimed",
+        "note": "one live claim",
         "stream": [
           {
             "seq": 1,
             "recv": 100,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
             "type": "task",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
           },
           {
             "seq": 2,
             "recv": 101,
-            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
             "type": "_.claim",
             "author": "alice",
             "ts": 2,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "a",
-            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+            "sig": "e5c8995afd0244797b77ad34b88e4f2eb8e9512be9f5f6cc67efab2b15b1e72e"
           }
         ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
         "opts": {
           "now": 150,
           "claimTimeout": 600
@@ -170,52 +268,54 @@
         "expect": {
           "state": "claimed",
           "owner": "alice"
-        }
+        },
+        "claimWinner": "alice"
       },
       {
         "name": "exactly-once-lowest-seq-wins",
+        "note": "the theorem: lowest seq, not first-observed",
         "stream": [
           {
             "seq": 1,
             "recv": 100,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
             "type": "task",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
           },
           {
             "seq": 2,
             "recv": 101,
-            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
             "type": "_.claim",
             "author": "alice",
             "ts": 2,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "a",
-            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+            "sig": "e5c8995afd0244797b77ad34b88e4f2eb8e9512be9f5f6cc67efab2b15b1e72e"
           },
           {
             "seq": 3,
             "recv": 102,
-            "id": "ef241db94c612043a4deb186a79ad066e20f42b055270498f97db49b5693dd69",
+            "id": "4b34b072d279955533be51caa447b28869af8bf5393e39d8df101fb82947439c",
             "type": "_.claim",
             "author": "bob",
             "ts": 3,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "b",
-            "sig": "017fc5ae7ef5d60b3241c18dc0b244c6d0d0e39402098a6915f086158f799b78"
+            "sig": "5fab8f7bb7b6a2623517156c37843af5d71de855563dee72406c898ef75510fd"
           }
         ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
         "opts": {
           "now": 150,
           "claimTimeout": 600
@@ -223,52 +323,54 @@
         "expect": {
           "state": "claimed",
           "owner": "alice"
-        }
+        },
+        "claimWinner": "alice"
       },
       {
         "name": "resolved-by-winner-terminal",
+        "note": "the winner resolves; terminal",
         "stream": [
           {
             "seq": 1,
             "recv": 100,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
             "type": "task",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
           },
           {
             "seq": 2,
             "recv": 101,
-            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
             "type": "_.claim",
             "author": "alice",
             "ts": 2,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "a",
-            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+            "sig": "e5c8995afd0244797b77ad34b88e4f2eb8e9512be9f5f6cc67efab2b15b1e72e"
           },
           {
             "seq": 3,
             "recv": 102,
-            "id": "d785d8ae774f8d2f0d4cccc7e4611aee601c14cbeee13d423c5185c435c58617",
+            "id": "66abd50b40ea63d4ddac6822c6d45f66737ecabf687d19aa763372d42e7c5fb8",
             "type": "_.resolve",
             "author": "alice",
             "ts": 3,
             "payload": {},
             "refs": {
-              "resolves": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "resolves": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "r",
-            "sig": "f4e8c4275d59fabb4e77a33989c7725c65a94eee8d2fd17eabe34c2342bc8836"
+            "sig": "d3758d30eec770670b39d3d6f8e3b922d872b318f9396f05721553b9c485621b"
           }
         ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
         "opts": {
           "now": 150,
           "claimTimeout": 600
@@ -276,52 +378,54 @@
         "expect": {
           "state": "resolved",
           "owner": "alice"
-        }
+        },
+        "claimWinner": "alice"
       },
       {
         "name": "resolve-by-non-winner-ignored",
+        "note": "a stranger's resolve is not honoured",
         "stream": [
           {
             "seq": 1,
             "recv": 100,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
             "type": "task",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
           },
           {
             "seq": 2,
             "recv": 101,
-            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
             "type": "_.claim",
             "author": "alice",
             "ts": 2,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "a",
-            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
+            "sig": "e5c8995afd0244797b77ad34b88e4f2eb8e9512be9f5f6cc67efab2b15b1e72e"
           },
           {
             "seq": 3,
             "recv": 102,
-            "id": "8de59dd15e9da4c3410daa6bb7ab9e49e3d05421e12bb519b980043e9f26d880",
+            "id": "78ddcee28ef483fa65500c5dcc4bd67b10f1d4416371ebcaa4553e3b8ea5a5f9",
             "type": "_.resolve",
             "author": "mallory",
             "ts": 3,
             "payload": {},
             "refs": {
-              "resolves": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "resolves": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "r",
-            "sig": "c17ddc6d49faec81fa7e073798d4a65756a5a7784b7334c4aa2bde24cf96e080"
+            "sig": "1a9c8135d69332097946e562f6de02e0cee39d8cc63e32360b3e063e701ca3e6"
           }
         ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
         "opts": {
           "now": 150,
           "claimTimeout": 600
@@ -329,91 +433,40 @@
         "expect": {
           "state": "claimed",
           "owner": "alice"
-        }
+        },
+        "claimWinner": "alice"
       },
       {
-        "name": "broadcast-resolve-never-claimed",
+        "name": "resolve-never-claimed-ignored",
+        "note": "v2.0 honoured this and it was a denial primitive: resolved is terminal, so one well-formed fact from any writer closed any never-claimed item permanently. To resolve, first claim.",
         "stream": [
           {
             "seq": 1,
             "recv": 100,
-            "id": "1392dc4e42afd8745ce522c77179997be53b72ed54df2adfe6d5dd02c1017062",
+            "id": "8e8761f8aec6c1fc1f6f43e6a73a0f7eb271331e817dfa9d834b582be28c2ac2",
             "type": "announce",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "1f5e45c093011eddf6a142b5943c3d0d5eae940edd980c220088144d38dc373d"
+            "sig": "589b4cafbcebc68fa474072e6074b374985fd39b0cb96a62204bdd56f9cd0bd3"
           },
           {
             "seq": 2,
             "recv": 101,
-            "id": "77f22e0f9144a586caf63b5b7238b5961ec9ed7f34398c270957d4610f28b85b",
+            "id": "83c0d5de4e6e52d475a52f7944153dad422a2a204b13dedbccb21666fe3ad5bf",
             "type": "_.resolve",
             "author": "anyone",
             "ts": 2,
             "payload": {},
             "refs": {
-              "resolves": "1392dc4e42afd8745ce522c77179997be53b72ed54df2adfe6d5dd02c1017062"
+              "resolves": "8e8761f8aec6c1fc1f6f43e6a73a0f7eb271331e817dfa9d834b582be28c2ac2"
             },
             "nonce": "r",
-            "sig": "94c1462e363dc63cd9420dcb394c365236e4d53af7cd945b97625d5fd3fc9b08"
+            "sig": "65346e3c9ab949456036e8284a64447a7c1b4cc66796ee15840aad27eefc4d69"
           }
         ],
-        "target": "1392dc4e42afd8745ce522c77179997be53b72ed54df2adfe6d5dd02c1017062",
-        "opts": {
-          "now": 150,
-          "claimTimeout": 600
-        },
-        "expect": {
-          "state": "resolved",
-          "owner": null
-        }
-      },
-      {
-        "name": "released-back-to-open",
-        "stream": [
-          {
-            "seq": 1,
-            "recv": 100,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
-            "type": "task",
-            "author": "seed",
-            "ts": 1,
-            "payload": {},
-            "refs": {},
-            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
-          },
-          {
-            "seq": 2,
-            "recv": 101,
-            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
-            "type": "_.claim",
-            "author": "alice",
-            "ts": 2,
-            "payload": {},
-            "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
-            },
-            "nonce": "a",
-            "sig": "d7c9b5b7674abb65a271a2bc0917b536c03620a8032a4fbfe06e56c8654941ed"
-          },
-          {
-            "seq": 3,
-            "recv": 102,
-            "id": "d12075eb3bb98f8b3474c1e5c4e4dbf84534a108f0ff28b29080246a32a04c58",
-            "type": "_.release",
-            "author": "alice",
-            "ts": 3,
-            "payload": {},
-            "refs": {
-              "release_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
-            },
-            "nonce": "x",
-            "sig": "5ce52bb66c0e0b81d3a7f7b4a848dcf73e764ef9bffc763e68e53f28688a81a2"
-          }
-        ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "8e8761f8aec6c1fc1f6f43e6a73a0f7eb271331e817dfa9d834b582be28c2ac2",
         "opts": {
           "now": 150,
           "claimTimeout": 600
@@ -421,38 +474,205 @@
         "expect": {
           "state": "open",
           "owner": null
-        }
+        },
+        "claimWinner": null
       },
       {
-        "name": "dead-via-tombstone",
+        "name": "resolve-by-stranger-after-lapse-ignored",
+        "note": "alice's claim has expired by recv 3000, so there is no winner — and a lapsed claim means the work needs re-dispatch, not closing by a passer-by",
         "stream": [
           {
             "seq": 1,
-            "recv": 100,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "recv": 1000,
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
             "type": "task",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "ef93d87eb044b3432ca7be533c6df00eefc567db8b819423a1802dd23f5b65e2"
+            "sig": "dfba42a0344a095408cb540adac93bb1498af9041c343dcdc1e99861f5a99045"
+          },
+          {
+            "seq": 2,
+            "recv": 1001,
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "a",
+            "sig": "ff4df51f379253d51f09fe8d149800558eb0e0cb2ba141aa6b1f3ba48c4e9255"
+          },
+          {
+            "seq": 3,
+            "recv": 3000,
+            "id": "78ddcee28ef483fa65500c5dcc4bd67b10f1d4416371ebcaa4553e3b8ea5a5f9",
+            "type": "_.resolve",
+            "author": "mallory",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "resolves": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "r",
+            "sig": "3c0f612f8f07a0e1c57c6cc758cdf3815fbd64079ef232d09167dd028be529df"
+          }
+        ],
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+        "opts": {
+          "now": 3050,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "open",
+          "owner": null
+        },
+        "claimWinner": null
+      },
+      {
+        "name": "released-back-to-open",
+        "note": "the holder releases",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
           },
           {
             "seq": 2,
             "recv": 101,
-            "id": "8b79826061d81f57d7d3f5b39fe3ee33357e5df310c7abfae356ab0bc13e8ef3",
-            "type": "_.tombstone",
-            "author": "gc",
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
+            "type": "_.claim",
+            "author": "alice",
             "ts": 2,
             "payload": {},
             "refs": {
-              "tombstones": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
-            "nonce": "t",
-            "sig": "efd0ce34801813217209e7a71ce6ea4a1f7ae30030d3a524a97a6c7252b3eeef"
+            "nonce": "a",
+            "sig": "e5c8995afd0244797b77ad34b88e4f2eb8e9512be9f5f6cc67efab2b15b1e72e"
+          },
+          {
+            "seq": 3,
+            "recv": 102,
+            "id": "ee2c2a15454b80d05a1f544bdcc89f88d8f38f4314048d9239c5200b22b81cd1",
+            "type": "_.release",
+            "author": "alice",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "release_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "x",
+            "sig": "dbd0d9cb23ead44a8127ae7b1a6ff80ada2ee55cde6103bb492df82a1f48433b"
           }
         ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "open",
+          "owner": null
+        },
+        "claimWinner": null
+      },
+      {
+        "name": "release-by-non-holder-ignored",
+        "note": "only an author holding a live claim may release it",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "a",
+            "sig": "e5c8995afd0244797b77ad34b88e4f2eb8e9512be9f5f6cc67efab2b15b1e72e"
+          },
+          {
+            "seq": 3,
+            "recv": 102,
+            "id": "9729866e587a7e88624c716a87bc6ad9b97616e3bda188c59d44f959e6d5fb19",
+            "type": "_.release",
+            "author": "mallory",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "release_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "x",
+            "sig": "f1dfb381216854faab63b00214292eab56ac93c67eb3bd187621374a1a2f778c"
+          }
+        ],
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "claimed",
+          "owner": "alice"
+        },
+        "claimWinner": "alice"
+      },
+      {
+        "name": "dead-via-own-authors-tombstone",
+        "note": "retraction is taking back YOUR OWN statement",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 100,
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "43c5066cbb96334f7accbffd07ec3a6a571cc8121a533302dcef39efeb26894f",
+            "type": "_.tombstone",
+            "author": "seed",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "tombstones": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "t",
+            "sig": "15ee425d7c0e26adbcc4ce4b670286c183a9c1a947e48e5734ce80f9f8a7cb32"
+          }
+        ],
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
         "opts": {
           "now": 150,
           "claimTimeout": 600
@@ -460,119 +680,219 @@
         "expect": {
           "state": "dead",
           "owner": null
-        }
+        },
+        "claimWinner": null
       },
       {
-        "name": "timeout-redispatch-recv-anchored",
+        "name": "stranger-tombstone-does-not-retract",
+        "note": "v2.0 let any author tombstone any fact — terminal state, register to null, and compaction then entitled to destroy the payload. A protocol-sanctioned data-destruction primitive.",
         "stream": [
           {
             "seq": 1,
-            "recv": 1000,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "recv": 100,
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
             "type": "task",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "a6a610ad805e65b396cffb224013d4bd519f38bde63099ab1bf74c69ba6deec8"
+            "sig": "81ab3e8e01a71449e3238d96a3a50e7e766ae8e6129ba5c244dc03d41267f394"
+          },
+          {
+            "seq": 2,
+            "recv": 101,
+            "id": "e95414b083f65371486dc18265e03d3f0fbe7f30ee5582adcd8990df39d78a49",
+            "type": "_.tombstone",
+            "author": "mallory",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "tombstones": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "t",
+            "sig": "07c304facecf8e6d9f6f40ffe105009f17d2dcee86035f2f57551f1036c55a54"
+          }
+        ],
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+        "opts": {
+          "now": 150,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "open",
+          "owner": null
+        },
+        "claimWinner": null
+      },
+      {
+        "name": "claim-expiry-exactly-at-delta",
+        "note": "1001 + 600 == 1601 and expiry is `fact.recv <= claim.recv + Delta`, so alice is still live at the boundary and still wins on lowest seq. Evaluated at now == 1601 so the advisory trailing branch does not muddy the deterministic one.",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1000,
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "dfba42a0344a095408cb540adac93bb1498af9041c343dcdc1e99861f5a99045"
           },
           {
             "seq": 2,
             "recv": 1001,
-            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
             "type": "_.claim",
             "author": "alice",
             "ts": 2,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "a",
-            "sig": "a4ad70d4e78feb77b39b0952350f75a54b7f56f611df5c9112956060401e3a2e"
+            "sig": "ff4df51f379253d51f09fe8d149800558eb0e0cb2ba141aa6b1f3ba48c4e9255"
           },
           {
             "seq": 3,
-            "recv": 2000,
-            "id": "ef241db94c612043a4deb186a79ad066e20f42b055270498f97db49b5693dd69",
+            "recv": 1601,
+            "id": "4b34b072d279955533be51caa447b28869af8bf5393e39d8df101fb82947439c",
             "type": "_.claim",
             "author": "bob",
             "ts": 3,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "b",
-            "sig": "28d6e979c3b70f590d21bcce5fe15258898f6711c3b29e95d5cadcf4980202ea"
+            "sig": "383b1e2cb8d059c0a90355de978924a527196b6d6b42521afeef0fe6f6e2d9ee"
           }
         ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
         "opts": {
-          "now": 2050,
+          "now": 1601,
+          "claimTimeout": 600
+        },
+        "expect": {
+          "state": "claimed",
+          "owner": "alice"
+        },
+        "claimWinner": "alice"
+      },
+      {
+        "name": "claim-expiry-one-past-delta",
+        "note": "one second later alice has lapsed and bob takes it",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1000,
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+            "type": "task",
+            "author": "seed",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "dfba42a0344a095408cb540adac93bb1498af9041c343dcdc1e99861f5a99045"
+          },
+          {
+            "seq": 2,
+            "recv": 1001,
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
+            "type": "_.claim",
+            "author": "alice",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "a",
+            "sig": "ff4df51f379253d51f09fe8d149800558eb0e0cb2ba141aa6b1f3ba48c4e9255"
+          },
+          {
+            "seq": 3,
+            "recv": 1602,
+            "id": "4b34b072d279955533be51caa447b28869af8bf5393e39d8df101fb82947439c",
+            "type": "_.claim",
+            "author": "bob",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
+            },
+            "nonce": "b",
+            "sig": "6f1d61ab45df9316540be9cb4af41737ad3a50b38350f16e691aa378be5d9de0"
+          }
+        ],
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
+        "opts": {
+          "now": 1650,
           "claimTimeout": 600
         },
         "expect": {
           "state": "claimed",
           "owner": "bob"
-        }
+        },
+        "claimWinner": "bob"
       },
       {
         "name": "resolve-before-expiry-stays-terminal",
+        "note": "crash-recovery re-dispatch must not un-do a real resolve",
         "stream": [
           {
             "seq": 1,
             "recv": 1000,
-            "id": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+            "id": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
             "type": "task",
             "author": "seed",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "a6a610ad805e65b396cffb224013d4bd519f38bde63099ab1bf74c69ba6deec8"
+            "sig": "dfba42a0344a095408cb540adac93bb1498af9041c343dcdc1e99861f5a99045"
           },
           {
             "seq": 2,
             "recv": 1001,
-            "id": "acde11909aa1eb5c4348e7a0faa872beb3f9df89a4d43975f49e714dfa990450",
+            "id": "065147d1ce2f7ef44514353cc0328c09cf8d500b5859e12753b12f2cd1b64d17",
             "type": "_.claim",
             "author": "alice",
             "ts": 2,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "a",
-            "sig": "a4ad70d4e78feb77b39b0952350f75a54b7f56f611df5c9112956060401e3a2e"
+            "sig": "ff4df51f379253d51f09fe8d149800558eb0e0cb2ba141aa6b1f3ba48c4e9255"
           },
           {
             "seq": 3,
             "recv": 1100,
-            "id": "d785d8ae774f8d2f0d4cccc7e4611aee601c14cbeee13d423c5185c435c58617",
+            "id": "66abd50b40ea63d4ddac6822c6d45f66737ecabf687d19aa763372d42e7c5fb8",
             "type": "_.resolve",
             "author": "alice",
             "ts": 3,
             "payload": {},
             "refs": {
-              "resolves": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "resolves": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "r",
-            "sig": "1df917bdde61708bc12b1ffb611d92b9a6c3d6c50e4e3586fe6031fe66d33f46"
+            "sig": "bb6ab084d8eab32bb2688eeac2e150228d127c23d9b993bf957f45cec82d017c"
           },
           {
             "seq": 4,
             "recv": 9000,
-            "id": "461b6e0d512ea78ee1cf3ed4ed10a79a8fd621821b8b76d16bf90bb31fb03539",
+            "id": "1aa731307b3308c4395180e81626b40059367bc4c5668759443900031794aad0",
             "type": "_.claim",
             "author": "bob",
             "ts": 4,
             "payload": {},
             "refs": {
-              "claim_of": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4"
+              "claim_of": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe"
             },
             "nonce": "b",
-            "sig": "30ec1357b6be852d12d7118b49be2de36507164203af03c923db9b218224da22"
+            "sig": "7a3615fc6c923e4a5e7d601b1e9171300db440f27a9675450de4f6113497f8b2"
           }
         ],
-        "target": "c63fc2b9ae29d456f5b0de1c5b5380f72c5c5271d52a68e64717c630419c70a4",
+        "target": "c1584bab871b28dd53a06f3e77fc15d0f0874d76e65eaa5e5974803a868ff2fe",
         "opts": {
           "now": 9999,
           "claimTimeout": 600
@@ -580,47 +900,50 @@
         "expect": {
           "state": "resolved",
           "owner": "alice"
-        }
+        },
+        "claimWinner": "alice"
       }
     ],
     "trust": [
       {
         "name": "asserted-no-votes",
+        "note": "the floor state",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
             "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           }
         ],
-        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
         "quorum": 2,
         "expect": "asserted"
       },
       {
         "name": "corroborated-one-vote",
+        "note": "below quorum",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
             "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "id": "150102102815b39da8a3c3fa3180be5ec081fe7cfaaecb6bbec4c2f59e5a4e12",
             "type": "_.vote",
             "author": "bob",
             "ts": 2,
@@ -628,34 +951,35 @@
               "verdict": "corroborate"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "1",
-            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+            "sig": "4d85475177cb2a64fa0ecdab368593a61d030e91ceefa90294cc7be5047ff1bb"
           }
         ],
-        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
         "quorum": 2,
         "expect": "corroborated"
       },
       {
-        "name": "consensus-quorum-2",
+        "name": "consensus-quorum-1",
+        "note": "quorum is the READER's policy; MUST be >= 1",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
             "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "id": "150102102815b39da8a3c3fa3180be5ec081fe7cfaaecb6bbec4c2f59e5a4e12",
             "type": "_.vote",
             "author": "bob",
             "ts": 2,
@@ -663,15 +987,51 @@
               "verdict": "corroborate"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "1",
-            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+            "sig": "4d85475177cb2a64fa0ecdab368593a61d030e91ceefa90294cc7be5047ff1bb"
+          }
+        ],
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
+        "quorum": 1,
+        "expect": "consensus"
+      },
+      {
+        "name": "consensus-quorum-2",
+        "note": "two distinct authors",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
+            "type": "obs",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "150102102815b39da8a3c3fa3180be5ec081fe7cfaaecb6bbec4c2f59e5a4e12",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 2,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
+            },
+            "nonce": "1",
+            "sig": "4d85475177cb2a64fa0ecdab368593a61d030e91ceefa90294cc7be5047ff1bb"
           },
           {
             "seq": 3,
             "recv": 3,
-            "id": "c26b9c7f00e4ecb5c9f20a3f382f6568bd8697d1fcd03ec03654da248ac80dac",
+            "id": "c6221881cee500ee93f01c125e58a5da0f9c46c6b5c39ce9454483e860235e44",
             "type": "_.vote",
             "author": "carol",
             "ts": 3,
@@ -679,34 +1039,35 @@
               "verdict": "corroborate"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "2",
-            "sig": "004bbc73edf011e6e791b2e6099035604bb3646dbf3c4033b1a118958fd3f32e"
+            "sig": "5c69e15ae927caf6da020000f9ff36ef7601d3d03810b8df114094be5a5ff98e"
           }
         ],
-        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
         "quorum": 2,
         "expect": "consensus"
       },
       {
         "name": "contested-one-contradict",
+        "note": "any contradiction outranks corroboration below quorum",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
             "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "id": "150102102815b39da8a3c3fa3180be5ec081fe7cfaaecb6bbec4c2f59e5a4e12",
             "type": "_.vote",
             "author": "bob",
             "ts": 2,
@@ -714,15 +1075,15 @@
               "verdict": "corroborate"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "1",
-            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+            "sig": "4d85475177cb2a64fa0ecdab368593a61d030e91ceefa90294cc7be5047ff1bb"
           },
           {
             "seq": 3,
             "recv": 3,
-            "id": "01e7d1cb74556aaeb76d7c8b0fa1cbad5900bc84d398edc81ff0a7b80d929d90",
+            "id": "d045110d78af0952455161918b495a9f979200e6ff50c5248bc8685a968c8c94",
             "type": "_.vote",
             "author": "carol",
             "ts": 3,
@@ -730,34 +1091,35 @@
               "verdict": "contradict"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "2",
-            "sig": "1c7714c184bed2d8d53122fc707c806bb9e89d95af83ba5fc24ccef84c348b68"
+            "sig": "c8a25612ddaa1ab22f5e1a365020b3ac3811ba50222322dcbd39e2ed4906b803"
           }
         ],
-        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
         "quorum": 2,
         "expect": "contested"
       },
       {
         "name": "refuted-quorum-2",
+        "note": "",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
             "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "667cde9f1316063b4e0286b773a09f74b384783d7860f67b858bfe928e0389b5",
+            "id": "5b8baebb57a1af953945f0ccf410496f23b458f10eb6dfd53e9fb28e00c2896e",
             "type": "_.vote",
             "author": "bob",
             "ts": 2,
@@ -765,15 +1127,15 @@
               "verdict": "contradict"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "1",
-            "sig": "3b835b6b706d36eea55a42f1a18b5eaafb47e9c956c1a52b2384e8a9d089005b"
+            "sig": "5592b0a8fbfbecdbed345cb7ad6d1e01696fdd041e794aa8257a757fa8e38e27"
           },
           {
             "seq": 3,
             "recv": 3,
-            "id": "01e7d1cb74556aaeb76d7c8b0fa1cbad5900bc84d398edc81ff0a7b80d929d90",
+            "id": "d045110d78af0952455161918b495a9f979200e6ff50c5248bc8685a968c8c94",
             "type": "_.vote",
             "author": "carol",
             "ts": 3,
@@ -781,34 +1143,35 @@
               "verdict": "contradict"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "2",
-            "sig": "1c7714c184bed2d8d53122fc707c806bb9e89d95af83ba5fc24ccef84c348b68"
+            "sig": "c8a25612ddaa1ab22f5e1a365020b3ac3811ba50222322dcbd39e2ed4906b803"
           }
         ],
-        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
         "quorum": 2,
         "expect": "refuted"
       },
       {
         "name": "self-vote-ignored",
+        "note": "you do not corroborate yourself",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
             "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "60998648cdcfaef512ac2abd7d89e55fbda7fb3b61c3a93eb63c6e7180e633cf",
+            "id": "b9a7895073f823f7ef801c015d73a61ad5de0d7286be72417dae0b896f71903a",
             "type": "_.vote",
             "author": "alice",
             "ts": 2,
@@ -816,34 +1179,35 @@
               "verdict": "corroborate"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "1",
-            "sig": "d36af192927a222e9967d5825aeedd70372c7042531207c6a44bfeb0e8e1af69"
+            "sig": "f30349d93e8d97297e0f4a149308e5c0378f660da28c2cac2b16bb859a467025"
           }
         ],
-        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
         "quorum": 2,
         "expect": "asserted"
       },
       {
         "name": "latest-vote-wins-per-author",
+        "note": "a voter who changes their mind is counted once",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
             "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "id": "150102102815b39da8a3c3fa3180be5ec081fe7cfaaecb6bbec4c2f59e5a4e12",
             "type": "_.vote",
             "author": "bob",
             "ts": 2,
@@ -851,15 +1215,15 @@
               "verdict": "corroborate"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "1",
-            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+            "sig": "4d85475177cb2a64fa0ecdab368593a61d030e91ceefa90294cc7be5047ff1bb"
           },
           {
             "seq": 3,
             "recv": 3,
-            "id": "44f425af697ca34a8d21fbd7acc42e83eb395f39e09c85166c4c8ee30fcedcc3",
+            "id": "6adb81b6bc138b8de62ad7da9aa114adec4f56c5e2b660c4e2d771a5c7928ab8",
             "type": "_.vote",
             "author": "bob",
             "ts": 3,
@@ -867,34 +1231,35 @@
               "verdict": "contradict"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "2",
-            "sig": "8d5b7818ae0fe3d189e504540e53758cd1924de0a1a839a0fe4b28431c8188db"
+            "sig": "ec1ad0005e393bd3861ab014d053dcf9e00f246ba060dea00e2b188f03f88a2f"
           }
         ],
-        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
         "quorum": 2,
         "expect": "contested"
       },
       {
-        "name": "superseded-beats-trust",
+        "name": "unrecognized-verdict-excluded",
+        "note": "the junk vote does NOT take bob's slot — in v2.0 it silently cancelled his earlier valid one",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
             "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "008c3446f318984947786e97f3eff23fbadd727364e5d469d715c56e9843e9ef"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "58c2afdf2703c823cb73b485d55df80aa5787ad4f77414f86b84b3907f757c0e",
+            "id": "150102102815b39da8a3c3fa3180be5ec081fe7cfaaecb6bbec4c2f59e5a4e12",
             "type": "_.vote",
             "author": "bob",
             "ts": 2,
@@ -902,215 +1267,721 @@
               "verdict": "corroborate"
             },
             "refs": {
-              "vote": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "1",
-            "sig": "f52434216ec4c1d1444a5ba79b32c9e2a48440b070b3ef0edb508f0f6d586750"
+            "sig": "4d85475177cb2a64fa0ecdab368593a61d030e91ceefa90294cc7be5047ff1bb"
           },
           {
             "seq": 3,
             "recv": 3,
-            "id": "99d791bcda7647b9c32eb10c022720d7d19f75d81d1f506d1cd48849e20a1b95",
+            "id": "e1893f0d3c817a60a138c97aaf75b52f0d2112a941ee67fc02e1eb6b78f1b35f",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 3,
+            "payload": {
+              "verdict": "maybe"
+            },
+            "refs": {
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
+            },
+            "nonce": "2",
+            "sig": "28155c984075ceb15e2f5bc856b72e067cab27634a89460b701fb84cadb6232f"
+          }
+        ],
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
+        "quorum": 1,
+        "expect": "consensus"
+      },
+      {
+        "name": "superseded-beats-trust",
+        "note": "freshness outranks confidence",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
-            "author": "carol",
+            "author": "alice",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "150102102815b39da8a3c3fa3180be5ec081fe7cfaaecb6bbec4c2f59e5a4e12",
+            "type": "_.vote",
+            "author": "bob",
+            "ts": 2,
+            "payload": {
+              "verdict": "corroborate"
+            },
+            "refs": {
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
+            },
+            "nonce": "1",
+            "sig": "4d85475177cb2a64fa0ecdab368593a61d030e91ceefa90294cc7be5047ff1bb"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "272f214ef5492cfa4e80b72b59ad1f41aff350ea1ebc28985bcae84d7e6d83b8",
+            "type": "obs",
+            "author": "alice",
             "ts": 3,
             "payload": {},
             "refs": {
-              "supersedes": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2"
+              "supersedes": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "s",
-            "sig": "2d2cb9b05bccfde19b649d6364f9581ef89f889dd515b1910b108bea25e20a9b"
+            "sig": "d3501830230f661caf5719706bcb830502335a6e7e48797299e590996d1c3b55"
           }
         ],
-        "target": "ee3018d5e20e1966de63152ab7ea3d4fc5e43b137c2175b4da35979ed3cb81c2",
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
         "quorum": 2,
         "expect": "superseded"
-      }
-    ],
-    "supersession": [
-      {
-        "name": "not-superseded",
-        "stream": [
-          {
-            "seq": 1,
-            "recv": 1,
-            "id": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
-            "type": "obs",
-            "author": "a",
-            "ts": 1,
-            "payload": {},
-            "refs": {},
-            "sig": "af294f6a554f8dd4367575d4b550e3d91a1f0de461367010e4c8059d4607a627"
-          }
-        ],
-        "target": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
-        "expect": null
       },
       {
-        "name": "explicit-supersedes",
+        "name": "retracted-outranks-consensus",
+        "note": "v2.0 had no retracted state, so a tombstoned fact could fold to consensus",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
+            "id": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
             "type": "obs",
-            "author": "a",
+            "author": "alice",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "af294f6a554f8dd4367575d4b550e3d91a1f0de461367010e4c8059d4607a627"
+            "sig": "2f24ec6874134d06ab13622fac2e2d20aa479696b62c9c3ad98157922d61a3d4"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "82b26843ad5341e1a31557580679e61905587bb18db657b291fb291e6de58b6c",
-            "type": "obs",
-            "author": "b",
+            "id": "150102102815b39da8a3c3fa3180be5ec081fe7cfaaecb6bbec4c2f59e5a4e12",
+            "type": "_.vote",
+            "author": "bob",
             "ts": 2,
-            "payload": {},
-            "refs": {
-              "supersedes": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00"
+            "payload": {
+              "verdict": "corroborate"
             },
-            "nonce": "g",
-            "sig": "6095a022bea0e4ee795f7ab94a429f85cb8af5576b3db9abda8590770f363240"
-          }
-        ],
-        "target": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
-        "expect": "82b26843ad5341e1a31557580679e61905587bb18db657b291fb291e6de58b6c"
-      },
-      {
-        "name": "subject-latest-wins",
-        "stream": [
-          {
-            "seq": 1,
-            "recv": 1,
-            "id": "c187d6a5e74243a3693eb29439b709fb98a509fc7d05daacc8ed73065d2ff378",
-            "type": "status",
-            "author": "a",
-            "ts": 1,
-            "payload": {},
             "refs": {
-              "subject": "deploy"
+              "vote": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
-            "sig": "798b93da616688780a56cb47f865cecdb90e85408ac8fd0d2c2bfd91dfded65f"
+            "nonce": "1",
+            "sig": "4d85475177cb2a64fa0ecdab368593a61d030e91ceefa90294cc7be5047ff1bb"
           },
           {
-            "seq": 2,
-            "recv": 2,
-            "id": "8cbcca01b3a9e7bd1e00f61a230a7fd936e08ce1f5ea0907b3fd66e26b317032",
-            "type": "status",
-            "author": "b",
-            "ts": 2,
-            "payload": {},
-            "refs": {
-              "subject": "deploy"
-            },
-            "sig": "8be989e5a49ecf4b065ae73116e35d4a4e2eb89db51f95629ceb5fb40365c8dc"
-          }
-        ],
-        "target": "c187d6a5e74243a3693eb29439b709fb98a509fc7d05daacc8ed73065d2ff378",
-        "expect": "8cbcca01b3a9e7bd1e00f61a230a7fd936e08ce1f5ea0907b3fd66e26b317032"
-      },
-      {
-        "name": "tombstone-is-not-supersession",
-        "stream": [
-          {
-            "seq": 1,
-            "recv": 1,
-            "id": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
-            "type": "obs",
-            "author": "a",
-            "ts": 1,
-            "payload": {},
-            "refs": {},
-            "sig": "af294f6a554f8dd4367575d4b550e3d91a1f0de461367010e4c8059d4607a627"
-          },
-          {
-            "seq": 2,
-            "recv": 2,
-            "id": "0265b7340c78c95e3156fcee6626462fd6c5e671ea2682ae2602833f7222e633",
+            "seq": 3,
+            "recv": 3,
+            "id": "fdef98391bdf41f50c77b6abce40045df2de857778b34d58d09ef2d2a641f69b",
             "type": "_.tombstone",
-            "author": "gc",
-            "ts": 2,
+            "author": "alice",
+            "ts": 3,
             "payload": {},
             "refs": {
-              "tombstones": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00"
+              "tombstones": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a"
             },
             "nonce": "t",
-            "sig": "6ac8db57b7f9936f577990d9b50008922e80b73a569d1fa1ec4a519228b502c9"
+            "sig": "baf39768a3aaa12d24d70f76bb079596adff3da13367ba124a4a502bf98e6bd6"
           }
         ],
-        "target": "965283c103e44beb0dd14b7e64c698d6bb0186cdd6b3a06ad050bbee06a07e00",
-        "expect": null
+        "target": "559e1d77aebe90be061d83868a4e9121decd20bf4e0e01a2faa77962c36cad0a",
+        "quorum": 1,
+        "expect": "retracted"
       }
     ],
-    "causation": [
+    "register": [
       {
-        "name": "root-only",
+        "name": "no-subject-not-superseded",
+        "note": "a fact outside any register",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "4fb66ce499bef7b8c0e797f641177e5b65d973da9161becf3bacbab286a7b76e",
+            "id": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a",
+            "type": "obs",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "2c03c298d689fc8d40df8685cfa36a2aafb2bd92c643302397d8f013e96e8234"
+          }
+        ],
+        "subject": "nobody",
+        "target": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a",
+        "history": [],
+        "current": null,
+        "supersededBy": null,
+        "isSuperseded": false
+      },
+      {
+        "name": "four-member-register-immediate-vs-latest",
+        "note": "THE divergence: supersededBy(A) is the NEXT member (seq 2), current(S) is the LATEST (seq 4). v2.0 returned the latest for both.",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+            "type": "status",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "639993e8e58bd0a4f9c5222a9e3863684a69d506a42f185686b6fe3f73e3ab06"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "d07e06675e08b0044347cb4bba4d8148d92181c395c898108dfd76ee03435ed6",
+            "type": "status",
+            "author": "b",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "954de923866a23ea7c8d5707b2e5374f25f680c3d081df8184a6e1988329e45d"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "f4bc2d81ccd3a2c0880bb045a8aa0d75d010ea2efa30d2c981d26ff3a9bbc253",
+            "type": "status",
+            "author": "c",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "15139efb4cee120c44746129e5620e589e0dcc1b72b87a831fd756bfbe5eb1af"
+          },
+          {
+            "seq": 4,
+            "recv": 4,
+            "id": "9d2b0fd4cbacc2b4e1f2cb89f491010b916fd9499b03c279b87751690c1ff9a4",
+            "type": "status",
+            "author": "d",
+            "ts": 4,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "f4b6c0c80a78f75ba34552f489df4483f62ad06f9c5c06368d32411d527166ab"
+          }
+        ],
+        "subject": "deploy",
+        "target": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+        "history": [
+          "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+          "d07e06675e08b0044347cb4bba4d8148d92181c395c898108dfd76ee03435ed6",
+          "f4bc2d81ccd3a2c0880bb045a8aa0d75d010ea2efa30d2c981d26ff3a9bbc253",
+          "9d2b0fd4cbacc2b4e1f2cb89f491010b916fd9499b03c279b87751690c1ff9a4"
+        ],
+        "current": "9d2b0fd4cbacc2b4e1f2cb89f491010b916fd9499b03c279b87751690c1ff9a4",
+        "supersededBy": "d07e06675e08b0044347cb4bba4d8148d92181c395c898108dfd76ee03435ed6",
+        "isSuperseded": true
+      },
+      {
+        "name": "two-explicit-successors-lowest-seq-wins",
+        "note": "ties break by seq, which is total, so there is never a choice; the other is an ordinary fact",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a",
+            "type": "obs",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "2c03c298d689fc8d40df8685cfa36a2aafb2bd92c643302397d8f013e96e8234"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "b20c3dad51e10a1165e8a868e63557107411dabae37c3903a193e505c8f36b1b",
+            "type": "obs",
+            "author": "a",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "supersedes": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a"
+            },
+            "nonce": "x",
+            "sig": "3fbc4e7632db4b71e03b2a668ca121e8b92a9e108840612f0855a8cd57ddaa6b"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "3bd27798e3c73b5d98c5d8583e2cee55e99bd56f50776850e4acf21079414eb1",
+            "type": "obs",
+            "author": "a",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "supersedes": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a"
+            },
+            "nonce": "y",
+            "sig": "f28fe4646c13d704163f931c3ee66d47529af1986749d9a893512ff0a37d8389"
+          }
+        ],
+        "subject": "none",
+        "target": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a",
+        "history": [],
+        "current": null,
+        "supersededBy": "b20c3dad51e10a1165e8a868e63557107411dabae37c3903a193e505c8f36b1b",
+        "isSuperseded": true
+      },
+      {
+        "name": "unauthorized-supersede-ignored",
+        "note": "because superseded outranks every vote in 3.3, an ungated supersedes let any author silence any fact's trust state with one append",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a",
+            "type": "obs",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "2c03c298d689fc8d40df8685cfa36a2aafb2bd92c643302397d8f013e96e8234"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "f45defefe21eece18ce26390b8956357b4b463c5a0a0c3777b9667ac1e6658dc",
+            "type": "obs",
+            "author": "mallory",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "supersedes": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a"
+            },
+            "nonce": "x",
+            "sig": "d29cbed4745007dbceb0845be2c79582cda1584571d1a138e1aaecbbdee9bc08"
+          }
+        ],
+        "subject": "none",
+        "target": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a",
+        "history": [],
+        "current": null,
+        "supersededBy": null,
+        "isSuperseded": false
+      },
+      {
+        "name": "retracted-successor-supersedes-nothing",
+        "note": "otherwise retracting a bad replacement leaves the original permanently superseded with nothing current",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a",
+            "type": "obs",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "2c03c298d689fc8d40df8685cfa36a2aafb2bd92c643302397d8f013e96e8234"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "b20c3dad51e10a1165e8a868e63557107411dabae37c3903a193e505c8f36b1b",
+            "type": "obs",
+            "author": "a",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "supersedes": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a"
+            },
+            "nonce": "x",
+            "sig": "3fbc4e7632db4b71e03b2a668ca121e8b92a9e108840612f0855a8cd57ddaa6b"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "63fee933680ba9e9e32b6adad364bbcddf1f0bbe0ff36fb99dff7e94fab47c1a",
+            "type": "_.tombstone",
+            "author": "a",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "tombstones": "b20c3dad51e10a1165e8a868e63557107411dabae37c3903a193e505c8f36b1b"
+            },
+            "nonce": "t",
+            "sig": "fa2901e0966829c0e86aea46f262436354826822027c5ef0ddcd4449732d49b0"
+          }
+        ],
+        "subject": "none",
+        "target": "0850e16e0359d26ec5efb672eaac13efede3b7e2638b3281c94dd07e94e6a92a",
+        "history": [],
+        "current": null,
+        "supersededBy": null,
+        "isSuperseded": false
+      },
+      {
+        "name": "register-head-retracted-folds-to-null",
+        "note": "retraction is not rollback: nothing is currently known, NOT the previous value",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+            "type": "status",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "639993e8e58bd0a4f9c5222a9e3863684a69d506a42f185686b6fe3f73e3ab06"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "2be420f47f51550060ec53e5efb2cf5422b020f84a2b2e68c5501120d9cd73e4",
+            "type": "status",
+            "author": "a",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "8044ee95339bd79652207e7da88a0c58a21dc10d11db5bdb1e449305730ef259"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "d2d58c55684167b3dadadf4a85c0fa52bc723681b9460f96170165cc21fd0f75",
+            "type": "_.tombstone",
+            "author": "a",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "tombstones": "2be420f47f51550060ec53e5efb2cf5422b020f84a2b2e68c5501120d9cd73e4"
+            },
+            "nonce": "t",
+            "sig": "d2177e92b646307b40c8e9eb3bfa5e8a09a85acd6928ad7f6cb6f8d0666e6223"
+          }
+        ],
+        "subject": "deploy",
+        "target": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+        "history": [
+          "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+          "2be420f47f51550060ec53e5efb2cf5422b020f84a2b2e68c5501120d9cd73e4"
+        ],
+        "current": null,
+        "supersededBy": null,
+        "isSuperseded": false
+      },
+      {
+        "name": "non-head-retraction-leaves-current-alone",
+        "note": "a tombstone on a non-head member does not move current(S)",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+            "type": "status",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "639993e8e58bd0a4f9c5222a9e3863684a69d506a42f185686b6fe3f73e3ab06"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "2be420f47f51550060ec53e5efb2cf5422b020f84a2b2e68c5501120d9cd73e4",
+            "type": "status",
+            "author": "a",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "8044ee95339bd79652207e7da88a0c58a21dc10d11db5bdb1e449305730ef259"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "86c3b45c65e315af5b07ccae850fa91450956c3c64257de850a251e079383623",
+            "type": "_.tombstone",
+            "author": "a",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "tombstones": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6"
+            },
+            "nonce": "t",
+            "sig": "7e9a965f0ad1bdc3c4deb4652307fa9c8a86131720f9d740d5a1e657f342bf68"
+          }
+        ],
+        "subject": "deploy",
+        "target": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+        "history": [
+          "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+          "2be420f47f51550060ec53e5efb2cf5422b020f84a2b2e68c5501120d9cd73e4"
+        ],
+        "current": "2be420f47f51550060ec53e5efb2cf5422b020f84a2b2e68c5501120d9cd73e4",
+        "supersededBy": null,
+        "isSuperseded": false
+      },
+      {
+        "name": "reserved-type-is-not-a-register-member",
+        "note": "tagging a _.tombstone with refs.subject must not make the retraction itself current(S), nor supersede the fact it retracts",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+            "type": "status",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {
+              "subject": "deploy"
+            },
+            "sig": "639993e8e58bd0a4f9c5222a9e3863684a69d506a42f185686b6fe3f73e3ab06"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "32e8b974ef5367d47419762aa7347f4732f47de529a19bef533466023c2592ab",
+            "type": "_.tombstone",
+            "author": "a",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "tombstones": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+              "subject": "deploy"
+            },
+            "nonce": "t",
+            "sig": "c16ce41f99705bb3949197ece3166bca6e724fa72e9cff174a989f12750a689a"
+          }
+        ],
+        "subject": "deploy",
+        "target": "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6",
+        "history": [
+          "b44cef13610dd1dd6575db2fab2c2320cb0e5c8dc47f28127727d663066fb1e6"
+        ],
+        "current": null,
+        "supersededBy": null,
+        "isSuperseded": false
+      }
+    ],
+    "trail": [
+      {
+        "name": "root-only",
+        "note": "a fact with no parent has depth 1",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "166b3ade523fb8f9bc00ec2132dcafe9240e1fcc7fb9cc2dc48f7bc6c2df8e34",
             "type": "root",
             "author": "a",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "f87cb4609400ee684da7c923fff4e7ae5f08056b7cafa711e25022b84fbe0a44"
+            "sig": "a33fcb75cd4815d722177263d9fb1bc20c029787d1134f6661d69e6b0e956b11"
           }
         ],
-        "target": "4fb66ce499bef7b8c0e797f641177e5b65d973da9161becf3bacbab286a7b76e",
-        "expect": [
-          "4fb66ce499bef7b8c0e797f641177e5b65d973da9161becf3bacbab286a7b76e"
-        ]
+        "target": "166b3ade523fb8f9bc00ec2132dcafe9240e1fcc7fb9cc2dc48f7bc6c2df8e34",
+        "chain": [
+          "166b3ade523fb8f9bc00ec2132dcafe9240e1fcc7fb9cc2dc48f7bc6c2df8e34"
+        ],
+        "descendants": []
       },
       {
         "name": "chain-root-to-fact",
+        "note": "root -> F",
         "stream": [
           {
             "seq": 1,
             "recv": 1,
-            "id": "f0c9dbb3bab23d8ba0b7749403d0348a2dad408288af9af0893200d83ea59489",
+            "id": "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8",
             "type": "build",
             "author": "a",
             "ts": 1,
             "payload": {},
             "refs": {},
-            "sig": "e8f59b1d4a391a7db2fa016f77280b2846ac8a213b6761f571b1ae0be863c2e5"
+            "sig": "d4bec589983c599cbe82bef57bec26be4bf19c6859fe2f37f0df593785fceea0"
           },
           {
             "seq": 2,
             "recv": 2,
-            "id": "efd5f2894d05bfc9ce692d8d6f3ff25873b8e07ed902b7b3e5fe1555e3d5ab1c",
+            "id": "09f7151a12a0cce41af009631e7c7a4771bd09fd2c330e10e586139bda8cc62c",
             "type": "test",
             "author": "a",
             "ts": 2,
             "payload": {},
             "refs": {
-              "parent": "f0c9dbb3bab23d8ba0b7749403d0348a2dad408288af9af0893200d83ea59489"
+              "parent": "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8"
             },
-            "sig": "c0a0db796aa1c6e7c28a4d813a055bb45c371098cf1bacd1d46476a807081618"
+            "sig": "bb6dd543038a22f5511a7fabad4f7839dd6106f07c1e1d4c4875e7cd087b041d"
           },
           {
             "seq": 3,
             "recv": 3,
-            "id": "114b12195f53091026cd4d070074e61af55851a413c05b6ae63e130557f98d18",
+            "id": "80d340163a12d6597ea1044059772e4be07c89479dc3a2219076e86f374befff",
             "type": "deploy",
             "author": "a",
             "ts": 3,
             "payload": {},
             "refs": {
-              "parent": "efd5f2894d05bfc9ce692d8d6f3ff25873b8e07ed902b7b3e5fe1555e3d5ab1c"
+              "parent": "09f7151a12a0cce41af009631e7c7a4771bd09fd2c330e10e586139bda8cc62c"
             },
-            "sig": "ce3e6f46ab03d31207a1915aae0a5e5d175e058f0dcb70a276ecfee00eaf117b"
+            "sig": "1e41cf1d7ba91faa509e2aa91693bf5ddd14e89b8f47e9f04f6a24e35d1afb9d"
           }
         ],
-        "target": "114b12195f53091026cd4d070074e61af55851a413c05b6ae63e130557f98d18",
-        "expect": [
-          "f0c9dbb3bab23d8ba0b7749403d0348a2dad408288af9af0893200d83ea59489",
-          "efd5f2894d05bfc9ce692d8d6f3ff25873b8e07ed902b7b3e5fe1555e3d5ab1c",
-          "114b12195f53091026cd4d070074e61af55851a413c05b6ae63e130557f98d18"
+        "target": "80d340163a12d6597ea1044059772e4be07c89479dc3a2219076e86f374befff",
+        "chain": [
+          "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8",
+          "09f7151a12a0cce41af009631e7c7a4771bd09fd2c330e10e586139bda8cc62c",
+          "80d340163a12d6597ea1044059772e4be07c89479dc3a2219076e86f374befff"
+        ],
+        "descendants": []
+      },
+      {
+        "name": "dangling-ancestor-surfaces-a-gap",
+        "note": "the parent is not in the prefix; the chain MUST begin with an explicit gap marker. A truncated chain that looks complete turns 'I could not see the origin' into 'this is the origin'.",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "7cd0696dbe8dbc4bf91f370911f9782cefa8bb7968326073a813089de3557f89",
+            "type": "test",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {
+              "parent": "0000000000000000000000000000000000000000000000000000000000000000"
+            },
+            "sig": "62961bb6636dc26005d2f2a53b4e6fa1f3fde14e5da2b136532b6146bb9f350a"
+          }
+        ],
+        "target": "7cd0696dbe8dbc4bf91f370911f9782cefa8bb7968326073a813089de3557f89",
+        "chain": [
+          {
+            "gap": true,
+            "missing": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "7cd0696dbe8dbc4bf91f370911f9782cefa8bb7968326073a813089de3557f89"
+        ],
+        "descendants": []
+      },
+      {
+        "name": "descendants-over-a-fork",
+        "note": "transitive, seq-ordered, F excluded",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8",
+            "type": "build",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {},
+            "sig": "d4bec589983c599cbe82bef57bec26be4bf19c6859fe2f37f0df593785fceea0"
+          },
+          {
+            "seq": 2,
+            "recv": 2,
+            "id": "09f7151a12a0cce41af009631e7c7a4771bd09fd2c330e10e586139bda8cc62c",
+            "type": "test",
+            "author": "a",
+            "ts": 2,
+            "payload": {},
+            "refs": {
+              "parent": "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8"
+            },
+            "sig": "bb6dd543038a22f5511a7fabad4f7839dd6106f07c1e1d4c4875e7cd087b041d"
+          },
+          {
+            "seq": 3,
+            "recv": 3,
+            "id": "d21d2e004abf1e44953d6808ddc1345a54be6404bd5eba8acd136cf85f2a25c2",
+            "type": "lint",
+            "author": "a",
+            "ts": 3,
+            "payload": {},
+            "refs": {
+              "parent": "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8"
+            },
+            "sig": "0c175653e1e3b237d5b86ab0b5c54fd88b983fbcdf0526e18102aa7b261e2733"
+          },
+          {
+            "seq": 4,
+            "recv": 4,
+            "id": "c076670ed977bb6e4d38b4de3510baa15f0fc234763c33d52a9ad8fb18a029c5",
+            "type": "test",
+            "author": "a",
+            "ts": 4,
+            "payload": {},
+            "refs": {
+              "parent": "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8"
+            },
+            "nonce": "d",
+            "sig": "62396d0132ab376ac5975a3070c4ac6c0c329d810fff4f9b2a5d5266fc018937"
+          },
+          {
+            "seq": 5,
+            "recv": 5,
+            "id": "c699c5fc09f5c94076098c518c2d9923d3693c46c2c177fcec625ec01002ebca",
+            "type": "deploy",
+            "author": "a",
+            "ts": 5,
+            "payload": {},
+            "refs": {
+              "parent": "c076670ed977bb6e4d38b4de3510baa15f0fc234763c33d52a9ad8fb18a029c5"
+            },
+            "sig": "affd6a17203eaa0769d5cc2670bd5b6a766ed64cfbb78b4b749020ccd80df99a"
+          }
+        ],
+        "target": "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8",
+        "chain": [
+          "b47e21e6822b2816c00c95443bcc7d1eb57b0a9b15111c6087f6d7972153bee8"
+        ],
+        "descendants": [
+          "09f7151a12a0cce41af009631e7c7a4771bd09fd2c330e10e586139bda8cc62c",
+          "d21d2e004abf1e44953d6808ddc1345a54be6404bd5eba8acd136cf85f2a25c2",
+          "c076670ed977bb6e4d38b4de3510baa15f0fc234763c33d52a9ad8fb18a029c5",
+          "c699c5fc09f5c94076098c518c2d9923d3693c46c2c177fcec625ec01002ebca"
+        ]
+      },
+      {
+        "name": "descendants-of-an-absent-fact",
+        "note": "the trail BELOW an unseen fact is still knowable; the trail above it is not, and the absent fact MUST NOT be reported as a root",
+        "stream": [
+          {
+            "seq": 1,
+            "recv": 1,
+            "id": "ea33d35f2dde2c7a8a46d3651846f01c6a80f771d29a2328bcf2a25c8c09e168",
+            "type": "orphan",
+            "author": "a",
+            "ts": 1,
+            "payload": {},
+            "refs": {
+              "parent": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            },
+            "sig": "1ab1c7c82bc0c41a7bdc8ff3fb6ece29937429773cc14990e61f0d01654fd8ee"
+          }
+        ],
+        "target": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "chain": [],
+        "descendants": [
+          "ea33d35f2dde2c7a8a46d3651846f01c6a80f771d29a2328bcf2a25c8c09e168"
         ]
       }
     ]

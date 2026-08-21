@@ -19,7 +19,7 @@ import { cors } from "hono/cors";
 import { BusV2 } from "./bus.js";
 import type { ReadQuery } from "./bus.js";
 import type { FsyncPolicy } from "./log.js";
-import type { FactInput } from "./types.js";
+import { FactRejected, type FactInput } from "./types.js";
 
 /** Hard cap on a single read window (review M2): a valid-but-huge `limit` is
  *  clamped to this so one request can never stream an unbounded log. Readers
@@ -38,7 +38,7 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
   const app = new Hono();
   app.use("*", cors());
 
-  app.get("/health", (c) => c.json({ status: "ok", protocol: "2.0", head_seq: bus.headSeq() }));
+  app.get("/health", (c) => c.json({ status: "ok", protocol: "3.0", head_seq: bus.headSeq() }));
 
   // Live dashboard — a static page that reads the public wire surface.
   app.get("/dashboard", async (c) => {
@@ -71,13 +71,15 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
     } catch {
       return c.json({ error: "invalid JSON body" }, 400);
     }
-    if (!body?.type || !body?.author || typeof body?.ts !== "number") {
-      return c.json({ error: "type, author, ts are required" }, 400);
-    }
+    // §1.1's domains are enforced in the core (types.ts), so this route only
+    // has to carry the status back out: 400 well-formedness, 413 a §8 limit.
     try {
       const r = bus.append(body);
       return c.json(r, r.deduped ? 200 : 201);
     } catch (err) {
+      if (err instanceof FactRejected) {
+        return c.json({ error: err.message }, err.status);
+      }
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 409);
     }
   });

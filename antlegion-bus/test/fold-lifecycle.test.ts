@@ -9,6 +9,11 @@ function f(seq: number, author: string, refs: Fact["refs"], recv = 1000, type = 
 
 const F = "F";
 
+/** The fact being claimed. Its author matters: §5.1 gates retraction on it. */
+const target: Fact = {
+  seq: 0, recv: 1000, id: F, type: "task", author: "seed", ts: 1, payload: {}, refs: {}, sig: "",
+};
+
 describe("v2 fold — lifecycle", () => {
   it("a single claim makes F claimed by that author", () => {
     const s = [f(1, "W", { claim_of: F })];
@@ -46,9 +51,15 @@ describe("v2 fold — lifecycle", () => {
     expect(lifecycle(s, F, { now: 2000, claimTimeout: 600 })).toEqual({ state: "open", owner: null });
   });
 
-  it("a tombstone makes F dead", () => {
-    const s = [f(1, "W", { claim_of: F }), f(2, "gc", { tombstones: F }, 1000, "_.tombstone")];
-    expect(lifecycle(s, F, { now: 1000 }).state).toBe("dead");
+  it("the target's own author can retract it — a stranger cannot (§5.1)", () => {
+    // The stream's target fact is authored by "seed" (see `target` below), so
+    // only "seed" can retract it. v2.0 let anyone, which made retraction a
+    // data-destruction primitive available to every writer.
+    const own = [target, f(2, "W", { claim_of: F }), f(3, "seed", { tombstones: F }, 1000, "_.tombstone")];
+    expect(lifecycle(own, F, { now: 1000 }).state).toBe("dead");
+
+    const stranger = [target, f(2, "W", { claim_of: F }), f(3, "gc", { tombstones: F }, 1000, "_.tombstone")];
+    expect(lifecycle(stranger, F, { now: 1000 }).state).toBe("claimed");
   });
 
   it("didIWin reflects the deterministic winner", () => {

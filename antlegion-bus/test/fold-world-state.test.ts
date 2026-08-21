@@ -43,13 +43,39 @@ describe("fold — subject register (§3.3): what is X right now", () => {
     expect(history(s, "k").map((x) => x.id)).toEqual(["id1", "id3"]);
   });
 
-  it("explicit supersedes beats group order and may leave the subject behind", () => {
+  it("a successor that does not carry the subject does NOT become current", () => {
+    // §3.1 rule 1: current(S) ranges over history(S) only. In v2.0 an explicit
+    // successor could become current(S) without carrying the subject, so
+    // `current(S) ∉ history(S)` was reachable and the two folds disagreed about
+    // which facts were live. To say what X is now, say it *about X*.
     const s = [
       f(1, "A", { subject: "k" }, "v", { v: 1 }),
       f(2, "A", { subject: "k" }, "v", { v: 2 }),
-      f(3, "B", { supersedes: "id2" }, "v", { v: 3 }), // no subject on the successor
+      f(3, "A", { supersedes: "id2" }, "v", { v: 3 }), // no subject on the successor
+    ];
+    expect(current(s, "k")?.id).toBe("id2");
+    expect(history(s, "k").map((x) => x.id)).toEqual(["id1", "id2"]);
+  });
+
+  it("a successor that DOES carry the subject moves the register", () => {
+    const s = [
+      f(1, "A", { subject: "k" }, "v", { v: 1 }),
+      f(2, "A", { subject: "k" }, "v", { v: 2 }),
+      f(3, "A", { subject: "k", supersedes: "id2" }, "v", { v: 3 }),
     ];
     expect(current(s, "k")?.id).toBe("id3");
+  });
+
+  it("a reserved-type fact tagged with a subject is not a register member", () => {
+    // §3.1 rule 6: otherwise the retraction itself becomes current(S) and
+    // simultaneously supersedes the fact it retracts.
+    const s = [
+      f(1, "A", { subject: "k" }, "v", { v: 1 }),
+      f(2, "A", { tombstones: "id1", subject: "k" }, "_.tombstone"),
+    ];
+    expect(history(s, "k").map((x) => x.id)).toEqual(["id1"]);
+    expect(current(s, "k")).toBeNull();          // id1 was retracted by its author
+    expect(isSuperseded(s, "id1")).toBe(false);  // retracted is never superseded
   });
 
   it("a tombstoned current retracts the register: null, not the previous value", () => {

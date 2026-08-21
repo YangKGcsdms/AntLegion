@@ -82,7 +82,7 @@ describe("alctl — the redis-cli analog", () => {
     lines.length = 0;
     expect(await run(["info"])).toBe(0);
     const info = JSON.parse(lines[0]);
-    expect(info.protocol).toBe("2.0");
+    expect(info.protocol).toBe("3.0");
     expect(info.facts).toBe(2);
     expect(info.head_seq).toBe(2);
     expect(info.fsync).toBeDefined();

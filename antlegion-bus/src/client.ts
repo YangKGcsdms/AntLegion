@@ -16,10 +16,11 @@ import type { AppendResult, Fact, FactInput, Refs } from "./types.js";
 import { RESERVED } from "./types.js";
 import type { BusV2, ReadQuery } from "./bus.js";
 import {
-  lifecycle, claimWinner, didIWin, trust, causationChain, descendants,
+  lifecycle, claimWinner, didIWin, trust, causationChain, causationFacts, descendants,
   supersededBy, current, history,
   colony, orphanReport, contextGaps,
-  type Lifecycle, type TrustState, type AgentRegistration, type OrphanReport, type ContextGap,
+  type Lifecycle, type TrustState, type TrailNode, type AgentRegistration,
+  type OrphanReport, type ContextGap,
 } from "./fold.js";
 
 /**
@@ -98,9 +99,26 @@ export function httpTransport(baseUrl: string): Transport {
 const nonce = () => randomBytes(8).toString("hex");
 const now = () => Date.now() / 1000;
 
+/**
+ * Drop `refs` keys whose value is undefined before appending.
+ *
+ * §1.1 rejects a null or empty refs value rather than dropping it, so an
+ * accidental `{ subject: undefined }` is now an error at the bus instead of a
+ * silent omission. Deciding not to write a key is the author's job, and this is
+ * where the author lives — over HTTP JSON.stringify would have done it
+ * invisibly, so doing it here also keeps the two transports identical.
+ */
+function pruneRefs(refs: Refs | undefined): Refs | undefined {
+  if (!refs) return undefined;
+  const out: Refs = {};
+  for (const [k, v] of Object.entries(refs)) if (v !== undefined) out[k] = v;
+  return Object.keys(out).length ? out : undefined;
+}
+
 export class ClientV2 {
   private mirror: Fact[] = [];
   private cursor = 0;
+  private claimTimeoutAdopted = false;
   private readonly foldOpts: { claimTimeout?: number };
 
   constructor(
@@ -111,6 +129,27 @@ export class ClientV2 {
     this.foldOpts = { claimTimeout: opts.claimTimeout };
   }
 
+  /**
+   * Adopt Δ from the bus (§3.4, §8). Δ is a property of the log, not of the
+   * reader: a client folding with its own value is non-conforming and the
+   * exclusivity guarantee does not hold for it. Called automatically on the
+   * first sync; an explicit `claimTimeout` passed to the constructor wins, so a
+   * test can still pin one.
+   */
+  private async adoptClaimTimeout(): Promise<void> {
+    if (this.foldOpts.claimTimeout !== undefined || this.claimTimeoutAdopted) return;
+    this.claimTimeoutAdopted = true;
+    try {
+      const info = await this.t.info?.();
+      const published = info?.claim_timeout;
+      if (typeof published === "number" && Number.isFinite(published) && published > 0) {
+        this.foldOpts.claimTimeout = published;
+      }
+    } catch {
+      // An info-less transport is allowed; the §8 default stands.
+    }
+  }
+
   /** A copy of this client bound to a different author (same transport, fresh mirror). */
   as(author: string): ClientV2 {
     return new ClientV2(this.t, author, this.foldOpts);
@@ -118,6 +157,7 @@ export class ClientV2 {
 
   /** Drain new facts into the local mirror up to the current head. */
   async sync(): Promise<void> {
+    await this.adoptClaimTimeout();
     for (;;) {
       const batch = await this.t.read({ since: this.cursor, limit: 500 });
       if (batch.length === 0) break;
@@ -134,7 +174,7 @@ export class ClientV2 {
     payload: Record<string, unknown> = {},
     opts: { refs?: Refs; nonce?: string } = {},
   ): Promise<{ id: string; seq: number; deduped: boolean }> {
-    const r = await this.t.append({ type, author: this.author, ts: now(), payload, refs: opts.refs, nonce: opts.nonce });
+    const r = await this.t.append({ type, author: this.author, ts: now(), payload, refs: pruneRefs(opts.refs), nonce: opts.nonce });
     return { id: r.id, seq: r.seq, deduped: r.deduped };
   }
 
@@ -209,10 +249,21 @@ export class ClientV2 {
     return trust(this.mirror, F, quorum);
   }
 
-  /** How F came to be: root→F along `refs.parent` (§3.4). */
-  async causation(F: string): Promise<Fact[]> {
+  /**
+   * How F came to be: root→F along `refs.parent` (§3.2). An unresolved parent
+   * comes back as an explicit `TrailGap` rather than a silent stop — a chain
+   * that looks complete but is not turns "I could not see the origin" into
+   * "this is the origin".
+   */
+  async causation(F: string): Promise<TrailNode[]> {
     await this.sync();
     return causationChain(this.mirror, F);
+  }
+
+  /** The ancestry of F with gaps dropped, for callers that only want the facts. */
+  async causationFacts(F: string): Promise<Fact[]> {
+    await this.sync();
+    return causationFacts(this.mirror, F);
   }
 
   /** What F led to: every transitive child of F, seq-ordered (§3.4, forward). */
@@ -244,8 +295,12 @@ export class ClientV2 {
   /**
    * Replace F with a successor: publish `type` with `refs.supersedes: F`,
    * inheriting F's `refs.subject` (so the register moves with it) unless the
-   * caller passes an explicit subject. Any author may supersede — the bus does
-   * not adjudicate; the reader's trust fold does (§3.2).
+   * caller passes an explicit subject.
+   *
+   * **Only F's own author may supersede F** (§5.1), and this throws rather than
+   * appending a fact readers would ignore. Observing that someone else's fact is
+   * stale is said by contradicting it (§3.3) or by writing to the register —
+   * not by retiring their statement.
    */
   async supersede(
     F: string,
@@ -256,15 +311,34 @@ export class ClientV2 {
     await this.sync();
     const target = this.mirror.find((x) => x.id === F);
     if (!target) throw new Error(`fact ${F} not found`);
+    if (target.author !== this.author) {
+      throw new Error(
+        `supersede refused — ${F} was authored by '${target.author}' (you are '${this.author}'); ` +
+        `only its author may supersede it (§5.1). Contradict it or write to the register instead.`);
+    }
     const subject = opts.subject ?? target.refs.subject;
     const refs: Refs = { ...opts.refs, supersedes: F, ...(subject ? { subject } : {}) };
     return this.publish(type, payload, { refs, nonce: nonce() });
   }
 
-  /** Retract F: append a `_.tombstone` (§5.2). Deleted is `dead`, never `superseded`. */
+  /**
+   * Retract F: append a `_.tombstone` (§5.3). Retracted is `dead`, never
+   * `superseded` — taking a statement back is not replacing it.
+   *
+   * **Only F's own author may retract F** (§5.1). An ungated tombstone was a
+   * data-destruction primitive available to every writer: it drove the target
+   * to a terminal state, folded its register to null, and licensed compaction
+   * to destroy its payload.
+   */
   async tombstone(F: string): Promise<{ id: string; seq: number }> {
     await this.sync();
-    if (!this.has(F)) throw new Error(`fact ${F} not found`);
+    const target = this.mirror.find((x) => x.id === F);
+    if (!target) throw new Error(`fact ${F} not found`);
+    if (target.author !== this.author) {
+      throw new Error(
+        `tombstone refused — ${F} was authored by '${target.author}' (you are '${this.author}'); ` +
+        `only its author may retract it (§5.1).`);
+    }
     const r = await this.t.append({ type: RESERVED.TOMBSTONE, author: this.author, ts: now(), refs: { tombstones: F }, nonce: nonce() });
     return { id: r.id, seq: r.seq };
   }
