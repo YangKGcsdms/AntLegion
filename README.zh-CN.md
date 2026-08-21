@@ -32,7 +32,7 @@ AntLegion 用一条日志取代这个中继。蚂蚁不下命令，只在地面�
 "deploy:prod 现在是 v42"是事实，上日志。
 "worker-3 去部署 v42"是命令，有收件人——日志里没有收件人。
 
-事实的 `refs` 只指向**事实 id，不指向智能体**：一条事实能说自己关于什么，说不了给谁。这就是"没有命令"的结构原因，也是它不是工作流引擎的原因——日志里没有步骤、没有指派、没有调度器。
+事实的 `refs` 只指向**一条事实，或世界的一部分——绝不指向任何一方**：一条事实能说自己关于什么，说不了给谁。这就是"没有命令"的结构原因，也是它不是工作流引擎的原因——日志里没有步骤、没有指派、没有调度器。
 
 总线只管一件事：**全序**。关于这个世界你想知道的一切，都是对全序的折叠（`PROTOCOL.md` §3，规范性）：
 
@@ -41,7 +41,9 @@ AntLegion 用一条日志取代这个中继。蚂蚁不下命令，只在地面�
 | **X 现在是什么** | `subject` 寄存器——seq 最高者胜出；撤回后折叠为「一无所知」，绝不回到旧值 |
 | **它是怎么来的 · 它引发了什么** | 因果踪迹——沿 `parent` 向后走到根，或向前走到每一个后代 |
 | **它可不可信** | corroborate / contradict 投票，quorum 是读者的策略 |
-| **谁拥有它** | seq 最小的存活 `claim_of`——所有权也是世界状态，恰好一次是全序的定理 |
+| **谁对它负责** | seq 最小的存活 `claim_of`——所有权也是世界状态，恰好一次是全序的定理 |
+
+这个顺序是有意的：它就是一个孤立 Agent 真正发问的顺序，而最后一问是**推论，不是目的**。一条流里一个 claim 都没有，它照样是个好世界。
 
 同一条流，两个读者，答案必然相同——两台机器上的智能体之间只有这条日志，却算出同一个世界，这就是全部要点。它**不是**消息队列（事实不被消费）、**不是**编排器（没人派活）、**不是**工作流引擎（就算你搭出一条流水线，那也是读者事后从踪迹里折出来的形状，不是谁持有的状态）。
 
@@ -53,21 +55,23 @@ AntLegion 用一条日志取代这个中继。蚂蚁不下命令，只在地面�
 {
   "seq":    1337,           // 总线分配的全序位置（可信）
   "recv":   1748300000.4,   // 总线盖章的可信接收时间——折叠用它，不用 ts
-  "id":     "b3f1…",        // sha256(canonical(record))——内容地址
+  "id":     "b3f1…",        // sha256(记录的 RFC 8785 JCS 规范串)——内容地址
   "type":   "deploy.status",// 点分类型；保留类型以 "_." 开头
   "author": "ci@build-7",   // 谁追加的
   "ts":     1748300000.0,   // 作者自报的时间（仅供参考——可伪造，永远别拿它折叠）
   "payload": { "…": "…" },  // 任意 JSON
-  "refs": {                 // 唯一的关系机制——所有值都是事实 id，
-    "subject": "deploy:prod",  // 绝不是 Agent id。这就是没有命令的
-    "parent":  "<id>",         // 结构性原因。
-    "supersedes": "<id>"       //（还有：tombstones · vote · claim_of · resolves · release_of）
+  "refs": {                 // 唯一的关系机制——每个值命名一条事实或世界的
+    "subject": "deploy:prod",  // 一部分，绝不命名任何一方。这就是没有命令的
+    "parent":  "<id>",         // 结构性原因。（还有：tombstones · vote ·
+    "supersedes": "<id>"       //  claim_of · resolves · release_of · about · answers）
   },
   "sig": "hmac…"            // 总线签的 HMAC-SHA256
 }
 ```
 
 **两个操作，这就是全部线面**：`POST /facts` 追加，`GET /facts?since=N` 读取。寄存器、踪迹、信任、所有权都是*关于事实的事实*，由读者折叠——见 [PROTOCOL.md](PROTOCOL.md)。
+
+但不是每条链接都照单全收。`claim_of`／`resolves`／`release_of`／`tombstones` 是**生命周期 ref**——一条事实最多只能带一个——而且读者在采信之前要过几道门：你只能取代或撤回**你自己**的事实，只有当前 claim 胜出者才能 resolve，你也不能给自己的事实投票（[§5](PROTOCOL.md)，v3.0 新增）。
 
 ## 快速上手
 
@@ -186,30 +190,44 @@ AntLegion/
 
 ## 当前状态
 
-**Alpha**——核心协议、参考实现、单节点运维故事都是扎实的。尚不建议用于不可信的公网（没有鉴权；总线信任它的调用者，和 Redis 一样）。
+**Alpha**——参考实现与单节点运维故事都是扎实的。尚不建议用于不可信的公网（没有网络层鉴权；总线信任它的调用者，和 Redis 一样）。
 
-已完成：无状态可信核心 · 带 `appendfsync` 与压缩的只追加日志 · 读者折叠 SDK（寄存器、踪迹、信任、所有权）· `alctl` CLI · 带独立 Python 校验器的跨语言合规向量 · 共享视图 + 所有权场景 · Docker 镜像 · 进程内约 160k 追加/秒 · 176 个测试 · npm 包 · 常驻 Agent（`ant init` / `ant start`、`@antlegion/dsh`）。
+> [!IMPORTANT]
+> **目前规范跑在实现前面。**[PROTOCOL.md](PROTOCOL.md) 已从「共享世界状态」这个本原重新推导为 **v3.0（草案）**。而已发布的总线、SDK 和合规向量仍然实现 **v2.0**——v3.0 是刻意**不与 v2.0 wire 兼容**的，最要命的一条是把自制的规范化换成了 **RFC 8785（JCS）**，这会改掉每一个 `id`。
 
-下一步：多语言客户端 SDK（Go、Python、Rust——[合规向量](antlegion-bus/conformance/vectors.json)是测试目标）· `PROTOCOL.md` 的论文级重写（[docs/protocol/](docs/protocol/)）· 面向暴露部署的鉴权与限流 · 复制/高可用（[§7](PROTOCOL.md)）。
+| | v3.0 规范 | 当前代码（`antlegion-bus/`） |
+|---|---|---|
+| 规范化（§4） | RFC 8785 JCS | v2.0 规则——`ts` 渲染成带尾随 `.0` |
+| [`conformance/vectors.json`](antlegion-bus/conformance/vectors.json) | 需重新钉到 v3.0 | `"version": "2.0"`——64 个 id，校验器通过 |
+| `supersedes`／`tombstones` 作者门控（§5.1） | 必须 | 未实施——任何作者都能撤回任何事实 |
+| `supersededBy`（§3.1） | *直接*后继，无前向游走 | *最后一个*后继，外加一次 subject 前向游走 |
+| 世界状态折叠（§3.1–§3.2） | 规范性 | 已实现——`current` · `history` · `descendants` |
+
+**今天请按 v2.0 开发**；v3.0 用来看方向。下面列出的东西都还没有重新钉到 v3.0。
+
+已完成：无状态可信核心 · 带 `appendfsync` 与压缩的只追加日志 · 读者折叠 SDK（寄存器、踪迹、信任、所有权）· `alctl` CLI · 带独立 Python 校验器的跨语言合规向量 · 共享视图 + 所有权场景 · Docker 镜像 · 进程内约 160k 追加/秒 · 176 个测试 · npm 包 · 常驻 Agent（`ant init` / `ant start`、`@antlegion/dsh`）· v3.0 重新推导（[docs/protocol/](docs/protocol/)）。
+
+下一步：**把 v3.0 落到代码里**——JCS 规范化、§5 授权门控、收紧后的 §3.1／§3.4 折叠、重新生成合规向量 · 按 v3.0 重写 `PROTOCOL.zh-CN.md` · 多语言客户端 SDK（Go、Python、Rust——合规向量是测试目标）· 面向暴露部署的鉴权与限流 · 复制/高可用（[§7](PROTOCOL.md)）。
 
 ## 文档
 
 | | |
 |---|---|
-| [PROTOCOL.md](PROTOCOL.md) | 线协议——权威；§3 折叠规则是规范性的 |
+| [PROTOCOL.md](PROTOCOL.md) | 线协议——权威；§3 折叠规则是规范性的。**v3.0，草案** |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | 分步：线面、CLI、SDK、持久化与恢复 |
 | [docs/AGENT-CLI.md](docs/AGENT-CLI.md) | 从已有 Agent 驱动日志，以及如何让它采用 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 各部分如何拼合、什么被证明了、为什么长这样 |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | 环境变量、运行方式、运维速查、排障 |
 | [docs/FACT-MODEL.md](docs/FACT-MODEL.md) | 板上有谁、孤儿事实、上下文充分性闭环 |
 | [docs/EVOLUTION.md](docs/EVOLUTION.md) | v0 → v1 → v2：试过什么、为什么变 |
+| [docs/protocol/](docs/protocol/) | v3.0 工作区——诊断、推导、骨架 |
 | [ant/README.md](ant/README.md) | 日志上的常驻 Agent；dev-chain 作为工作流客户端示例 |
 
-每份文档都有 `.zh-CN.md` 伴生版。
+每份文档都有 `.zh-CN.md` 伴生版。唯一的例外（文件里已自行标注）：`PROTOCOL.zh-CN.md` 仍对应 **v2.0**，将在 v3.0 脱离草案后重写——在那之前请以英文版协议为实现依据。
 
 ## 参与贡献
 
-欢迎贡献。**协议变更是线上破坏性的**：对事实形状、`id` 计算（§4）或 §3 折叠规则的任何改动，必须同时落到 `PROTOCOL.md`、`conformance/vectors.json`（用 `npx tsx conformance/generate.ts` 重新生成）和跨语言校验器——在一个声明 `[protocol-change]` 的提交里一起落地。
+欢迎贡献。**协议变更是线上破坏性的**：对事实形状、`id` 计算（§4）或 §3 折叠规则的任何改动，必须同时落到 `PROTOCOL.md`、`conformance/vectors.json`（用 `npx tsx conformance/generate.ts` 重新生成）和跨语言校验器——在一个声明 `[protocol-change]` 的提交里一起落地。v3.0 草案是「一起落地」这一条的既定例外：它先落规范，等实现跟上时再重新钉向量（见**当前状态**）。
 
 ```bash
 npm test                      # 176 个测试，约 1 秒
@@ -226,5 +244,5 @@ MIT——见 [LICENSE](LICENSE)。
 ---
 
 <div align="center">
-  <sub>AntLegion Protocol v2.0 · Carter.Yang 设计 · 2026 年从第一性原理推导。</sub>
+  <sub>AntLegion Protocol v3.0（草案）· Carter.Yang 设计 · 2026 年从第一性原理推导。</sub>
 </div>

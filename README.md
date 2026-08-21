@@ -32,7 +32,7 @@ AntLegion replaces the relay with a log. Think ants, not armies: an ant never te
 `"deploy:prod is at v42"` is a fact and belongs on the log.
 `"worker-3, deploy v42"` is a command — it has a recipient, and the log has none.
 
-Every fact's `refs` point at **fact ids, never agent ids** — a fact can say what it is *about*, it cannot say who it is *for*. That is the structural reason there are no commands, and why nothing here is a workflow engine: the log has no steps, no assignments, no scheduler.
+Every fact's `refs` name **a fact, or a piece of the world — never a party** — a fact can say what it is *about*, it cannot say who it is *for*. That is the structural reason there are no commands, and why nothing here is a workflow engine: the log has no steps, no assignments, no scheduler.
 
 The bus enforces exactly one thing: **total order**. Everything a reader wants to know about the shared world is a fold over that order (`PROTOCOL.md` §3, normative):
 
@@ -41,7 +41,9 @@ The bus enforces exactly one thing: **total order**. Everything a reader wants t
 | **what is X right now** | the `subject` register — highest seq wins; retracted folds to nothing, never to a stale value |
 | **how did this come to be · what did it lead to** | the causal trail — `parent` links walked back to a root, or forward to every descendant |
 | **can it be trusted** | corroborate / contradict votes, quorum is the reader's policy |
-| **who owns it** | the lowest-seq live `claim_of` — ownership is world state too, and exactly-once falls out as a theorem of order |
+| **who is responsible for it** | the lowest-seq live `claim_of` — ownership is world state too, and exactly-once falls out as a theorem of order |
+
+That order is deliberate: it is the order an isolated agent actually asks in, and the last question is **a corollary, not the purpose**. A stream with no claim in it is a perfectly good world.
 
 Two readers folding the same stream always agree. That is the whole point: two agents on two machines, with no channel between them but the log, compute the same world. It is **not** a message queue (nothing is consumed), **not** an orchestrator (nobody assigns work), **not** a workflow engine (a pipeline, if you build one, is a shape readers fold out of the trail afterwards — never a state anyone holds).
 
@@ -53,21 +55,23 @@ One primitive, immutable, content-addressed, at a unique position in a single to
 {
   "seq":    1337,           // bus-assigned position in the total order (trusted)
   "recv":   1748300000.4,   // bus-assigned trusted receive time — fold on this, not ts
-  "id":     "b3f1…",        // sha256(canonical(record)) — the content address
+  "id":     "b3f1…",        // sha256(RFC 8785 JCS of the record) — the content address
   "type":   "deploy.status",// dotted taxonomy; reserved types begin with "_."
   "author": "ci@build-7",   // who appended it
   "ts":     1748300000.0,   // author-stated time (advisory — spoofable, never fold on this)
   "payload": { "…": "…" },  // arbitrary JSON
-  "refs": {                 // the only relational mechanism — all values are fact ids,
-    "subject": "deploy:prod",  // never agent ids. That is the structural reason
-    "parent":  "<id>",         // there are no commands.
-    "supersedes": "<id>"       // (also: tombstones · vote · claim_of · resolves · release_of)
-  },
+  "refs": {                 // the only relational mechanism — every value names a fact
+    "subject": "deploy:prod",  // or a piece of the world, never a party. That is the
+    "parent":  "<id>",         // structural reason there are no commands. (also:
+    "supersedes": "<id>"       //  tombstones · vote · claim_of · resolves · release_of
+  },                           //  · about · answers)
   "sig": "hmac…"            // HMAC-SHA256 signed by the bus
 }
 ```
 
 **Two ops, and that's the whole wire surface**: `POST /facts` to append, `GET /facts?since=N` to read. Registers, trails, trust and ownership are *facts about facts*, folded by the reader — see [PROTOCOL.md](PROTOCOL.md).
+
+Not every link is taken at face value. `claim_of`/`resolves`/`release_of`/`tombstones` are **lifecycle refs** — a fact may carry at most one — and a reader gates several keys before honouring them: you may only supersede or retract **your own** fact, only the current claim winner may resolve one, and you may not vote on your own ([§5](PROTOCOL.md), new in v3.0).
 
 ## Quickstart
 
@@ -186,30 +190,44 @@ Two things deliberately **not** in the tree: `.data-v2/` (the journal) and `.ant
 
 ## Status
 
-**Alpha** — the core protocol, reference implementation, and single-node operational story are solid. Not yet recommended for untrusted public networks (there is no auth; the bus trusts its callers, same as Redis).
+**Alpha** — the reference implementation and the single-node operational story are solid. Not yet recommended for untrusted public networks (there is no network auth; the bus trusts its callers, same as Redis).
 
-Done: stateless trusted core · append-only journal with `appendfsync` + compaction · reader-fold SDK (registers, trails, trust, ownership) · `alctl` CLI · cross-language conformance vectors with an independent Python verifier · shared-view + ownership scenarios · Docker image · ~160k appends/s in-process · 176 tests · npm packages · resident agents (`ant init` / `ant start`, `@antlegion/dsh`).
+> [!IMPORTANT]
+> **The spec is currently ahead of the code.** [PROTOCOL.md](PROTOCOL.md) has been re-derived as **v3.0 (draft)** from the shared-world-state primitive. The shipped bus, SDK and conformance vectors still implement **v2.0**, and v3.0 is deliberately **not wire-compatible** with it — most consequentially it replaces the bespoke canonicalization with **RFC 8785 (JCS)**, which changes every `id`.
 
-Next: multi-language client SDKs (Go, Python, Rust — the [conformance vectors](antlegion-bus/conformance/vectors.json) are the test target) · a paper-grade rewrite of `PROTOCOL.md` ([docs/protocol/](docs/protocol/)) · auth + rate limiting for exposed deployments · replication/HA ([§7](PROTOCOL.md)).
+| | v3.0 spec | code today (`antlegion-bus/`) |
+|---|---|---|
+| canonicalization (§4) | RFC 8785 JCS | v2.0 rules — `ts` renders with a trailing `.0` |
+| [`conformance/vectors.json`](antlegion-bus/conformance/vectors.json) | must be re-pinned to v3.0 | `"version": "2.0"` — 64 ids, verifier green |
+| `supersedes` / `tombstones` author gate (§5.1) | required | not enforced — any author can retract any fact |
+| `supersededBy` (§3.1) | the *immediate* successor, no forward-walk | the *last* successor, plus a subject forward-walk |
+| world-state folds (§3.1–§3.2) | normative | shipped — `current` · `history` · `descendants` |
+
+**Build against v2.0 today**; read v3.0 for where this is going. Nothing below has been re-pinned to v3.0 yet.
+
+Done: stateless trusted core · append-only journal with `appendfsync` + compaction · reader-fold SDK (registers, trails, trust, ownership) · `alctl` CLI · cross-language conformance vectors with an independent Python verifier · shared-view + ownership scenarios · Docker image · ~160k appends/s in-process · 176 tests · npm packages · resident agents (`ant init` / `ant start`, `@antlegion/dsh`) · the v3.0 re-derivation ([docs/protocol/](docs/protocol/)).
+
+Next: **land v3.0 in code** — JCS canonicalization, the §5 authorization gates, the tightened §3.1/§3.4 folds, regenerated conformance vectors · rewrite `PROTOCOL.zh-CN.md` against v3.0 · multi-language client SDKs (Go, Python, Rust — the vectors are the test target) · auth + rate limiting for exposed deployments · replication/HA ([§7](PROTOCOL.md)).
 
 ## Docs
 
 | | |
 |---|---|
-| [PROTOCOL.md](PROTOCOL.md) | the wire protocol — authoritative; §3 fold rules are normative |
+| [PROTOCOL.md](PROTOCOL.md) | the wire protocol — authoritative; §3 fold rules are normative. **v3.0, draft** |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | step-by-step: wire surface, CLI, SDK, persistence & recovery |
 | [docs/AGENT-CLI.md](docs/AGENT-CLI.md) | driving the log from an existing agent, and how to get one to adopt it |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how the pieces fit, what's proven, and why it's shaped this way |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | env vars, ways to run it, ops cheat sheet, troubleshooting |
 | [docs/FACT-MODEL.md](docs/FACT-MODEL.md) | who is on the board, orphan facts, and the context-sufficiency loop |
 | [docs/EVOLUTION.md](docs/EVOLUTION.md) | v0 → v1 → v2: what was tried, and why it changed |
+| [docs/protocol/](docs/protocol/) | the v3.0 workspace — diagnosis, derivation, skeleton |
 | [ant/README.md](ant/README.md) | resident agents on a log; the dev-chain as a workflow client example |
 
-Every document has a `.zh-CN.md` companion.
+Every document has a `.zh-CN.md` companion. One exception, marked in the file itself: `PROTOCOL.zh-CN.md` still tracks **v2.0** and will be rewritten once v3.0 leaves draft — until then the English protocol is the one to implement against.
 
 ## Contributing
 
-Contributions are welcome. **Protocol changes are wire-breaking**: any change to the fact shape, the `id` computation (§4), or the §3 fold rules must land in `PROTOCOL.md`, `conformance/vectors.json` (regenerate with `npx tsx conformance/generate.ts`), and the cross-language verifier — together, in one commit that declares `[protocol-change]`.
+Contributions are welcome. **Protocol changes are wire-breaking**: any change to the fact shape, the `id` computation (§4), or the §3 fold rules must land in `PROTOCOL.md`, `conformance/vectors.json` (regenerate with `npx tsx conformance/generate.ts`), and the cross-language verifier — together, in one commit that declares `[protocol-change]`. The v3.0 draft is the standing exception to the *together* part: it lands the spec first, and the vectors get re-pinned when the implementation follows (see **Status**).
 
 ```bash
 npm test                      # 176 tests, ~1s
@@ -226,5 +244,5 @@ MIT — see [LICENSE](LICENSE).
 ---
 
 <div align="center">
-  <sub>AntLegion Protocol v2.0 · Designed by Carter.Yang · Derived from first principles, 2026.</sub>
+  <sub>AntLegion Protocol v3.0 (draft) · Designed by Carter.Yang · Derived from first principles, 2026.</sub>
 </div>
