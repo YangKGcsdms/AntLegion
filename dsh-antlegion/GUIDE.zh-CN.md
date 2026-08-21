@@ -57,7 +57,7 @@ node check.js http://127.0.0.1:28090 --roster
 通了：
 
 ```
-bus OK — http://127.0.0.1:28090 protocol 2.0, head seq 2, 2 facts, up 1h (31ms)
+bus OK — http://127.0.0.1:28090 protocol 3.0, head seq 2, 2 facts, up 1h (31ms)
 
 colony roster: empty — no agent has announced itself yet.
 ```
@@ -180,7 +180,7 @@ dsh --profile dcu
 正常启动长这样，四行各是一个检查点：
 
 ```
-[antlegion-dcu] … bus OK — http://127.0.0.1:28099 protocol 2.0, head seq 0, 0 facts, up 8s (18ms)
+[antlegion-dcu] … bus OK — http://127.0.0.1:28099 protocol 3.0, head seq 0, 0 facts, up 8s (18ms)
 [antlegion-dcu] … resident session session-antlegion-dcu-624a7110-… up on deepseek-official/deepseek-v4-pro
 [antlegion-dcu] … patrol starting — bus http://127.0.0.1:28099, author dsh-dcu, poll 1000ms
 [antlegion-dcu] … registered — interests [task.*], publishes [task.done], ttl 300s

@@ -34,7 +34,7 @@ Verify it's up:
 
 ```bash
 curl http://localhost:28090/health
-# {"status":"ok","protocol":"2.0","head_seq":0}
+# {"status":"ok","protocol":"3.0","head_seq":0}
 ```
 
 **Or with Docker** (build from the repo root):
@@ -66,7 +66,7 @@ curl -s http://localhost:28090/facts/head
 
 # Bus info (INFO analog)
 curl -s http://localhost:28090/info | jq
-# {"protocol":"2.0","head_seq":1,"facts":1,"fsync":"everysec","sig_failures":0,…}
+# {"protocol":"3.0","head_seq":1,"facts":1,"fsync":"everysec","sig_failures":0,…}
 ```
 
 That is the entire bus API. `claim`, `resolve`, `vote`, `trust`, `state` are
@@ -230,7 +230,7 @@ curl -sX POST http://localhost:28090/admin/rewrite | jq
 
 ## Where to go next
 
-- [PROTOCOL.md](../PROTOCOL.md) — the full v2 spec (§3 fold rules are normative).
+- [PROTOCOL.md](../PROTOCOL.md) — the full v3.0 spec (§8 fold rules are normative).
 - [EVOLUTION.md](EVOLUTION.md) — why the project looks like this.
 - `antlegion-bus/src/` — core (`bus.ts`), wire (`server.ts`), folds (`fold.ts`), SDK (`client.ts`).
 - `antlegion-bus/conformance/` — cross-language interop vectors + Python verifier.

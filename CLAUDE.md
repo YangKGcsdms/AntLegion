@@ -19,7 +19,7 @@ Two published packages, no root `package.json` and **no npm workspace** — each
 
 `ant` depends on the **published** `@antlegion/bus` (`^0.4.x`), not on `../antlegion-bus`. A local bus change is invisible to `ant` until it is published — or until you `npm link` it deliberately. When bumping the bus, `ant/package-lock.json` must be re-synced or CI's `ant` job fails.
 
-`PROTOCOL.md` is the **authoritative spec**; its §3 fold rules are normative (that is where meaning lives, since the bus is stateless). Keep `PROTOCOL.md` and `antlegion-bus/src/` in sync. (An earlier v1 — a mutable-state bus + a separate MCP package — was removed; see `docs/EVOLUTION.md` and git history.)
+`PROTOCOL.md` is the **authoritative spec**; its §8 fold rules are normative (that is where meaning lives, since the bus is stateless). Keep `PROTOCOL.md` and `antlegion-bus/src/` in sync. (An earlier v1 — a mutable-state bus + a separate MCP package — was removed; see `docs/EVOLUTION.md` and git history.)
 
 ## Commands
 
@@ -38,7 +38,7 @@ npm test                                    # vitest run
 npx vitest run test/fold-lifecycle.test.ts  # single file
 npx vitest run -t "exactly-once"            # by name
 
-# conformance vectors (the §4 interop contract)
+# conformance vectors (the §A.2 interop contract)
 npx tsx conformance/generate.ts   # regenerate vectors.json (only on an intentional protocol change)
 python3 conformance/verify.py     # independent cross-language check: reproduce every committed hash byte-for-byte
 
@@ -66,7 +66,7 @@ your code → ClientV2 (client.ts)    ─┘                         └ folds (
 ### `antlegion-bus/src/` (flat)
 
 - **`bus.ts` — stateless trusted core.** Assigns total order (`seq`), verifies the content-hash `id`, stamps a trusted receive time (`recv`) + HMAC `sig`, persists, serves a range. Its only derived indexes (seq counter, `id→seq` dedup) are pure projections of the log. **No per-fact mutable state, no state machine.**
-- **`fold.ts` — reader folds (the semantics).** `current`/`history` (the §3.3 subject register — "what is X right now"), `supersededBy`/`isSuperseded`, `causationChain`/`descendants` (§3.4 trail, both directions), `lifecycle` (claimed/resolved/dead/open), `claimWinner`/`didIWin`, `trust`, plus the optional conventions of §3.5–§3.6: `colony`/`SYS_REGISTRY` (who is on the board), `orphanReport` (fact types nobody listens for), `contextGaps` (`context.requested`/`context.provided`). Pure functions over the fact stream.
+- **`fold.ts` — reader folds (the semantics).** `current`/`history` (the §8.1 subject register — "what is X right now"), `supersededBy`/`isSuperseded`, `causationChain`/`descendants` (§8.2 trail, both directions, with an explicit gap marker for an unresolved ancestor), `lifecycle` (claimed/resolved/dead/open), `claimWinner`/`didIWin`, `trust`, plus the optional conventions of §8.5: `colony`/`SYS_REGISTRY` (who is on the board), `orphanReport` (fact types nobody listens for), `contextGaps` (`context.requested`/`context.provided`). Pure functions over the fact stream.
 - **`server.ts`** — Hono wire surface: `POST /facts`, `GET /facts` (since/type/author/refs; returns `X-Max-Seq` for cursor advance), `/facts/head`, `/facts/:id`, `/info` (INFO), `POST /admin/rewrite` (BGREWRITEAOF), `/health`, plus the static `/dashboard` + `/console`.
 - **`log.ts`** — append-only AOF: `appendfsync` policy (`always|everysec|no`), flush-on-close, compaction that keeps the full `{id,seq,recv,author,refs,sig}` skeleton (only payloads dropped).
 - **`client.ts`** — folding SDK over a transport (`localTransport(bus)` for in-process/tests, `httpTransport(url)` for real). `cli.ts` drives this same client, so fold logic is written once.
@@ -94,18 +94,18 @@ poll(since cursor) → rebuild shared fold → evaluate trigger → act → adva
 
 ### Things to know
 - **Exactly-once is a theorem of total order**, not a lock: the lowest-`seq` live `claim_of:F` wins; every reader computes the same winner.
-- **Time-based folds key on `recv` (bus-stamped, trusted), never `ts` (author-stated, advisory).** Claim expiry is **recv-anchored and deterministic**: a claim expires once a later fact's `recv` passes `claim.recv + Δ`; only a trailing claim falls back to wall-clock `now`. This lets crash-recovery re-dispatch transfer ownership without un-doing a real resolve (`PROTOCOL.md` §3.1).
+- **Time-based folds key on `recv` (bus-stamped, trusted), never `ts` (author-stated, advisory).** Claim expiry is **recv-anchored and deterministic**: a claim expires once a later fact's `recv` passes `claim.recv + Δ`; only a trailing claim falls back to wall-clock `now`. This lets crash-recovery re-dispatch transfer ownership without un-doing a real resolve (`PROTOCOL.md` §8.4, §9.3).
 - **Idempotent by `id`**: re-appending identical content returns the existing fact; set a fresh `nonce` for a genuinely new action. Several subsystems lean on this deliberately — `sys.registry` facts publish with `ts:0` + a stable nonce so restart-registration dedups; scheduler fires use `sched:{colony}:{name}:{slot}` so a restart can never double-fire; `req new` and the ingestor's backfill plan byte-identical facts for the same dir.
 - **A long act holds its claim by overlapping re-claim, never release** (`worker-spawn.ts`): re-claim the same input with a fresh nonce every Δ/3; the earlier claim expires at `recv+Δ` and the same author's later claim is then the lowest live seq. Ownership continues with zero race and zero protocol change; if the child dies, renewal stops and the claim lapses naturally.
 - **The bus cannot forbid two processes sharing an author — a fold can see it.** `detectIdentityConflicts` folds heartbeats; two live instance tokens under one author is a double-start (检测代替禁止). One identity = one process.
 - **Server config is env-driven** (`antlegion-bus/src/config.ts`, the `redis.conf` analog): `PORT` (28090), `HOST` (127.0.0.1), `ANTLEGION_DATA_DIR` (`.data-v2`), `ANTLEGION_FSYNC` (`always|everysec|no`, default `everysec`), `ANTLEGION_BUS_SECRET`, `ANTLEGION_MAX_DEPTH` (64). Set a **stable** `ANTLEGION_BUS_SECRET` — unset, the bus mints a fresh HMAC key each boot and `sig`s written before a restart can no longer be verified.
 - ESM (`"type":"module"`); intra-package imports use explicit `.js` extensions from `.ts` sources.
-- **Spec safety rules are enforced, not just documented (§4/§5).** `append` rejects causation depth > `maxDepth`; parent *cycles* need no check — content addressing makes them unconstructible. The bus verifies every fact's `sig` on recovery when the secret is stable and surfaces `sig_failures` via INFO (`hash.ts:verifySig`, constant-time; HMAC is symmetric so only the bus / a secret-sharing replica can verify, never an HTTP client).
+- **Spec safety rules are enforced, not just documented (§10).** `append` rejects causation depth > `maxDepth`; parent *cycles* need no check — content addressing makes them unconstructible. The bus verifies every fact's `sig` on recovery when the secret is stable and surfaces `sig_failures` via INFO (`hash.ts:verifySig`, constant-time; HMAC is symmetric so only the bus / a secret-sharing replica can verify, never an HTTP client).
 - Spawned agent children get a **whitelisted env only**; `ANTLEGION_BUS_SECRET` and `LARK_*` are blocked even if explicitly listed in `spawn.envPass`.
 - Docs are bilingual by convention: **every `X.md` has an `X.zh-CN.md` companion** — update both, or neither.
 
 ## Reference docs
-- `PROTOCOL.md` — the protocol (authoritative; §3 folds are normative). `PROTOCOL.zh-CN.md` — Chinese reader's guide.
+- `PROTOCOL.md` — the protocol (authoritative; §8 folds are normative). `PROTOCOL.zh-CN.md` — the same spec in Chinese, section-for-section aligned.
 - `docs/QUICKSTART.md` · `docs/AGENT-CLI.md` (how agents drive the bus via `alctl`) · `docs/FACT-MODEL.md` · `docs/EVOLUTION.md` (v0 runtime → v1 → v2 monist redesign, and why v1 was removed) · `docs/DOCKER-VERIFY.md` · `docs/proposals/` (design docs under review).
 - `README.md` — overview, positioning, repo map, validated guarantees. `ant/README.md` — the DCU model, dev-chain table, supervision board.
 - `research/` — first-party measurements the READMEs cite (contention/double-execution, forged-evidence interception). `deploy/mvp/`, `toys/` — containerized multi-agent runs.

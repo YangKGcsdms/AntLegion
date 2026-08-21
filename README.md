@@ -11,7 +11,7 @@
 [![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-176%20passing-brightgreen?style=flat-square)](antlegion-bus/test/)
+[![Tests](https://img.shields.io/badge/tests-244%20passing-brightgreen?style=flat-square)](antlegion-bus/test/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/status-alpha-orange?style=flat-square)]()
 
@@ -34,7 +34,7 @@ AntLegion replaces the relay with a log. Think ants, not armies: an ant never te
 
 Every fact's `refs` name **a fact, or a piece of the world — never a party** — a fact can say what it is *about*, it cannot say who it is *for*. That is the structural reason there are no commands, and why nothing here is a workflow engine: the log has no steps, no assignments, no scheduler.
 
-The bus enforces exactly one thing: **total order**. Everything a reader wants to know about the shared world is a fold over that order (`PROTOCOL.md` §3, normative):
+The bus enforces exactly one thing: **total order**. Everything a reader wants to know about the shared world is a fold over that order (`PROTOCOL.md` §8, normative):
 
 | question | fold |
 |---|---|
@@ -71,7 +71,7 @@ One primitive, immutable, content-addressed, at a unique position in a single to
 
 **Two ops, and that's the whole wire surface**: `POST /facts` to append, `GET /facts?since=N` to read. Registers, trails, trust and ownership are *facts about facts*, folded by the reader — see [PROTOCOL.md](PROTOCOL.md).
 
-Not every link is taken at face value. `claim_of`/`resolves`/`release_of`/`tombstones` are **lifecycle refs** — a fact may carry at most one — and a reader gates several keys before honouring them: you may only supersede or retract **your own** fact, only the current claim winner may resolve one, and you may not vote on your own ([§5](PROTOCOL.md), new in v3.0).
+Not every link is taken at face value. `claim_of`/`resolves`/`release_of`/`tombstones` are **lifecycle refs** — a fact may carry at most one — and a reader gates several keys before honouring them: you may only supersede or retract **your own** fact, only the current claim winner may resolve one, and you may not vote on your own ([§10.1](PROTOCOL.md), new in v3.0).
 
 ## Quickstart
 
@@ -165,7 +165,7 @@ Three published packages, plus docs, demos, and a landing page. Every top-level 
 
 ```
 AntLegion/
-├── PROTOCOL.md             ← wire protocol spec — §3 fold rules are normative
+├── PROTOCOL.md             ← wire protocol spec — §8 fold rules are normative
 ├── CLAUDE.md               ← orientation for coding agents working in this repo
 ├── Dockerfile              ← builds the bus image; context is the repo root
 │
@@ -193,27 +193,17 @@ Two things deliberately **not** in the tree: `.data-v2/` (the journal) and `.ant
 **Alpha** — the reference implementation and the single-node operational story are solid. Not yet recommended for untrusted public networks (there is no network auth; the bus trusts its callers, same as Redis).
 
 > [!IMPORTANT]
-> **The spec is currently ahead of the code.** [PROTOCOL.md](PROTOCOL.md) has been re-derived as **v3.0 (draft)** from the shared-world-state primitive. The shipped bus, SDK and conformance vectors still implement **v2.0**, and v3.0 is deliberately **not wire-compatible** with it — most consequentially it replaces the bespoke canonicalization with **RFC 8785 (JCS)**, which changes every `id`.
+> **v3.0 is wire-breaking, and it has landed.** The spec, the bus, the folding SDK and the [conformance vectors](antlegion-bus/conformance/vectors.json) all speak v3.0; canonicalization is now **RFC 8785 (JCS)**, which changes every `id`. A v2.0 log fails `id` verification on every record under a v3.0 reader — there is no migration path and none is offered. Start a new log; archive a v2.0 one and read it with a v2.0 reader. Full change list: [§C](PROTOCOL.md).
 
-| | v3.0 spec | code today (`antlegion-bus/`) |
-|---|---|---|
-| canonicalization (§4) | RFC 8785 JCS | v2.0 rules — `ts` renders with a trailing `.0` |
-| [`conformance/vectors.json`](antlegion-bus/conformance/vectors.json) | must be re-pinned to v3.0 | `"version": "2.0"` — 64 ids, verifier green |
-| `supersedes` / `tombstones` author gate (§5.1) | required | not enforced — any author can retract any fact |
-| `supersededBy` (§3.1) | the *immediate* successor, no forward-walk | the *last* successor, plus a subject forward-walk |
-| world-state folds (§3.1–§3.2) | normative | shipped — `current` · `history` · `descendants` |
+Done: stateless trusted core · append-only journal with `appendfsync`, torn-tail recovery and fold-preserving compaction · reader-fold SDK (registers, trails, trust, ownership) with the §10.1 authorization gates · `alctl` CLI · cross-language conformance vectors whose independent Python verifier checks **folds, not just hashes** (204 assertions) · shared-view + ownership scenarios · Docker image · ~160k appends/s in-process · 244 tests · npm packages · resident agents (`ant init` / `ant start`, `@antlegion/dsh`).
 
-**Build against v2.0 today**; read v3.0 for where this is going. Nothing below has been re-pinned to v3.0 yet.
-
-Done: stateless trusted core · append-only journal with `appendfsync` + compaction · reader-fold SDK (registers, trails, trust, ownership) · `alctl` CLI · cross-language conformance vectors with an independent Python verifier · shared-view + ownership scenarios · Docker image · ~160k appends/s in-process · 176 tests · npm packages · resident agents (`ant init` / `ant start`, `@antlegion/dsh`) · the v3.0 re-derivation ([docs/protocol/](docs/protocol/)).
-
-Next: **land v3.0 in code** — JCS canonicalization, the §5 authorization gates, the tightened §3.1/§3.4 folds, regenerated conformance vectors · rewrite `PROTOCOL.zh-CN.md` against v3.0 · multi-language client SDKs (Go, Python, Rust — the vectors are the test target) · auth + rate limiting for exposed deployments · replication/HA ([§7](PROTOCOL.md)).
+Next: multi-language client SDKs (Go, Python, Rust — the [conformance vectors](antlegion-bus/conformance/vectors.json) are the test target) · auth + rate limiting for exposed deployments ([§10.3](PROTOCOL.md)) · replication/HA ([§11.3](PROTOCOL.md)) · length-prefixed `sig` fields ([§5.10](PROTOCOL.md)).
 
 ## Docs
 
 | | |
 |---|---|
-| [PROTOCOL.md](PROTOCOL.md) | the wire protocol — authoritative; §3 fold rules are normative. **v3.0, draft** |
+| [PROTOCOL.md](PROTOCOL.md) | the wire protocol — authoritative; §8 fold rules are normative. **v3.0, draft** |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | step-by-step: wire surface, CLI, SDK, persistence & recovery |
 | [docs/AGENT-CLI.md](docs/AGENT-CLI.md) | driving the log from an existing agent, and how to get one to adopt it |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how the pieces fit, what's proven, and why it's shaped this way |
@@ -223,16 +213,18 @@ Next: **land v3.0 in code** — JCS canonicalization, the §5 authorization gate
 | [docs/protocol/](docs/protocol/) | the v3.0 workspace — diagnosis, derivation, skeleton |
 | [ant/README.md](ant/README.md) | resident agents on a log; the dev-chain as a workflow client example |
 
-Every document has a `.zh-CN.md` companion. One exception, marked in the file itself: `PROTOCOL.zh-CN.md` still tracks **v2.0** and will be rewritten once v3.0 leaves draft — until then the English protocol is the one to implement against.
+Every document has a `.zh-CN.md` companion, `PROTOCOL.zh-CN.md` included — both protocol texts track v3.0 and are kept section-for-section aligned.
 
 ## Contributing
 
-Contributions are welcome. **Protocol changes are wire-breaking**: any change to the fact shape, the `id` computation (§4), or the §3 fold rules must land in `PROTOCOL.md`, `conformance/vectors.json` (regenerate with `npx tsx conformance/generate.ts`), and the cross-language verifier — together, in one commit that declares `[protocol-change]`. The v3.0 draft is the standing exception to the *together* part: it lands the spec first, and the vectors get re-pinned when the implementation follows (see **Status**).
+Contributions are welcome. **Protocol changes are wire-breaking**: any change to the fact shape, the `id` computation (§5.9), or the §8 fold rules must land in `PROTOCOL.md`, `PROTOCOL.zh-CN.md`, `conformance/vectors.json` (regenerate with `npx tsx conformance/generate.ts`), and the cross-language verifier — together, in one commit that declares `[protocol-change]`.
+
+The rule's useful half runs the other way, and it is the cheapest review tool here: **a change that only restates the spec must leave every vector byte-identical.** If you rewrote prose and `vectors.json` moved, you changed semantics without meaning to.
 
 ```bash
-npm test                      # 176 tests, ~1s
+npm test                      # 244 tests, ~2s
 npx tsc --noEmit              # type check
-python3 conformance/verify.py # cross-language hash proof
+python3 conformance/verify.py # cross-language proof: 204 assertions, folds included
 ```
 
 Read [docs/EVOLUTION.md](docs/EVOLUTION.md) first — it'll save you from re-inventing discarded approaches.

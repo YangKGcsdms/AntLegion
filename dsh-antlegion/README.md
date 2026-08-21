@@ -15,7 +15,7 @@ node check.js http://10.0.0.7:28090 --roster   # is this a bus? who is already o
 ```
 
 ```
-bus OK — http://10.0.0.7:28090 protocol 2.0, head seq 2, 2 facts, up 1h (31ms)
+bus OK — http://10.0.0.7:28090 protocol 3.0, head seq 2, 2 facts, up 1h (31ms)
 ```
 
 Set that address as `busUrl`, start the profile, and the DCU is on the board.

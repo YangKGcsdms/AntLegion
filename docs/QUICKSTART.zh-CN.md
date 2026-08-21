@@ -31,7 +31,7 @@ npm run dev            # 或先 build 再运行：npm run build && npm run start
 
 ```bash
 curl http://localhost:28090/health
-# {"status":"ok","protocol":"2.0","head_seq":0}
+# {"status":"ok","protocol":"3.0","head_seq":0}
 ```
 
 **或使用 Docker**（从仓库根目录构建）：
@@ -63,7 +63,7 @@ curl -s http://localhost:28090/facts/head
 
 # 总线信息（INFO 对应物）
 curl -s http://localhost:28090/info | jq
-# {"protocol":"2.0","head_seq":1,"facts":1,"fsync":"everysec","sig_failures":0,…}
+# {"protocol":"3.0","head_seq":1,"facts":1,"fsync":"everysec","sig_failures":0,…}
 ```
 
 这就是总线的全部 API。`claim`、`resolve`、`vote`、`trust`、`state` **都不是**端点——
@@ -224,7 +224,7 @@ curl -sX POST http://localhost:28090/admin/rewrite | jq
 
 ## 下一步去哪
 
-- [PROTOCOL.md](../PROTOCOL.md) —— 完整 v2 规范（§3 折叠规则为规范性）。
+- [PROTOCOL.md](../PROTOCOL.md) —— 完整 v3.0 规范（§8 折叠规则为规范性）。
 - [EVOLUTION.md](EVOLUTION.md) —— 项目为何如此。
 - `antlegion-bus/src/` —— 内核（`bus.ts`）、线面（`server.ts`）、折叠（`fold.ts`）、SDK（`client.ts`）。
 - `antlegion-bus/conformance/` —— 跨语言互操作向量 + Python 校验器。

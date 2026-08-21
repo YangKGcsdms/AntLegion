@@ -33,7 +33,7 @@ Not a message queue (nothing is consumed), not an orchestrator (nobody assigns w
 
 ### Three mechanisms, one collaboration model
 
-**Persistence lets agents share reality. Claiming lets them divide work. Causation lets workflows emerge.** Everything else in the system is one of these three, read from the same ordered log — persistence is the append-only journal ([§1](../PROTOCOL.md)), claiming is the lowest-seq theorem ([§3.1](../PROTOCOL.md)), causation is `refs.parent` chains ([§3.4](../PROTOCOL.md)).
+**Persistence lets agents share reality. Claiming lets them divide work. Causation lets workflows emerge.** Everything else in the system is one of these three, read from the same ordered log — persistence is the append-only journal ([§11.1](../PROTOCOL.md)), claiming is the lowest-seq theorem ([§8.4](../PROTOCOL.md), proved in [§9.1](../PROTOCOL.md)), causation is `refs.parent` chains ([§8.2](../PROTOCOL.md)).
 
 ## The implementation
 
