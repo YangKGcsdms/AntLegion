@@ -22,15 +22,36 @@ export const SYS_HEARTBEAT = 'sys.heartbeat'
 export const SYS_REGISTRY = 'sys.registry'
 
 /**
- * The keyed slot this DCU's liveness lives in.
+ * The grouping label this DCU's liveness facts carry.
  *
- * Liveness is a TTL, not a stream. Every registration carries `refs.subject`,
- * and §3.3 supersession is latest-wins WITHIN a subject group — so each refresh
- * supersedes the last one, and `POST /admin/rewrite` reclaims the old ones.
- * A fixed periodic heartbeat instead appends a fact that is meaningless 40
- * seconds later and can never be collected, because nothing supersedes it.
+ * Liveness is a TTL, not a stream: one registration per half-TTL, each meant to
+ * replace the last. A fixed periodic heartbeat instead appends a fact that is
+ * meaningless 40 seconds later and can never be collected at all.
+ *
+ * **Two v3.0 rules shape how the old ones are retired, and neither is the one
+ * this used to rely on.**
+ *
+ * 1. `sys.` is a *reserved namespace* (§5.1), and §8.1 rule 6 excludes
+ *    reserved-namespace facts from subject registers. So a `sys.registry` never
+ *    becomes `current(S)` no matter what `refs.subject` says, and supersession
+ *    within the group does not happen. The subject here is a **grouping label
+ *    for humans and read filters, not a protocol mechanism.** What actually
+ *    keeps the roster correct is §8.5's own rule: the latest `sys.registry`
+ *    *per author* wins.
+ * 2. §11.2 no longer lets compaction drop a *superseded* payload — only a
+ *    *retracted* one — because §8.1 supports readers accumulating over a
+ *    register and stripping non-head members destroyed exactly that.
+ *
+ * Together: each refresh publishes the new registration and then **retracts the
+ * one it replaced** (its own fact, which is what §10.1's gate requires). That
+ * is what makes the old payload reclaimable by `POST /admin/rewrite`. Retracting
+ * an *older* registration is housekeeping; only retracting the *latest* one
+ * means "this agent has left" (§8.5), which is why the order matters.
  */
 const livenessSubject = (author) => `liveness:${author}`
+
+/** §B default Δ, used only until the bus's `/info` answers. */
+const PROTOCOL_DEFAULT_DELTA = 600
 
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms) })
 
@@ -93,7 +114,8 @@ export function selectWork(batch, mirror, { author, interests, foldOpts }) {
  * @param options.heartbeatSec - legacy `sys.heartbeat` interval, off by default.
  *   Turn it on only for a reader that folds heartbeats specifically (ant's
  *   identity-conflict watchdog); the TTL slot covers ordinary liveness.
- * @param options.claimTimeout - claim-expiry Δ in seconds for this DCU's folds.
+ * @param options.claimTimeout - FALLBACK Δ in seconds, used only until the bus
+ *   publishes one. Δ belongs to the log, not the reader (§8.4).
  * @param options.log - diagnostic sink.
  * @param options.onWork - called with selected facts; MUST return promptly.
  * @returns the patrol handle.
@@ -114,9 +136,12 @@ export function createPatrol(options) {
     onWork = () => {},
   } = options
 
-  const foldOpts = typeof claimTimeout === 'number' && claimTimeout > 0
-    ? { claimTimeout }
-    : undefined
+  // Δ belongs to the log, not to this reader (§8.4). A DCU folding with its own
+  // value does not merely disagree about who holds a claim — it disagrees about
+  // whether the work was resolved at all. `claimTimeout` from config is now only
+  // a fallback for a bus that publishes none; `adoptDelta()` replaces it below.
+  const foldOpts = { claimTimeout: PROTOCOL_DEFAULT_DELTA }
+  if (typeof claimTimeout === 'number' && claimTimeout > 0) foldOpts.claimTimeout = claimTimeout
 
   // Boot token: minted per start, never part of the author. It rides in the
   // registration payload so readers can FOLD OUT a double-started identity
@@ -147,15 +172,80 @@ export function createPatrol(options) {
    * previous one and `POST /admin/rewrite` can reclaim it (§3.3).
    * @param reason - `register` on cold start, `refresh` when the TTL is halfway.
    */
+  /**
+   * Our own newest registration in this liveness slot, or null.
+   *
+   * Deliberately not a register fold: §8.1 rule 6 means `current(S)` is always
+   * null here (see `livenessSubject`). This asks the narrower question the
+   * refresh actually needs — "which of MY registrations does a new write
+   * replace" — and skips anything already retracted, so a refresh never
+   * tombstones the same fact twice.
+   */
+  function currentRegistration() {
+    let latest = null
+    for (const fact of mirror) {
+      if (fact.type !== SYS_REGISTRY) continue
+      if (fact.author !== author) continue
+      if ((fact.refs || {}).subject !== subject) continue
+      if (!latest || fact.seq > latest.seq) latest = fact
+    }
+    if (!latest) return null
+    const retracted = mirror.some((f) =>
+      f.type === '_.tombstone' && (f.refs || {}).tombstones === latest.id && f.author === author)
+    return retracted ? null : latest
+  }
+
+  /**
+   * Take Δ from the bus (§8.4, §7.5). Best-effort: the patrol loop retries the
+   * bus anyway, so a failure here leaves the configured fallback in place and
+   * says which number is being folded with.
+   */
+  async function adoptDelta() {
+    try {
+      const res = await fetch(`${busUrl.replace(/\/$/, '')}/info`)
+      if (!res.ok) throw new Error(`info → ${res.status}`)
+      const info = await res.json()
+      if (typeof info.claim_timeout === 'number' && Number.isFinite(info.claim_timeout) && info.claim_timeout > 0) {
+        if (info.claim_timeout !== foldOpts.claimTimeout) {
+          log(`Δ = ${info.claim_timeout}s (published by the bus; §8.4 — the reader does not choose it)`)
+        }
+        foldOpts.claimTimeout = info.claim_timeout
+        return
+      }
+      log(`bus published no usable Δ — folding with ${foldOpts.claimTimeout}s`)
+    } catch (err) {
+      log(`could not read Δ from the bus (${err.message}) — folding with ${foldOpts.claimTimeout}s`)
+    }
+  }
+
   async function announce(reason) {
+    // The registration this one is about to replace, if we have seen it. Taken
+    // before publishing so the new fact is not its own predecessor.
+    const previous = currentRegistration()
+
     await client.publish(
       SYS_REGISTRY,
       { interests, publishes, runtime: 'deepseek-harness', instance, ttl_sec: livenessTtlSec },
       { refs: { subject } },
     )
+
+    // Retract the one we just replaced so compaction can reclaim its payload
+    // (§11.2 — supersession alone no longer licenses that). It is our own fact,
+    // which is what §10.1's gate requires, and it is no longer the register head,
+    // so `current(S)` is unaffected (§8.1). Best-effort: a failure here costs
+    // disk, never correctness.
+    if (previous) {
+      try {
+        await client.tombstone(previous.id)
+      } catch (err) {
+        log(`could not retract the superseded registration ${previous.id.slice(0, 12)}… — ${err.message}`)
+      }
+    }
+
     lastProofAt = Date.now()
     if (reason === 'register') log(`registered — interests [${interests.join(', ')}], publishes [${publishes.join(', ')}], ttl ${livenessTtlSec}s`)
-    else log(`liveness refreshed — ttl ${livenessTtlSec}s (previous registration superseded)`)
+    else log(`liveness refreshed — ttl ${livenessTtlSec}s` +
+      (previous ? ` (previous registration superseded and retracted)` : ''))
   }
 
   async function tick() {
@@ -190,6 +280,9 @@ export function createPatrol(options) {
 
     if (!announced) {
       announced = true
+      // Cold start, and again after a bus restart: the log may be a different
+      // log now, so re-read its Δ before folding anything with it.
+      await adoptDelta()
       await announce('register')
     }
 

@@ -12,6 +12,7 @@ import { BusV2 } from "../src/bus.js";
 import { LogCorrupt } from "../src/log.js";
 import { FactRejected } from "../src/types.js";
 import { ClientV2, localTransport } from "../src/client.js";
+import { colony } from "../src/fold.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "al-v3-"));
 const logPath = (dir: string) => join(dir, "facts-v2.jsonl");
@@ -215,6 +216,36 @@ describe("§5.1 — the client refuses to author a fact readers would ignore", (
     await expect(mallory.tombstone(f.id)).rejects.toThrow(/only its author may retract/);
 
     await expect(owner.supersede(f.id, "obs", { v: 2 })).resolves.toBeTruthy();
+    bus.close();
+  });
+});
+
+describe("§8.5 — leaving the roster", () => {
+  it("an author whose LATEST registration is retracted is off the colony roster", () => {
+    const bus = new BusV2({ secret: "s", dataDir: tmp() });
+    const stay = bus.append({ type: "sys.registry", author: "stays", ts: 1, payload: { interests: ["a.*"] } });
+    const go = bus.append({ type: "sys.registry", author: "leaves", ts: 2, payload: { interests: ["b.*"] } });
+    expect(colony(bus.all()).map((r) => r.author)).toEqual(["leaves", "stays"]);
+
+    bus.append({ type: "_.tombstone", author: "leaves", ts: 3, refs: { tombstones: go.id }, nonce: "1" });
+    expect(colony(bus.all()).map((r) => r.author)).toEqual(["stays"]);
+
+    // A stranger cannot evict anyone (§10.1's gate).
+    bus.append({ type: "_.tombstone", author: "mallory", ts: 4, refs: { tombstones: stay.id }, nonce: "2" });
+    expect(colony(bus.all()).map((r) => r.author)).toEqual(["stays"]);
+    bus.close();
+  });
+
+  it("retracting an OLDER registration is housekeeping, not leaving", () => {
+    // This is what a liveness refresh does so §7.2 can reclaim the old payload.
+    // Evicting the author for it would make routine TTL refreshes look like exits.
+    const bus = new BusV2({ secret: "s", dataDir: tmp() });
+    const first = bus.append({ type: "sys.registry", author: "a", ts: 1, payload: { interests: ["x.*"] }, nonce: "1" });
+    bus.append({ type: "sys.registry", author: "a", ts: 2, payload: { interests: ["x.*"] }, nonce: "2" });
+    bus.append({ type: "_.tombstone", author: "a", ts: 3, refs: { tombstones: first.id }, nonce: "t" });
+    expect(colony(bus.all()).map((r) => r.author)).toEqual(["a"]);
+    expect(bus.rewrite()).toBe(1);            // the older payload is reclaimable
+    expect(colony(bus.all()).map((r) => r.author)).toEqual(["a"]);     // and the roster is unchanged
     bus.close();
   });
 });

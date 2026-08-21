@@ -21,7 +21,17 @@ AntLegion 是**为智能体共享世界状态的事实日志**：跨进程/机�
 | `dsh-antlegion/` | `@antlegion/dsh` | 把 DeepSeek Harness 跑成日志上的常驻 Agent（感知 = Node 巡逻流，决策 = LLM 轮次） |
 | `antlegion-alias/` | `antlegion` | 20 行别名，让 `npx antlegion` 直接起总线 |
 
-`ant` 依赖的是**已发布**的 `@antlegion/bus`（`^0.4.x`），而不是 `../antlegion-bus`。本地改总线，`ant` 侧看不见——除非发布，或你有意 `npm link`。升级总线版本时必须同步 `ant/package-lock.json`，否则 CI 的 `ant` job 会挂。
+`ant` 与 `dsh-antlegion` 依赖的是**已发布**的 `@antlegion/bus`，而不是 `../antlegion-bus`，所以本地改总线它们看不见，除非发布。
+
+**目前两者要的是 `^0.5.0`，而该版本尚未上 npm**，所以在这两个目录里跑 `npm ci` 会以 `ETARGET` 失败，它们的 lockfile 也仍钉着 0.4.1。CI 用的是你在本地也该用的办法——从当前提交构建总线，再覆盖安装：
+
+```bash
+cd antlegion-bus && npm ci && npm run build && npm pack --pack-destination /tmp
+cd ../ant && npm install --no-save /tmp/antlegion-bus-0.5.0.tgz          # 然后 tsc / npm test
+cd ../dsh-antlegion && npm install --no-save --legacy-peer-deps /tmp/antlegion-bus-0.5.0.tgz
+```
+
+`--no-save` 既不改写 `package.json` 也不改写 lockfile。等 0.5.0 发布后，重新同步两份 lockfile，CI 就能换回 `npm ci`。
 
 `PROTOCOL.md` 是**权威规范**；其 §8 折叠规则是规范性的（意义住在那里，因为总线无状态）。请保持 `PROTOCOL.md` 与 `antlegion-bus/src/` 同步。（早期的 v1——可变状态总线 + 独立 MCP 包——已被移除；见 `docs/EVOLUTION.md` 与 git 历史。）
 
@@ -53,9 +63,13 @@ npm run board            # 监督看板 → http://localhost:28091/devchain.html
 npm run req -- new "名称" -s slug         # 发布 req.registered 驱动整条链
 ANT_WORKER=simulated npx tsx src/main.ts mvp --reqs 25   # 无人值守吞吐跑，不需要 API key
 ./scripts/up.sh          # 幂等拉起：bus + ingestor + dev-chain DCU + board；./scripts/down.sh 全停
+
+# ── dsh-antlegion/ ──（按上面那段装；--legacy-peer-deps，DSH 宿主在这里不装）
+npm test                 # node --test —— 拉起一个真总线，验证 v3.0 的那几条行为
+node check.js "$BUS"     # 预检：这是不是总线、说的是不是 3.0、它的 Δ 是多少
 ```
 
-无 lint 配置。`npx tsc --noEmit` 做类型检查（两个包都要，CI 就是这么跑的）。CI（`.github/workflows/ci.yml`）三个 job：`bus`（typecheck + vitest + `conformance/verify.py`）、`ant`（typecheck + vitest）、`vectors-guard`。
+无 lint 配置。`npx tsc --noEmit` 做类型检查（两个 TS 包都要，CI 就是这么跑的）。CI（`.github/workflows/ci.yml`）四个 job：`bus`（typecheck + vitest + `conformance/verify.py`）、`ant`（typecheck + vitest）、`dsh`（node --test）、`vectors-guard`。`ant` 与 `dsh` 两个 job 都会先用**当前提交**的总线源码构建打包、再覆盖安装，所以卫星包测的永远是这一版总线，不是 npm 上那一版。
 
 **改 `conformance/vectors.json` 即破坏线格式。** 只要 PR 碰了它，`vectors-guard` 就会失败，除非该 PR 的某条 commit message 里带字面标记 `[protocol-change]`。仅在有意的协议变更时重新生成，并逐条审查哈希 diff。
 
@@ -92,7 +106,7 @@ poll(游标) → 重建共享折叠 → 判定触发谓词 → act → 推进游
 - **`dcus/`** —— dev-chain 六单元（`devchain-dcus.ts` = 4 个阶段 DCU + 裁决者；`watchdog-dcu.ts`）、只读工作区镜像 `ingestor-req.ts`、`scheduler-dcu.ts`（cron 节拍**以事实形式发布**）、`worker-spawn.ts`（唤醒真实 headless agent 干活）、`workers-llm.ts`（pi-ai → DeepSeek）、`gate-approver.ts`。
 - **`main.ts`** —— `ant` CLI，其中的 `HELP` 字符串才是当前命令清单（`chain`/`ingestor`/`board`/`req new`/`mvp`/`init`/`start [--daemon]`/`stop`/`status`/`logs`/`launchd`）；`ant/README.md` 早于常驻功能，仍写着 `init`/`start`「0.2 落地」。
 - **`daemon.ts`** —— 蚁群常驻：分离式 `ant start`，pid/日志/prompt/`memory/` 都在 `./.ant/` 下；macOS 开机自启的 launchd plist。
-- **配置**是蚁群根目录的 `./ant.config.json`（`config.ts`）：`busUrl`、`watchRoots`、`worker`（`llm|simulated|spawn`）、`identity`（蚁群名 + origin/payload 认领范围）、`spawn`、`schedules`、`heartbeatSec`。环境变量优先于文件：`ANTLEGION_BUS_URL`、`ANT_WORKER`、`ANT_LLM_MODEL`、`ANT_LLM_BASE_URL`、`ANT_AUTO_GATE`、`ANT_CLAIM_DELTA`、`BOARD_PORT`、`DEEPSEEK_API_KEY`。
+- **配置**是蚁群根目录的 `./ant.config.json`（`config.ts`）：`busUrl`、`watchRoots`、`worker`（`llm|simulated|spawn`）、`identity`（蚁群名 + origin/payload 认领范围）、`spawn`、`schedules`、`heartbeatSec`。环境变量优先于文件：`ANTLEGION_BUS_URL`、`ANT_WORKER`、`ANT_LLM_MODEL`、`ANT_LLM_BASE_URL`、`ANT_AUTO_GATE`、`BOARD_PORT`、`DEEPSEEK_API_KEY`。**`ANT_CLAIM_DELTA` 已移除** —— v3.0 起 Δ 是日志的属性（`PROTOCOL.md` §8.4），因此 `runtime.ts` 从总线 `/info` 读到 `DCUContext.claimTimeout`，包内每条折叠都从那里取。仍然设置这个环境变量只会打一行日志，告诉运维应该去总线上设。
 
 **证据形状才是重点**（做完了 ≠ 验证过了）：resolve 不是一句声明，而是提交证据。裁决者按生产者在 `sys.registry` 里登记的形状校验每份产物的 payload，发 `evidence.accepted`/`evidence.rejected`；被否的产物会让该阶段停住。下游阶段只折叠裁决结论，绝不直接折叠原始产物。
 

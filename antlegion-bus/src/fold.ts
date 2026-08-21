@@ -469,6 +469,12 @@ export function colony(stream: readonly Fact[]): AgentRegistration[] {
   }
   const out: AgentRegistration[] = [];
   for (const f of latest.values()) {
+    // §8.5: an author whose LATEST registration is retracted has left. This is
+    // the only way to leave the roster — an agent that simply stops appending
+    // stays on it forever, which is what the liveness TTL in the payload is for.
+    // Note it must be the latest: retracting an older registration is ordinary
+    // housekeeping (it lets §11.2 reclaim the payload) and must not evict anyone.
+    if (retracted(stream, f)) continue;
     const p = f.payload as Record<string, unknown>;
     const interests = asStringArray(p.interests).concat(asStringArray(p.listens));
     const publishes = asStringArray(p.publishes).concat(asStringArray(p.produces));

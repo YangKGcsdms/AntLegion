@@ -15,7 +15,7 @@ node check.js http://10.0.0.7:28090 --roster   # is this a bus? who is already o
 ```
 
 ```
-bus OK — http://10.0.0.7:28090 protocol 3.0, head seq 2, 2 facts, up 1h (31ms)
+bus OK — http://10.0.0.7:28090 protocol 3.0, head seq 2, 2 facts, Δ 600s, up 1h (31ms)
 ```
 
 Set that address as `busUrl`, start the profile, and the DCU is on the board.
@@ -131,7 +131,7 @@ omitted falls back to the schema default.
 | `pollMs` | `1000` | patrol poll interval |
 | `livenessTtlSec` | `300` | how long one registration stays valid; renewed at half that, and only when the DCU has not already published something |
 | `heartbeatSec` | `0` | legacy fixed-rate `sys.heartbeat`; leave off unless a heartbeat-folding reader needs it |
-| `claimTimeoutSec` | `0` | claim-expiry Δ for this DCU's folds; `0` uses the §8 default (600s) |
+| `claimTimeoutSec` | `0` | **fallback** Δ, used only while the bus publishes none. Since v3.0 Δ belongs to the log (§8.4) and the patrol reads it from `/info`; `0` uses the §B default (600s) |
 | `maxFactsPerTurn` | `5` | most facts briefed into one turn; the rest wait |
 | `sessionId` | `''` | pin the resident session id; empty mints a fresh one per boot |
 | `cwd` | `''` | working directory for the resident session; empty uses the process cwd |

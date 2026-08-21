@@ -17,7 +17,17 @@ Two published packages, no root `package.json` and **no npm workspace** — each
 | `dsh-antlegion/` | `@antlegion/dsh` | DeepSeek Harness as a resident agent on the log (perception = Node patrol over the stream, decisions = LLM turns) |
 | `antlegion-alias/` | `antlegion` | 20-line alias so `npx antlegion` boots the bus |
 
-`ant` depends on the **published** `@antlegion/bus` (`^0.4.x`), not on `../antlegion-bus`. A local bus change is invisible to `ant` until it is published — or until you `npm link` it deliberately. When bumping the bus, `ant/package-lock.json` must be re-synced or CI's `ant` job fails.
+`ant` and `dsh-antlegion` depend on the **published** `@antlegion/bus`, not on `../antlegion-bus`, so a local bus change is invisible to them until it is published.
+
+**Right now they ask for `^0.5.0`, which is not on npm yet**, so `npm ci` in those two dirs fails with `ETARGET` and their lockfiles still pin 0.4.1. CI does what you should do locally — build the bus from this commit and install it over the top:
+
+```bash
+cd antlegion-bus && npm ci && npm run build && npm pack --pack-destination /tmp
+cd ../ant && npm install --no-save /tmp/antlegion-bus-0.5.0.tgz          # then tsc / npm test
+cd ../dsh-antlegion && npm install --no-save --legacy-peer-deps /tmp/antlegion-bus-0.5.0.tgz
+```
+
+`--no-save` rewrites neither `package.json` nor the lockfile. When 0.5.0 is published, re-sync both lockfiles and CI can go back to `npm ci`.
 
 `PROTOCOL.md` is the **authoritative spec**; its §8 fold rules are normative (that is where meaning lives, since the bus is stateless). Keep `PROTOCOL.md` and `antlegion-bus/src/` in sync. (An earlier v1 — a mutable-state bus + a separate MCP package — was removed; see `docs/EVOLUTION.md` and git history.)
 
@@ -49,9 +59,13 @@ npm run board            # supervision board → http://localhost:28091/devchain
 npm run req -- new "名称" -s slug         # publish a req.registered to drive the chain
 ANT_WORKER=simulated npx tsx src/main.ts mvp --reqs 25   # unattended throughput run, no API key
 ./scripts/up.sh          # idempotent: bus + ingestor + dev-chain DCUs + board;  ./scripts/down.sh stops all
+
+# ── dsh-antlegion/ ──  (install per the block above; --legacy-peer-deps, the DSH host is not installed here)
+npm test                 # node --test — spawns a real bus and exercises the v3.0 behaviours
+node check.js "$BUS"     # preflight: is this a bus, does it speak 3.0, what is its Δ
 ```
 
-No lint config. `npx tsc --noEmit` typechecks (both packages; it is what CI runs). CI (`.github/workflows/ci.yml`) runs three jobs: `bus` (typecheck + vitest + `conformance/verify.py`), `ant` (typecheck + vitest), and `vectors-guard`.
+No lint config. `npx tsc --noEmit` typechecks (both TS packages; it is what CI runs). CI (`.github/workflows/ci.yml`) runs four jobs: `bus` (typecheck + vitest + `conformance/verify.py`), `ant` (typecheck + vitest), `dsh` (`node --test`), and `vectors-guard`. The `ant` and `dsh` jobs both build and pack the bus **from the commit under test** and install it over the top, so the satellites are always exercised against this version of the bus rather than the one on npm.
 
 **`conformance/vectors.json` is wire-breaking to change.** `vectors-guard` fails any PR that touches it unless a commit message in the PR contains the literal marker `[protocol-change]`. Regenerate only on a deliberate protocol change, and review the hash diff.
 
@@ -88,7 +102,7 @@ poll(since cursor) → rebuild shared fold → evaluate trigger → act → adva
 - **`dcus/`** — the six dev-chain units (`devchain-dcus.ts` = 4 stage DCUs + adjudicator; `watchdog-dcu.ts`), the read-only workspace `ingestor-req.ts`, `scheduler-dcu.ts` (cron beats *published as facts*), `worker-spawn.ts` (headless-agent act), `workers-llm.ts` (pi-ai → DeepSeek acts), `gate-approver.ts`.
 - **`main.ts`** — the `ant` CLI. Its `HELP` string is the current command list (`chain`/`ingestor`/`board`/`req new`/`mvp`/`init`/`start [--daemon]`/`stop`/`status`/`logs`/`launchd`); `ant/README.md` predates the residency commands and still says `init`/`start` "land in 0.2".
 - **`daemon.ts`** — colony residency: detached `ant start`, pid/log/prompts/`memory/` under `./.ant/`, launchd plist for macOS boot.
-- **Config** is `./ant.config.json` in the colony root (`config.ts`): `busUrl`, `watchRoots`, `worker` (`llm|simulated|spawn`), `identity` (colony name + origin/payload claim scoping), `spawn`, `schedules`, `heartbeatSec`. Env wins over file: `ANTLEGION_BUS_URL`, `ANT_WORKER`, `ANT_LLM_MODEL`, `ANT_LLM_BASE_URL`, `ANT_AUTO_GATE`, `ANT_CLAIM_DELTA`, `BOARD_PORT`, `DEEPSEEK_API_KEY`.
+- **Config** is `./ant.config.json` in the colony root (`config.ts`): `busUrl`, `watchRoots`, `worker` (`llm|simulated|spawn`), `identity` (colony name + origin/payload claim scoping), `spawn`, `schedules`, `heartbeatSec`. Env wins over file: `ANTLEGION_BUS_URL`, `ANT_WORKER`, `ANT_LLM_MODEL`, `ANT_LLM_BASE_URL`, `ANT_AUTO_GATE`, `BOARD_PORT`, `DEEPSEEK_API_KEY`. **`ANT_CLAIM_DELTA` is gone** — since v3.0, Δ is a property of the log (`PROTOCOL.md` §8.4), so `runtime.ts` reads it from the bus's `/info` into `DCUContext.claimTimeout` and every fold in the package takes it from there. Setting the env var logs a line telling the operator to set it on the bus instead.
 
 **Evidence shapes are the point** (`做完了 ≠ 验证过了`): resolving is not a declaration, it is submitting evidence. The adjudicator validates each artifact's payload against the shape its producer registered via `sys.registry` and publishes `evidence.accepted`/`evidence.rejected`; a rejected artifact halts that stage. Downstream stages fold on the verdict, never on the raw artifact.
 
