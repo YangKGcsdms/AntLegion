@@ -13,6 +13,7 @@ The bus is configured entirely by environment variables — the `redis.conf` ana
 | `ANTLEGION_DATA_DIR` | `.data-v2` | Directory for the journal file (`facts-v2.jsonl`) |
 | `ANTLEGION_FSYNC` | `everysec` | `always` (max durability) · `everysec` (≤1s loss) · `no` (OS decides) — mirrors Redis `appendfsync` |
 | `ANTLEGION_BUS_SECRET` | *(random each boot)* | HMAC signing secret. **Always set a stable value in production** — without it, signatures written before a restart cannot be verified |
+| `ANTLEGION_API_TOKEN` | *(unset)* | Shared HTTP Bearer token; authentication is disabled when unset |
 | `ANTLEGION_MAX_DEPTH` | `64` | Maximum causation chain depth (§5 safety cap; cycles are structurally impossible under content addressing) |
 
 ```bash
@@ -69,7 +70,7 @@ npm install && npm run dev
 
 ## Security model
 
-Same trust boundary as Redis: the bus **trusts its callers**. It binds to `127.0.0.1` by default; set `HOST=0.0.0.0` only inside a boundary you control (a docker network, a VPC). There is no authentication yet — do not expose it to untrusted networks.
+Same trust boundary as Redis: the bus **trusts its callers**. It binds to `127.0.0.1` by default; set `HOST=0.0.0.0` only inside a boundary you control (a docker network, a VPC). By default there is no authentication. Set `ANTLEGION_API_TOKEN` to require a shared Bearer token; the token does not authenticate individual authors. Use HTTPS or VPN on untrusted networks. See [home deployment](../deploy/home/README.md).
 
 ## Troubleshooting
 

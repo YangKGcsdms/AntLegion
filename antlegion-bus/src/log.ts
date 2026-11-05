@@ -14,7 +14,7 @@
 
 import {
   appendFileSync, existsSync, mkdirSync, openSync, readFileSync,
-  renameSync, statSync, writeFileSync, fsyncSync, closeSync,
+  renameSync, statSync, writeFileSync, fsyncSync, closeSync, truncateSync,
 } from "node:fs";
 import { join } from "node:path";
 import type { Fact } from "./types.js";
@@ -27,6 +27,9 @@ export class JsonlLog {
   private fd: number | null = null;
   private dirty = false;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private entries = 0;
+  /** Bytes discarded from an interrupted final append during recovery. */
+  recoveredTailBytes = 0;
 
   constructor(dataDir = ".data-v2", fsyncPolicy: FsyncPolicy = "always") {
     mkdirSync(dataDir, { recursive: true });
@@ -54,22 +57,47 @@ export class JsonlLog {
   append(fact: Fact): void {
     const fd = this.ensureFd();
     appendFileSync(fd, JSON.stringify(fact) + "\n", "utf-8");
+    this.entries++;
     if (this.fsyncPolicy === "always") fsyncSync(fd);
     else this.dirty = true; // flushed by timer (everysec) or on close (no/everysec)
   }
 
   readAll(): Fact[] {
-    if (!existsSync(this.path)) return [];
+    if (!existsSync(this.path)) { this.entries = 0; return []; }
+    const bytes = readFileSync(this.path);
     const out: Fact[] = [];
-    for (const line of readFileSync(this.path, "utf-8").split("\n")) {
-      const t = line.trim();
-      if (!t) continue;
-      try {
-        out.push(JSON.parse(t) as Fact);
-      } catch {
-        // torn final record — skip
+    let start = 0;
+    let truncateAt: number | undefined;
+    while (start < bytes.length) {
+      const newline = bytes.indexOf(10, start);
+      const end = newline === -1 ? bytes.length : newline;
+      const line = bytes.subarray(start, end).toString("utf-8").trim();
+      if (line) {
+        try {
+          out.push(JSON.parse(line) as Fact);
+        } catch {
+          // Only an unterminated LAST record can be a torn append. Silently
+          // skipping a corrupt complete line would change the ordered history.
+          if (newline !== -1) throw new Error(`corrupt journal record at byte ${start}`);
+          truncateAt = start;
+        }
       }
+      start = end + 1;
     }
+    if (truncateAt !== undefined || (bytes.length && bytes[bytes.length - 1] !== 10)) {
+      // Repair before another append, using byte offsets (payloads may be UTF-8).
+      // A complete final JSON record without a newline must be preserved.
+      this.flush();
+      if (truncateAt !== undefined) {
+        truncateSync(this.path, truncateAt);
+        this.recoveredTailBytes += bytes.length - truncateAt;
+      } else {
+        appendFileSync(this.path, "\n");
+      }
+      const repairFd = openSync(this.path, "r+");
+      try { fsyncSync(repairFd); } finally { closeSync(repairFd); }
+    }
+    this.entries = out.length;
     return out;
   }
 
@@ -94,6 +122,7 @@ export class JsonlLog {
     });
     writeFileSync(tmp, lines.length ? lines.join("\n") + "\n" : "", "utf-8");
     renameSync(tmp, this.path);
+    this.entries = facts.length;
     this.dirty = false;
     return stripped;
   }
@@ -107,9 +136,8 @@ export class JsonlLog {
 
   stats(): { entries: number; bytes: number } {
     if (!existsSync(this.path)) return { entries: 0, bytes: 0 };
-    const content = readFileSync(this.path, "utf-8");
     return {
-      entries: content.split("\n").filter((l) => l.trim()).length,
+      entries: this.entries,
       bytes: statSync(this.path).size,
     };
   }

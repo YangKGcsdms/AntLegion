@@ -205,6 +205,18 @@
 const Q = new URLSearchParams(location.search);
 // default: same origin when served by the bus itself (GET /dashboard), else localhost
 const BUS = (Q.get("bus") || (location.protocol.startsWith("http") ? location.origin : "http://localhost:28090")).replace(/\/$/, "");
+async function apiFetch(url, options = {}) {
+  const token = sessionStorage.getItem("antlegion-token:" + BUS);
+  const headers = new Headers(options.headers);
+  if (token) headers.set("Authorization", "Bearer " + token);
+  const response = await fetch(url, { ...options, headers, redirect: "error" });
+  if (response.status === 401) {
+    location.href = "/console";
+    throw new Error("Open /console to enter the API token");
+  }
+  return response;
+}
+
 const DELTA = parseFloat(Q.get("delta") || "600");   // claim timeout seconds (demo uses 3)
 const STALE = parseFloat(Q.get("stale") || "8");     // agent "alive" window in bus-time seconds
 
@@ -504,7 +516,7 @@ function onReconnect() {
 }
 async function refill() {
   for (;;) {
-    const r = await fetch(`${BUS}/facts?since=${cursor}&limit=1000`);
+    const r = await apiFetch(`${BUS}/facts?since=${cursor}&limit=1000`);
     if (!r.ok) throw new Error("read " + r.status);
     const batch = await r.json();
     if (batch.length === 0) break;
@@ -517,7 +529,7 @@ async function refill() {
 // ── polling ──
 async function tick() {
   try {
-    const r = await fetch(`${BUS}/facts?since=${cursor}&limit=1000`);
+    const r = await apiFetch(`${BUS}/facts?since=${cursor}&limit=1000`);
     if (!r.ok) throw new Error("read " + r.status);
     const batch = await r.json();
     if (batch.length) {
@@ -534,7 +546,7 @@ async function tick() {
 }
 async function infoTick() {
   try {
-    const r = await fetch(`${BUS}/info`);
+    const r = await apiFetch(`${BUS}/info`);
     if (!r.ok) throw new Error("info " + r.status);
     setConnected(true, await r.json());
   } catch (e) {

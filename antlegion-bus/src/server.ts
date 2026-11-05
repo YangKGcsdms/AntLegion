@@ -14,12 +14,15 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { BusV2 } from "./bus.js";
 import type { ReadQuery } from "./bus.js";
 import type { FsyncPolicy } from "./log.js";
 import type { FactInput } from "./types.js";
+import { BusObservations } from "./observability.js";
+import { current, history, lifecycle, trust, causationChain, descendants } from "./fold.js";
 
 /** Hard cap on a single read window (review M2): a valid-but-huge `limit` is
  *  clamped to this so one request can never stream an unbounded log. Readers
@@ -32,13 +35,32 @@ const DASHBOARD_HTML = path.resolve(
 const CONSOLE_HTML = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)), "..", "console", "console.html",
 );
+const EXPLORER_HTML = path.resolve(path.dirname(CONSOLE_HTML), "explorer.html");
 
-export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy; maxDepth?: number }) {
+export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync?: FsyncPolicy; maxDepth?: number; apiToken?: string }) {
   const bus = new BusV2(opts);
+  const observations = new BusObservations();
+  const instanceId = randomUUID();
+  const tokenHash = opts?.apiToken ? createHash("sha256").update(opts.apiToken).digest() : null;
   const app = new Hono();
   app.use("*", cors());
+  app.use("*", async (c, next) => {
+    const route = c.req.path;
+    if (route === "/info" || /^\/(facts|admin|ops)(\/|$)/.test(route)) {
+      c.header("Cache-Control", "no-store");
+      if (tokenHash) {
+        const bearer = /^Bearer (.+)$/i.exec(c.req.header("Authorization") ?? "")?.[1];
+        if (!bearer || !timingSafeEqual(tokenHash, createHash("sha256").update(bearer).digest())) {
+          c.header("WWW-Authenticate", "Bearer");
+          return c.json({ error: "valid Bearer token required" }, 401);
+        }
+      }
+    }
+    await next();
+  });
 
   app.get("/health", (c) => c.json({ status: "ok", protocol: "2.0", head_seq: bus.headSeq() }));
+  app.get("/", (c) => c.redirect("/console"));
 
   // Live dashboard — a static page that reads the public wire surface.
   app.get("/dashboard", async (c) => {
@@ -60,6 +82,35 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
     }
   });
 
+  app.get("/explorer", async (c) => {
+    try { return c.html(await fs.readFile(EXPLORER_HTML, "utf-8")); }
+    catch { return c.json({ error: "explorer not bundled in this install" }, 404); }
+  });
+
+  app.get("/ops/overview", (c) => c.json({
+    instance_id: instanceId,
+    auth_enabled: !!tokenHash,
+    ...observations.snapshot(bus.all()),
+    bus: bus.info(),
+    latest_facts: bus.all().slice(-100),
+  }));
+
+  app.get("/ops/subject", (c) => {
+    const subject = c.req.query("name");
+    if (!subject) return c.json({ error: "name is required" }, 400);
+    const stream = bus.all();
+    return c.json({ head_seq: bus.headSeq(), subject, current: current(stream, subject), history: history(stream, subject) });
+  });
+
+  app.get("/ops/fact/:id", (c) => {
+    const id = c.req.param("id");
+    const fact = bus.get(id);
+    if (!fact) return c.json({ error: "not found" }, 404);
+    const stream = bus.all();
+    return c.json({ head_seq: bus.headSeq(), fact, lifecycle: lifecycle(stream, id), trust: trust(stream, id), quorum: 2,
+      ancestors: causationChain(stream, id), descendants: descendants(stream, id) });
+  });
+
   // INFO (redis INFO analog) + rewrite (BGREWRITEAOF analog)
   app.get("/info", (c) => c.json(bus.info()));
   app.post("/admin/rewrite", (c) => c.json({ stripped: bus.rewrite() }));
@@ -71,8 +122,12 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
     } catch {
       return c.json({ error: "invalid JSON body" }, 400);
     }
-    if (!body?.type || !body?.author || typeof body?.ts !== "number") {
+    if (typeof body?.type !== "string" || !body.type || typeof body?.author !== "string" || !body.author || typeof body?.ts !== "number" || !Number.isFinite(body.ts)) {
       return c.json({ error: "type, author, ts are required" }, 400);
+    }
+    if ((body.payload != null && (typeof body.payload !== "object" || Array.isArray(body.payload))) ||
+        (body.refs != null && (typeof body.refs !== "object" || Array.isArray(body.refs) || Object.values(body.refs).some((v) => typeof v !== "string")))) {
+      return c.json({ error: "payload must be an object; refs must map keys to strings" }, 400);
     }
     try {
       const r = bus.append(body);
