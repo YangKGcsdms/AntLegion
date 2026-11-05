@@ -42,7 +42,7 @@ export class BusV2 {
     this.secret = providedSecret ?? randomBytes(32).toString("hex");
     this.maxDepth = opts?.maxDepth ?? 64;
     this.log = new JsonlLog(opts?.dataDir, opts?.fsync ?? "always");
-    this.recover();
+    try { this.recover(); } catch (err) { this.log.close(); throw err; }
   }
 
   private recover(): void {
@@ -184,6 +184,7 @@ export class BusV2 {
       facts: this.facts.length,
       log_entries: s.entries,
       log_bytes: s.bytes,
+      recovered_tail_bytes: this.log.recoveredTailBytes,
       fsync: this.log.fsyncPolicy,
       dedup_hits: this.dedupHits,
       secret_stable: this.secretStable,

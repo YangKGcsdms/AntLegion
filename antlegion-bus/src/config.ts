@@ -7,6 +7,7 @@
  *   ANTLEGION_DATA_DIR    default .data-v2
  *   ANTLEGION_FSYNC       always | everysec | no   (default everysec)
  *   ANTLEGION_BUS_SECRET  stable HMAC secret (recommended; random if unset)
+ *   ANTLEGION_API_TOKEN   optional shared Bearer token for HTTP clients
  *   ANTLEGION_MAX_DEPTH   causation depth cap (§5, default 64)
  */
 
@@ -18,6 +19,7 @@ export interface V2Config {
   dataDir: string;
   fsync: FsyncPolicy;
   secret?: string;
+  apiToken?: string;
   maxDepth: number;
 }
 
@@ -31,6 +33,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     dataDir: env.ANTLEGION_DATA_DIR ?? ".data-v2",
     fsync,
     secret: env.ANTLEGION_BUS_SECRET,
+    apiToken: env.ANTLEGION_API_TOKEN || undefined,
     maxDepth: Number.isInteger(d) && d > 0 ? d : 64,
   };
 }

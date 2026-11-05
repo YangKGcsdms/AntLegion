@@ -14,7 +14,7 @@ import { runCli } from "./cli.js";
 const url = (process.env.ANTLEGION_BUS_URL ?? "http://localhost:28090").replace(/\/$/, "");
 const author = process.env.ANTLEGION_AUTHOR ?? defaultAuthor();
 
-const client = new ClientV2(httpTransport(url), author);
+const client = new ClientV2(httpTransport(url, { token: process.env.ANTLEGION_API_TOKEN }), author);
 
 runCli(
   process.argv.slice(2),

@@ -54,8 +54,11 @@ export function localTransport(bus: BusV2): Transport {
 }
 
 /** HTTP transport — talks to a v2 server (§2). */
-export function httpTransport(baseUrl: string): Transport {
+export function httpTransport(baseUrl: string, opts: { token?: string } = {}): Transport {
   const base = baseUrl.replace(/\/$/, "");
+  // Explicit per-transport credentials; never attach process-wide credentials
+  // to an arbitrary SDK destination. The CLI wires its own environment below.
+  const headers: Record<string, string> = opts.token ? { authorization: `Bearer ${opts.token}` } : {};
   // Human-grade connection errors: an unreachable bus should say how to start one,
   // not dump `TypeError: fetch failed`.
   const call = async (fn: () => Promise<Response>): Promise<Response> => {
@@ -70,7 +73,8 @@ export function httpTransport(baseUrl: string): Transport {
       const res = await call(() =>
         fetch(`${base}/facts`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { ...headers, "content-type": "application/json" },
+          redirect: "error",
           body: JSON.stringify(i),
         }));
       if (!res.ok) throw new Error(`append → ${res.status}: ${await res.text()}`);
@@ -83,12 +87,12 @@ export function httpTransport(baseUrl: string): Transport {
       if (q.type) p.set("type", q.type);
       if (q.author) p.set("author", q.author);
       if (q.ref) p.set(`refs.${q.ref.key}`, q.ref.value);
-      const res = await call(() => fetch(`${base}/facts?${p.toString()}`));
+      const res = await call(() => fetch(`${base}/facts?${p.toString()}`, { headers, redirect: "error" }));
       if (!res.ok) throw new Error(`read → ${res.status}: ${await res.text()}`); // include body, like append (review L6)
       return (await res.json()) as Fact[];
     },
     info: async () => {
-      const res = await call(() => fetch(`${base}/info`));
+      const res = await call(() => fetch(`${base}/info`, { headers, redirect: "error" }));
       if (!res.ok) throw new Error(`info → ${res.status}: ${await res.text()}`);
       return (await res.json()) as Record<string, unknown>;
     },

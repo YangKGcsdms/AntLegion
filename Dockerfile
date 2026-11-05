@@ -7,7 +7,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY antlegion-bus/package*.json antlegion-bus/tsconfig.json ./
-RUN npm ci
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; npm ci
 COPY antlegion-bus/src ./src
 RUN npm run build
 
@@ -20,13 +21,15 @@ ENV HOST=0.0.0.0
 ENV ANTLEGION_DATA_DIR=/data
 ENV ANTLEGION_FSYNC=everysec
 COPY antlegion-bus/package*.json ./
-RUN npm ci --omit=dev
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 # The read-only ops pages the server serves at /console and /dashboard. Without
 # these the routes 404 with "not bundled in this install" — the same files the
 # npm package ships (package.json "files"), so image and package stay in sync.
 COPY antlegion-bus/console ./console
 COPY antlegion-bus/demo ./demo
+COPY antlegion-bus/examples/home-demo.mjs ./examples/home-demo.mjs
 VOLUME ["/data"]
 EXPOSE 28090
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 \

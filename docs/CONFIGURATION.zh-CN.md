@@ -13,6 +13,7 @@
 | `ANTLEGION_DATA_DIR` | `.data-v2` | 日志文件（`facts-v2.jsonl`）所在目录 |
 | `ANTLEGION_FSYNC` | `everysec` | `always`（最高持久性）· `everysec`（最多丢 1 秒）· `no`（交给操作系统）——对应 Redis 的 `appendfsync` |
 | `ANTLEGION_BUS_SECRET` | *（每次启动随机）* | HMAC 签名密钥。**生产环境务必设一个稳定值**——否则重启前写入的签名将无法再被验证 |
+| `ANTLEGION_API_TOKEN` | *（未设置）* | 共享 HTTP Bearer 令牌；未设置时不启用鉴权 |
 | `ANTLEGION_MAX_DEPTH` | `64` | 因果链最大深度（§5 安全上限；内容寻址让环从结构上不可能出现） |
 
 ```bash
@@ -69,7 +70,7 @@ npm install && npm run dev
 
 ## 安全模型
 
-与 Redis 相同的信任边界：总线**信任它的调用方**。默认绑定 `127.0.0.1`；只在你自己控制的边界内（docker 网络、VPC）才设 `HOST=0.0.0.0`。目前还没有鉴权——不要把它暴露到不受信任的网络上。
+与 Redis 相同的信任边界：总线**信任它的调用方**。默认绑定 `127.0.0.1`；只在你自己控制的边界内（docker 网络、VPC）才设 `HOST=0.0.0.0`。默认没有鉴权。设置 `ANTLEGION_API_TOKEN` 可启用共享 Bearer 令牌；令牌不绑定作者身份。跨不受信任网络访问时使用 HTTPS 或 VPN。详见[家庭部署](../deploy/home/README.zh-CN.md)。
 
 ## 排障
 

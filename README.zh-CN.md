@@ -69,6 +69,8 @@ AntLegion 用一条日志取代这个中继。蚂蚁不下命令，只在地面�
 
 **两个操作，这就是全部线面**：`POST /facts` 追加，`GET /facts?since=N` 读取。寄存器、踪迹、信任、所有权都是*关于事实的事实*，由读者折叠——见 [PROTOCOL.md](PROTOCOL.md)。
 
+使用 Docker 自托管控制台、访问令牌及独立家庭演示，参见[家庭部署说明](deploy/home/README.zh-CN.md)。
+
 ## 快速上手
 
 **需要 Node.js ≥ 20。** 最快看一眼，零配置、零 API key、约 15 秒：

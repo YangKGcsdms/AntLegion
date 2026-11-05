@@ -1,0 +1,36 @@
+services:
+  bus:
+    image: antlegion-home:local
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${ANTLEGION_BIND:-127.0.0.1}:${ANTLEGION_PORT:-28090}:28090"
+    environment:
+      ANTLEGION_BUS_SECRET: ${ANTLEGION_BUS_SECRET:?run antlegion.sh up first}
+      ANTLEGION_API_TOKEN: ${ANTLEGION_API_TOKEN:?run antlegion.sh up first}
+      ANTLEGION_FSYNC: ${ANTLEGION_FSYNC:-everysec}
+    volumes:
+      - data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  demo:
+    image: antlegion-home:local
+    profiles: [demo]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: "no"
+    environment:
+      ANTLEGION_BUS_URL: http://bus:28090
+      ANTLEGION_API_TOKEN: ${ANTLEGION_API_TOKEN:?run antlegion.sh up first}
+    depends_on:
+      bus:
+        condition: service_healthy
+    command: ["node", "examples/home-demo.mjs"]
+volumes:
+  data:

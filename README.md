@@ -69,6 +69,8 @@ One primitive, immutable, content-addressed, at a unique position in a single to
 
 **Two ops, and that's the whole wire surface**: `POST /facts` to append, `GET /facts?since=N` to read. Registers, trails, trust and ownership are *facts about facts*, folded by the reader — see [PROTOCOL.md](PROTOCOL.md).
 
+For a self-hosted Docker console with an access token and isolated home demo, see [Home deployment](deploy/home/README.md).
+
 ## Quickstart
 
 **Requires Node.js ≥ 20.** The fastest look, zero config, zero API key, ~15 seconds:
