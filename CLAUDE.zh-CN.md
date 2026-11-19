@@ -12,13 +12,12 @@
 
 AntLegion 是**为智能体共享世界状态的事实日志**：跨进程/机器/厂商的智能体把观察写进同一条只追加、全序、不可变、内容寻址的日志，各自折叠出同一个世界——现在是什么（`subject` 寄存器）、因何而起/引出了什么（因果踪迹）、可信与否、归谁所有。奠基公理是**只有事实，没有命令（facts, not commands）**——`refs` 指向的是事实 id 而非 Agent id，所以日志上没有任何东西能被寄给谁。所有权/恰好一次认领是共享一个世界的*推论*（seq 最小的认领胜出），不是目的。它**不是**消息队列、编排器、工作流引擎或多智能体协作框架——「几个 Agent 一起完成一个任务」是工作流领域，只存在于客户端（`ant` 的 dev-chain 是一个例子），绝不进入定位。本地/可内嵌的基础设施（类 Redis），而非公网 SaaS。品牌隐喻：**蚂蚁读地面上的信息素**（stigmergy）——绝不是一支工蚁军队/舰队；避免 舰队/蜂群/spawn 当劳动力 这类措辞。
 
-两个已发布的包，根目录**没有** `package.json`、**没有** npm workspace——各自独立安装、独立测试：
+三个已发布的包，根目录**没有** `package.json`、**没有** npm workspace——各自独立安装、独立测试：
 
 | 目录 | 包名 | 是什么 |
 |---|---|---|
 | `antlegion-bus/` | `@antlegion/bus` | 总线、折叠 SDK、`alctl` CLI、一致性向量 |
 | `ant/` | `@antlegion/ant` | 活在日志**之上**的常驻 Agent（DCU）：镜像 → 折叠 → 行动 的运行时、蚁群守护进程、看板；附带一条 dev-chain 作为工作流客户端示例 |
-| `dsh-antlegion/` | `@antlegion/dsh` | DSH 的 AntLegion 插件——dsh 挂到总线上值守（感知 = Node 巡逻流，决策 = LLM 轮次） |
 | `antlegion-alias/` | `antlegion` | 20 行别名，让 `npx antlegion` 直接起总线 |
 
 `ant` 依赖的是**已发布**的 `@antlegion/bus`（`^0.5.x`），而不是 `../antlegion-bus`。本地改总线，`ant` 侧看不见——除非发布，或你有意 `npm link`。升级总线版本时必须同步 `ant/package-lock.json`，否则 CI 的 `ant` job 会挂。

@@ -8,13 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AntLegion is a **shared world-state log for AI agents that share nothing else** (different processes / machines / vendors): an append-only, totally-ordered log of immutable, content-addressed facts. Agents deposit what they observed; every agent folds the same log into the same world — what is X right now (`subject` registers), how it came to be / what it led to (causal trail), whether to trust it, and who owns it. The founding axiom is **facts, not commands** — `refs` name fact ids, never agent ids, so nothing on the log can be addressed to anyone. Ownership / exactly-once claiming is a *corollary* of sharing a world (lowest-seq claim wins), not the purpose. It is **not** a message queue, orchestrator, workflow engine, or multi-agent collaboration framework — "agents doing a task together" is workflow territory and lives in clients (the `ant` dev-chain is one such example), never in the positioning. Local/embeddable infrastructure (Redis-shaped), not a public SaaS. Brand metaphor: **ants reading pheromone on the ground** (stigmergy) — never an army/fleet of workers; avoid fleet/swarm/spawn-as-workforce wording.
 
-Two published packages, no root `package.json` and **no npm workspace** — each is installed and tested on its own:
+Three published packages, no root `package.json` and **no npm workspace** — each is installed and tested on its own:
 
 | dir | package | what it is |
 |---|---|---|
 | `antlegion-bus/` | `@antlegion/bus` | the bus, folding SDK, `alctl` CLI, conformance vectors |
 | `ant/` | `@antlegion/ant` | resident agents (DCUs) that live *on* a log: mirror → fold → act runtime, colony daemon, boards; ships a dev-chain as a workflow client example |
-| `dsh-antlegion/` | `@antlegion/dsh` | the AntLegion plugin for DeepSeek Harness — dsh mounted on the bus, standing watch (perception = Node patrol over the stream, decisions = LLM turns) |
 | `antlegion-alias/` | `antlegion` | 20-line alias so `npx antlegion` boots the bus |
 
 `ant` depends on the **published** `@antlegion/bus` (`^0.5.x`), not on `../antlegion-bus`. A local bus change is invisible to `ant` until it is published — or until you `npm link` it deliberately. When bumping the bus, `ant/package-lock.json` must be re-synced or CI's `ant` job fails.

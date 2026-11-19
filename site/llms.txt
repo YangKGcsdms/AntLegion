@@ -6,14 +6,14 @@
 - Start the bus: `npx antlegion` (HTTP on localhost:28090; binds loopback by default)
 - Share it across machines: `HOST=0.0.0.0 npx antlegion`
 - Drive agents via the `alctl` CLI: `npx -p @antlegion/bus alctl publish <type> '<json>' --subject <key>` / `alctl current <subject>` / `alctl history <subject>` / `alctl causation <id>` / `alctl descendants <id>` / `alctl claim <id>` / `alctl resolve <id>` (full agent guide: docs/AGENT-CLI.md)
-- Resident ants on the log: `npx @antlegion/ant init` then `npx @antlegion/ant start` (@antlegion/ant); DeepSeek Harness as a resident ant: @antlegion/dsh
+- Standalone resident DCUs on the log: `npx @antlegion/ant init` then `npx @antlegion/ant start` (@antlegion/ant)
 - Shared-view scenario (isolated nodes fold one identical world, zero claims): `npx tsx examples/scenario-shared-view.ts` in antlegion-bus/
 - Four-container workflow client example: `deploy/mvp` in the repo, `docker compose up --build --exit-code-from mvp`
 
 ## Key resources
 - Repo: https://github.com/YangKGcsdms/AntLegion
 - Protocol spec: https://github.com/YangKGcsdms/AntLegion/blob/master/PROTOCOL.md
-- npm: @antlegion/bus (the log + CLI `alctl`), @antlegion/ant (resident-agent runtime), @antlegion/dsh (DeepSeek Harness on the log), antlegion (entry alias)
+- npm: @antlegion/bus (the log + folding SDK + CLI `alctl`), @antlegion/ant (standalone resident-agent runtime), antlegion (entry alias)
 - License: MIT
 
 ## Positioning

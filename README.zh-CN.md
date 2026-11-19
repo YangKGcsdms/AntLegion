@@ -152,104 +152,39 @@ alctl claim <id> && alctl resolve <id>                          # 拥有一条�
 
 → 完整动词参考、贴给 Agent 的第一条 prompt、`CLAUDE.md` / `.cursorrules` 规则片段、5 分钟双窗口实验：[docs/AGENT-CLI.md](docs/AGENT-CLI.md)
 
-## 把 Agent 托管成常驻单元（DCU 模式）
+## 运行独立的常驻单元（DCU 模式）
 
-上面讲的都是有人在驱动的 Agent。另一种姿态是**常驻**：没人驱动它，日志驱动它。它平时闲着，直到一条它声明关注的事实落到日志上——醒来、认领（同伴因此不会重复做）、干活、把产出挂回原事实底下。没有队列，没有调度器，没有人在提示符前面等着。
-
-`@antlegion/dsh` 是为 **DeepSeek Harness** 提供的 AntLegion 插件：运行它，这个 dsh 就作为一个挂载到总线的 DCU 运作——值守在那里，自动响应总线上的事实，并把做完的事作为事实发布回去。感知仍然是纯 Node 代码——轮询、推游标、折叠、筛选——只有「这条事实该怎么办」才花掉一次 LLM 轮次。
-
-### 装插件
-
-先探通节点。地址是这个插件唯一猜不出来的东西，而且填错了会被分类告诉你（`refused` / `dns` / `timeout` / `not-a-bus`），不会挂在那里转圈：
+`@antlegion/ant` 提供独立的 DCU 运行时：镜像日志、折叠本地视图、判断触发条件、执行，再把结果发布回去。附带的 dev-chain 是构建在总线之上的工作流客户端示例。
 
 ```bash
-npx -p @antlegion/dsh antlegion-dcu-check http://10.0.0.7:28090 --roster   # 这是一条总线吗？上面已经有谁？
+npm i -g @antlegion/ant
+ant init                     # 写入 ant.config.json；选择总线、工作区和执行模式
+ant start --daemon           # 转到后台；pid 和日志保存在 ./.ant/
+ant status
+ant logs -f
+ant stop
 ```
 
-`dsh plugin` 会把参数转发给 profile 目录里的 pnpm，所以装它就一行：
+客户端可以用两种方式执行工作：
 
-```bash
-dsh plugin --profile dcu add @antlegion/dsh
-# 从本仓库装：  dsh plugin --profile dcu add link:/path/to/AntLegion/dsh-antlegion
-# 直接从 git 装：dsh plugin --profile dcu add "github:YangKGcsdms/AntLegion#path:/dsh-antlegion"
+- **自己写脚本：**通过 `ClientV2` 或 `alctl` 读取事实、选择相关上下文、按需认领，再发布结果；在脚本中调用所选模型 SDK 或无头 CLI。
+- **使用现有 DCU 运行时：**选择 `worker: "spawn"`，用 `spawn.cmd` 调用自己的脚本或无头 CLI。运行时提供提示词文件、在执行期间续领、校验产物，再把结果写回总线。
+
+例如，可以这样把两个文件路径传给自己提供的脚本：
+
+```json
+{
+  "worker": "spawn",
+  "spawn": {
+    "cmd": "node ./agent-runner.mjs \"{promptFile}\" \"{artifactFile}\"",
+    "artifact": "dcu-workspace/{req}/{stage}.out.json"
+  }
+}
 ```
 
-然后把这个 bundle 列进 profile，再给它一个地址和它关注的事实类型：
+`agent-runner.mjs` 由你实现：读取提示词，调用模型 SDK 或 CLI，再按契约写出 JSON 产物。模型凭证通过显式的 `spawn.envPass` 白名单传入。模型调用留在客户端，总线负责保存事实。
 
-```jsonc
-// ~/.dsh/profiles/dcu/package.json —— 一个 dcu profile 就是 dsh-base 加这一个 bundle，没别的
-{ "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@antlegion/dsh"] } } }
-```
-
-```yaml
-# ~/.dsh/profiles/dcu/cordis.patch.yml —— patch 是整块替换 config，不是合并，
-# 所以你关心的键要写全；没写的走插件的 schema 默认值
-- id: antlegion-dcu
-  config:
-    busUrl: http://10.0.0.7:28090
-    author: dsh-dcu             # 它在群落里的身份——一个身份一个进程
-    resident: true              # false 只挂工具，不跑巡检
-    interests: ["task.*"]       # 唤醒它的事实类型——空的话它永远不会醒
-    publishes: ["task.done"]    # 它向名册声明自己会产出什么
-```
-
-`dsh --profile dcu` 启动；`dsh --profile dcu --dump-config` 只看合成结果、不启动。
-
-### 后台托管
-
-它就是一个普通的长期进程——交给你已经在用的进程守护即可。一份 systemd user unit：
-
-```ini
-# ~/.config/systemd/user/antlegion-dcu.service
-[Unit]
-Description=AntLegion resident DCU (DeepSeek Harness)
-After=network-online.target
-
-[Service]
-ExecStart=/usr/bin/env dsh --profile dcu    # unit 的 PATH 里没有 dsh（nvm、asdf……）就写绝对路径
-Environment=DEEPSEEK_API_KEY=…              # 模型凭证也可以放在 ~/.dsh/settings.yaml 里
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-```
-
-```bash
-systemctl --user enable --now antlegion-dcu
-journalctl --user -u antlegion-dcu -f   # 启动四行：bus OK · session up · patrol starting · registered
-```
-
-`Restart=always` 在这里是安全的，而这是日志的性质，不是进程守护的功劳。一个握着认领死掉的常驻单元不会卡住任何东西：每条认领在总线盖章的 `recv` 之后 Δ 失效，同伴接着做，而且不会撤销一次真的完成了的 `resolve`。重复启动也不花代价——注册是 `refs.subject` 组里的一个 TTL 槽位，重启只会覆盖掉自己那条旧的，不会越堆越多。总线还没起就先起它也没问题：它会退避重连，等节点出现自己接上并重新报到。唯一要当心的和日志上每个 Agent 一样：**一个身份一个进程**——同一个 `author` 起两份就是双启动，这件事由折叠检测出来（`sys.identity.conflict`），而不是由总线禁止。
-
-同样的姿态、换成自带运行时而不是挂在 harness 上，就是 `@antlegion/ant`：`ant start --daemon` 把群落转到后台（pid、日志、工作记忆都在 `./.ant/`），`ant launchd` 打印一份 macOS 开机自启的 plist。
-
-### 在板上确认它活着
-
-```bash
-alctl colony
-# [{"author":"dsh-dcu","interests":["task.*"],"publishes":["task.done"]}]
-```
-
-沉积一条它说过自己关心的事实，然后看它在没人盯着的情况下把闭环走完：
-
-```bash
-alctl publish task.todo '{"title":"用一句话说明这次 p99 尖刺"}'   # → {"id":"3729ce03…","seq":14}
-alctl state 3729ce03…         # → {"state":"resolved","owner":"dsh-dcu"}
-alctl descendants 3729ce03…   # → 它挂在原事实底下的那条 task.answer
-```
-
-```
-日志上的样子（节选）——全程没有人在提示符前面
-#14  task.todo    @carter                         另一个节点沉积下来的事实
-#15  _.claim      @dsh-dcu   claim_of: 3729ce03…  它折叠到了，先把所有权占下
-#17  _.resolve    @dsh-dcu   resolves: 3729ce03…  处理完毕
-#18  task.answer  @dsh-dcu   parent:   3729ce03…  产出挂成因果链——踪迹留在日志上
-```
-
-`task.*` 只是个例子，认领也不是必须的：一个只观察、只沉积的常驻单元同样是合格的蚂蚁。
-
-→ 配置键、工具与巡检的分工、以及「liveness 是 TTL 槽位而不是心跳流」：[dsh-antlegion/README.md](dsh-antlegion/README.md) · 从选地址到验证闭环走一遍的中文接入指引：[dsh-antlegion/GUIDE.zh-CN.md](dsh-antlegion/GUIDE.zh-CN.md)
+→ [DCU 运行时与 dev-chain](ant/README.md) · [spawn 配置](ant/src/config.ts) · [提示词与产物契约](ant/src/dcus/worker-spawn.ts)
 
 ## 这东西真的成立吗？
 
@@ -281,7 +216,6 @@ AntLegion/
 ├── ant/                    ← @antlegion/ant——住在日志上的常驻 Agent（镜像 → 折叠 → 行动）；
 │                             附带一条 dev-chain 作为*工作流客户端示例*，不是产品本身
 ├── antlegion-alias/        ← antlegion——20 行别名，让 `npx antlegion` 启动总线
-├── dsh-antlegion/          ← @antlegion/dsh——DSH 的 AntLegion 插件：挂到总线上值守
 │
 │   ── 其它 ──
 ├── docs/                   ← QUICKSTART · AGENT-CLI · ARCHITECTURE · CONFIGURATION ·
@@ -299,7 +233,7 @@ AntLegion/
 
 **Alpha**——核心协议、参考实现、单节点运维故事都是扎实的。尚不建议用于不可信的公网（没有鉴权；总线信任它的调用者，和 Redis 一样）。
 
-已完成：无状态可信核心 · 带 `appendfsync` 与压缩的只追加日志 · 读者折叠 SDK（寄存器、踪迹、信任、所有权）· `alctl` CLI · 带独立 Python 校验器的跨语言合规向量 · 共享视图 + 所有权场景 · Docker 镜像 · 进程内约 160k 追加/秒 · 176 个测试 · npm 包 · 常驻 Agent（`ant init` / `ant start`、`@antlegion/dsh`）。
+已完成：无状态可信核心 · 带 `appendfsync` 与压缩的只追加日志 · 读者折叠 SDK（寄存器、踪迹、信任、所有权）· `alctl` CLI · 带独立 Python 校验器的跨语言合规向量 · 共享视图 + 所有权场景 · Docker 镜像 · 进程内约 160k 追加/秒 · 176 个测试 · npm 包 · 常驻 Agent（`@antlegion/ant`：`ant init` / `ant start`）。
 
 下一步：多语言客户端 SDK（Go、Python、Rust——[合规向量](antlegion-bus/conformance/vectors.json)是测试目标）· `PROTOCOL.md` 的论文级重写（[docs/protocol/](docs/protocol/)）· 面向暴露部署的鉴权与限流 · 复制/高可用（[§7](PROTOCOL.md)）。
 
@@ -315,7 +249,6 @@ AntLegion/
 | [docs/FACT-MODEL.md](docs/FACT-MODEL.md) | 板上有谁、孤儿事实、上下文充分性闭环 |
 | [docs/EVOLUTION.md](docs/EVOLUTION.md) | v0 → v1 → v2：试过什么、为什么变 |
 | [ant/README.md](ant/README.md) | 日志上的常驻 Agent；dev-chain 作为工作流客户端示例 |
-| [dsh-antlegion/README.md](dsh-antlegion/README.md) | dsh 插件：挂到总线上值守什么、怎么装、配置键（[中文](dsh-antlegion/README.zh-CN.md)） |
 
 每份文档都有 `.zh-CN.md` 伴生版。
 

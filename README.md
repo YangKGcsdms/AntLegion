@@ -152,104 +152,39 @@ alctl claim <id> && alctl resolve <id>                          # own a fact (ex
 
 → Full verb reference, the first prompt to paste into an agent, a rules snippet for `CLAUDE.md` / `.cursorrules`, and a 5-minute two-window experiment: [docs/AGENT-CLI.md](docs/AGENT-CLI.md)
 
-## Host an agent as a resident (DCU mode)
+## Run a standalone resident (DCU mode)
 
-Everything above is an agent someone is driving. The other posture is a **resident**: nobody drives it — the log does. It sits idle until a fact matching what it declared an interest in lands, then wakes, claims that fact so no sibling repeats the work, does the work, and deposits the result back under the original. No queue, no dispatcher, nobody at a prompt.
-
-`@antlegion/dsh` is the AntLegion plugin for **DeepSeek Harness**: run it and that dsh operates as a DCU mounted on the bus — it stands watch, responds to facts on the log by itself, and publishes what it did back as facts. Perception stays plain Node — poll, advance a cursor, fold, select — and only *deciding what to do about a fact* costs an LLM turn.
-
-### Install the plugin
-
-Probe the node first. The address is the one thing the plugin cannot guess, and a wrong one comes back classified (`refused` / `dns` / `timeout` / `not-a-bus`) instead of as a hang:
+`@antlegion/ant` supplies the independent DCU runtime: mirror the log, fold a local view, evaluate a trigger, act, and publish the result. Its bundled dev-chain is a workflow client example on top of the bus.
 
 ```bash
-npx -p @antlegion/dsh antlegion-dcu-check http://10.0.0.7:28090 --roster   # is this a bus? who is already on it?
+npm i -g @antlegion/ant
+ant init                     # writes ant.config.json; choose the bus, workspace and worker mode
+ant start --daemon           # run in the background; pid and logs live in ./.ant/
+ant status
+ant logs -f
+ant stop
 ```
 
-`dsh plugin` forwards to pnpm inside the profile directory, so installing is one line:
+Choose how the client performs its work:
 
-```bash
-dsh plugin --profile dcu add @antlegion/dsh
-# from a checkout:  dsh plugin --profile dcu add link:/path/to/AntLegion/dsh-antlegion
-# straight from git: dsh plugin --profile dcu add "github:YangKGcsdms/AntLegion#path:/dsh-antlegion"
+- **Your own script:** use `ClientV2` or `alctl` to read facts, select relevant context, claim when needed, and publish results. Call your chosen model SDK or headless CLI from that script.
+- **The existing DCU runtime:** choose `worker: "spawn"` and configure `spawn.cmd` to run your script or headless CLI. The runtime supplies a prompt file, renews the claim during execution, validates the output artifact, and writes the result back to the bus.
+
+For example, a script you provide can receive the two file paths through this configuration:
+
+```json
+{
+  "worker": "spawn",
+  "spawn": {
+    "cmd": "node ./agent-runner.mjs \"{promptFile}\" \"{artifactFile}\"",
+    "artifact": "dcu-workspace/{req}/{stage}.out.json"
+  }
+}
 ```
 
-Then list the bundle in the profile, and give it an address and its interests:
+`agent-runner.mjs` is your integration code: read the prompt, call the model SDK or CLI, and write the required JSON artifact. Its model credentials are passed through the explicit `spawn.envPass` list. The model invocation stays in the client; the bus stores facts.
 
-```jsonc
-// ~/.dsh/profiles/dcu/package.json — a dcu profile is dsh-base plus this bundle, nothing else
-{ "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@antlegion/dsh"] } } }
-```
-
-```yaml
-# ~/.dsh/profiles/dcu/cordis.patch.yml — a patch replaces the whole config block,
-# so restate every key you care about; anything omitted falls back to the schema default
-- id: antlegion-dcu
-  config:
-    busUrl: http://10.0.0.7:28090
-    author: dsh-dcu             # its colony identity — one identity, one process
-    resident: true              # false mounts the bus tools only, with no patrol
-    interests: ["task.*"]       # the fact types that wake it — empty means it never wakes
-    publishes: ["task.done"]    # what it declares to the roster
-```
-
-`dsh --profile dcu` boots it; `dsh --profile dcu --dump-config` shows the composed tree without booting.
-
-### Keep it running
-
-It is an ordinary long-lived process — put it under whatever supervisor you already run. A systemd user unit:
-
-```ini
-# ~/.config/systemd/user/antlegion-dcu.service
-[Unit]
-Description=AntLegion resident DCU (DeepSeek Harness)
-After=network-online.target
-
-[Service]
-ExecStart=/usr/bin/env dsh --profile dcu    # absolute path to dsh if the unit's PATH lacks it (nvm, asdf …)
-Environment=DEEPSEEK_API_KEY=…              # model credentials otherwise live in ~/.dsh/settings.yaml
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-```
-
-```bash
-systemctl --user enable --now antlegion-dcu
-journalctl --user -u antlegion-dcu -f   # four boot lines: bus OK · session up · patrol starting · registered
-```
-
-`Restart=always` is safe here, and that is a property of the log rather than of the supervisor. A resident that dies holding claims strands nothing: each claim lapses Δ after its bus-stamped `recv` and a sibling picks the work up, without un-doing a `resolve` that did complete. Booting twice costs nothing either — registration is a TTL slot in a `refs.subject` group, so a restart supersedes its own stale entry rather than piling up. Pointing it at a bus that is not up yet is fine too: it backs off, reconnects when the node appears, and re-announces. The one caveat it shares with every agent on the log: **one identity, one process** — two units under one `author` is a double-start, which a fold detects (`sys.identity.conflict`) rather than the bus forbidding.
-
-The same posture with its own runtime instead of a harness is `@antlegion/ant`: `ant start --daemon` detaches a colony (pid, logs and working memory under `./.ant/`), and `ant launchd` prints a plist for macOS boot.
-
-### See it on the board
-
-```bash
-alctl colony
-# [{"author":"dsh-dcu","interests":["task.*"],"publishes":["task.done"]}]
-```
-
-Deposit something it said it cares about, and watch it close the loop with nobody at a prompt:
-
-```bash
-alctl publish task.todo '{"title":"summarize the p99 spike"}'   # → {"id":"3729ce03…","seq":14}
-alctl state 3729ce03…         # → {"state":"resolved","owner":"dsh-dcu"}
-alctl descendants 3729ce03…   # → the task.answer it hung under the request
-```
-
-```
-the stream, abridged — nobody was at a prompt for any of it
-#14  task.todo    @carter                         a fact another node deposited
-#15  _.claim      @dsh-dcu   claim_of: 3729ce03…  it folded the log, and took ownership first
-#17  _.resolve    @dsh-dcu   resolves: 3729ce03…  work done
-#18  task.answer  @dsh-dcu   parent:   3729ce03…  the output, hung under the request — the trail stays on the log
-```
-
-`task.*` is only an example, and claiming is not mandatory: a resident that only observes and only deposits is a perfectly good ant.
-
-→ Config keys, the tools/patrol split, and liveness as a TTL slot rather than a heartbeat stream: [dsh-antlegion/README.md](dsh-antlegion/README.md) · a step-by-step Chinese walkthrough from picking an address to verifying the loop: [dsh-antlegion/GUIDE.zh-CN.md](dsh-antlegion/GUIDE.zh-CN.md)
+→ [DCU runtime and dev-chain](ant/README.md) · [spawn configuration](ant/src/config.ts) · [prompt and artifact contract](ant/src/dcus/worker-spawn.ts)
 
 ## Does it actually work?
 
@@ -281,7 +216,6 @@ AntLegion/
 ├── ant/                    ← @antlegion/ant — resident agents that live on a log (mirror → fold → act);
 │                             ships a dev-chain as a *workflow client example*, not the product
 ├── antlegion-alias/        ← antlegion — 20-line alias so `npx antlegion` boots the bus
-├── dsh-antlegion/          ← @antlegion/dsh — the AntLegion plugin for DeepSeek Harness: dsh on watch
 │
 │   ── everything else ──
 ├── docs/                   ← QUICKSTART · AGENT-CLI · ARCHITECTURE · CONFIGURATION ·
@@ -299,7 +233,7 @@ Two things deliberately **not** in the tree: `.data-v2/` (the journal) and `.ant
 
 **Alpha** — the core protocol, reference implementation, and single-node operational story are solid. Not yet recommended for untrusted public networks (there is no auth; the bus trusts its callers, same as Redis).
 
-Done: stateless trusted core · append-only journal with `appendfsync` + compaction · reader-fold SDK (registers, trails, trust, ownership) · `alctl` CLI · cross-language conformance vectors with an independent Python verifier · shared-view + ownership scenarios · Docker image · ~160k appends/s in-process · 176 tests · npm packages · resident agents (`ant init` / `ant start`, `@antlegion/dsh`).
+Done: stateless trusted core · append-only journal with `appendfsync` + compaction · reader-fold SDK (registers, trails, trust, ownership) · `alctl` CLI · cross-language conformance vectors with an independent Python verifier · shared-view + ownership scenarios · Docker image · ~160k appends/s in-process · 176 tests · npm packages · resident agents (`@antlegion/ant`: `ant init` / `ant start`).
 
 Next: multi-language client SDKs (Go, Python, Rust — the [conformance vectors](antlegion-bus/conformance/vectors.json) are the test target) · a paper-grade rewrite of `PROTOCOL.md` ([docs/protocol/](docs/protocol/)) · auth + rate limiting for exposed deployments · replication/HA ([§7](PROTOCOL.md)).
 
@@ -315,7 +249,6 @@ Next: multi-language client SDKs (Go, Python, Rust — the [conformance vectors]
 | [docs/FACT-MODEL.md](docs/FACT-MODEL.md) | who is on the board, orphan facts, and the context-sufficiency loop |
 | [docs/EVOLUTION.md](docs/EVOLUTION.md) | v0 → v1 → v2: what was tried, and why it changed |
 | [ant/README.md](ant/README.md) | resident agents on a log; the dev-chain as a workflow client example |
-| [dsh-antlegion/README.md](dsh-antlegion/README.md) | the dsh plugin: mount it on the bus, what it stands watch for, config keys |
 
 Every document has a `.zh-CN.md` companion.
 
