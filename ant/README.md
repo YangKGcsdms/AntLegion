@@ -43,7 +43,9 @@ dev → unittest → e2e run themselves to ✔ CHAIN DONE. `ant --help` lists al
 commands; an optional `./ant.config.json` configures the bus URL and watch
 roots (`ANTLEGION_BUS_URL` overrides).
 
-> `ant init` (guided setup) and `ant start` (resident daemon) land in 0.2.
+> `ant init` writes the configuration through guided setup. `ant start` runs
+> the resident agents in the foreground; `ant start --daemon` runs them in
+> the background, managed with `ant stop`, `ant status`, and `ant logs -f`.
 
 ### LLM acts + the unattended MVP run
 
@@ -194,12 +196,13 @@ ant req new "你的需求名" -s your-slug   # publishes req.registered
 Working from the repo instead, `ant/scripts/up.sh` brings up bus + ingestor +
 fleet + board idempotently and `ant/scripts/down.sh` stops everything.
 
-Workers are **simulated** in Step 3 (deterministic payloads + a short sleep):
-this validates the *mechanics* — claim, gate, adjudicate, chain, escalate —
-before wiring real work. Swapping a simulated worker for a headless-agent spawn
-(`claude -p "<work packet>" --cwd <worktree>`, `codex exec …`) changes only the
-worker body in `src/dcus/devchain-dcus.ts`; **the bus contract is identical.**
-That is the intended Step 4.
+Workers support three modes: `simulated` uses deterministic payloads to
+exercise the mechanics; `llm` calls the configured model; `spawn` runs a
+configured script or headless CLI. Set `worker` in `ant.config.json` (or
+override it with `ANT_WORKER`); `spawn` also requires `spawn.cmd` and
+`spawn.artifact`. The runtime supplies the prompt file, renews the claim,
+validates the output artifact, and publishes the result. See the
+[configuration](src/config.ts) and [spawn contract](src/dcus/worker-spawn.ts).
 
 ---
 

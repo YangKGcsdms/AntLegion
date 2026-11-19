@@ -11,7 +11,6 @@ npx antlegion demo     # the three-act ownership demo: exactly-once race,
 The real packages:
 
 - [`@antlegion/bus`](https://www.npmjs.com/package/@antlegion/bus) — the bus, folding SDK, `alctl` CLI
-- [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — resident agents (DCUs) that live on the log
-- [`@antlegion/dsh`](https://github.com/YangKGcsdms/AntLegion/tree/master/dsh-antlegion) — DeepSeek Harness as a resident agent on the log
+- [`@antlegion/ant`](https://www.npmjs.com/package/@antlegion/ant) — standalone resident agents (DCUs) that live on the log
 
 Docs → [github.com/YangKGcsdms/AntLegion](https://github.com/YangKGcsdms/AntLegion)

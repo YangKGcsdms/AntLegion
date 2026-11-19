@@ -46,6 +46,3 @@ docker-compose.override.yml
 
 # verify-cli-eventflow self-booted bus data
 deploy/.verify-data-*/
-
-# Local dev overlay — carries an absolute path; copy from the .example.
-dsh-antlegion/cordis.patch.local.yml
