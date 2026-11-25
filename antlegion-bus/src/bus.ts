@@ -11,8 +11,7 @@
 import { randomBytes } from "node:crypto";
 import { computeId, computeSig, verifySig } from "./hash.js";
 import { JsonlLog, type FsyncPolicy } from "./log.js";
-import { RESERVED, type AppendResult, type Fact, type FactInput } from "./types.js";
-import { isSuperseded } from "./fold.js";
+import { normalizeFactInput, type AppendResult, type Fact, type FactInput } from "./types.js";
 import { globMatch } from "./canonical.js";
 
 export interface ReadQuery {
@@ -77,6 +76,7 @@ export class BusV2 {
 
   /** The single write. Idempotent by id (§4): a repeat returns the existing fact. */
   append(input: FactInput): AppendResult {
+    input = normalizeFactInput(input);
     const id = computeId(input);
 
     if (input.id && input.id !== id) {
@@ -130,11 +130,12 @@ export class BusV2 {
       out.push(f);
       if (out.length >= limit) break;
     }
-    return out;
+    return structuredClone(out);
   }
 
   get(id: string): Fact | undefined {
-    return this.byId.get(id);
+    const fact = this.byId.get(id);
+    return fact ? structuredClone(fact) : undefined;
   }
 
   headSeq(): number {
@@ -143,36 +144,23 @@ export class BusV2 {
 
   /** All facts (ordered) — used by the fold layer (fold.ts), not a wire endpoint. */
   all(): readonly Fact[] {
-    return this.facts;
+    return structuredClone(this.facts);
   }
 
   /**
-   * Compaction (§5.2/§7): drop the payloads of the given fact ids while keeping
-   * their full {id, seq, recv, author, refs, sig} skeleton, so folds still work.
-   * Returns the number of payloads stripped.
+   * Compatibility entry point. Full event content is retained (§5.2/§7),
+   * including retracted/superseded facts; no file or in-memory facts are changed.
    */
-  compact(payloadDroppable: Set<string>): number {
-    const stripped = this.log.compact(this.facts, payloadDroppable);
-    for (const f of this.facts) {
-      if (payloadDroppable.has(f.id)) f.payload = {}; // keep projection == disk
-    }
-    return stripped;
+  compact(_payloadDroppable: Set<string>): number {
+    return 0;
   }
 
   /**
-   * Rewrite (the BGREWRITEAOF analog): compact by stripping payloads of facts
-   * that are tombstoned or superseded — their content no longer matters, only
-   * their {id, seq, parent} skeleton (§5.2). Returns payloads stripped.
+   * Compatibility entry point for /admin/rewrite. Payload deletion is disabled;
+   * retaining full content preserves hashes, historical values and vote results.
    */
   rewrite(): number {
-    const tombstoned = new Set(
-      this.facts.filter((f) => f.type === RESERVED.TOMBSTONE && f.refs.tombstones).map((f) => f.refs.tombstones!),
-    );
-    const droppable = new Set<string>();
-    for (const f of this.facts) {
-      if (tombstoned.has(f.id) || isSuperseded(this.facts, f.id)) droppable.add(f.id);
-    }
-    return this.compact(droppable);
+    return 0;
   }
 
   /** INFO — the operator's window into the bus (the redis INFO analog). */

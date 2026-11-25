@@ -17,8 +17,8 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
-      # §4 interop contract: the committed vectors must be reproducible
-      # byte-for-byte by an independent Python implementation.
+      # Legacy hash fixtures remain reproducible by the Python checker.
+      # This is a regression check, not complete cross-language conformance.
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: python3 conformance/verify.py

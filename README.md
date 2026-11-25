@@ -4,14 +4,14 @@
 
 # AntLegion
 
-**A shared world-state log for AI agents that share nothing else.** Agents on different machines, in different runtimes, from different vendors deposit *what they observed* into one append-only, totally-ordered log of immutable facts — and each of them, at its own pace, folds that log into the same world: what happened, what X is right now, how it came to be, what it led to, and whether to trust it. Nobody commands anybody. Nobody relays state by hand. Local, embeddable infrastructure (think Redis, not SaaS).
+**A shared world-state log for AI agents that share nothing else.** Agents on different machines, in different runtimes, from different vendors deposit *what they observed* into one append-only, totally-ordered log of immutable facts — and each derives what happened, what X is right now, how it came to be, and whether to trust it. Matching log positions, rules, parameters and calculation times give matching results. The bus does not dispatch commands. Local, embeddable infrastructure (think Redis, not SaaS).
 
 ![npx @antlegion/bus demo — isolated processes, one world, byte-identical replay](deploy/media/demo.gif)
 
 [![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-176%20passing-brightgreen?style=flat-square)](antlegion-bus/test/)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Tests](https://img.shields.io/badge/tests-regression%20suite-brightgreen?style=flat-square)](antlegion-bus/test/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/status-alpha-orange?style=flat-square)]()
 
@@ -23,27 +23,27 @@
 
 Run agents that don't share a process — a Claude Code session on your laptop, a Codex job in CI, a resident agent on a server, a vendor's hosted agent — and the *only* thing carrying state between them is you, pasting from one window into the next. Inside one process tree there are subagents, teams, shared memory. Between physically isolated agents there is no bigger agent to fall back on. There is a human relay.
 
-AntLegion replaces the relay with a log. Think ants, not armies: an ant never tells another ant what to do. It deposits pheromone on the ground, and every other ant reads the ground. Here the ground is a **totally-ordered, append-only, content-addressed log of facts**, and "reading the ground" is a deterministic **fold** every reader can run — on any node, at any time, after any replay — and get the same answer.
+AntLegion provides a **totally-ordered, append-only, content-addressed log of facts**. Each reader derives state by applying fold rules to the log. Replaying the same records with the same rules and inputs reproduces that state; readers at different positions or using different parameters may disagree.
 
 ## The core idea
 
 **Facts, not commands.**
 
 `"deploy:prod is at v42"` is a fact and belongs on the log.
-`"worker-3, deploy v42"` is a command — it has a recipient, and the log has none.
+`"worker-3, deploy v42"` is an instruction; storing that text does not cause the bus to dispatch or execute it.
 
-Every fact's `refs` point at **fact ids, never agent ids** — a fact can say what it is *about*, it cannot say who it is *for*. That is the structural reason there are no commands, and why nothing here is a workflow engine: the log has no steps, no assignments, no scheduler.
+`refs.subject` names a subject; the other defined relation keys point at **fact ids**. Unknown extension keys and arbitrary JSON content are accepted within the input rules. "No commands" means the bus does not address, dispatch, or force execution; it does not mean JSON cannot contain instructions. Workflow steps and scheduling belong to clients.
 
-The bus enforces exactly one thing: **total order**. Everything a reader wants to know about the shared world is a fold over that order (`PROTOCOL.md` §3, normative):
+The bus assigns **total order**, validates content, and preserves the log. Everything a reader wants to know about the shared world is a fold over that order (`PROTOCOL.md` §3, normative):
 
 | question | fold |
 |---|---|
 | **what is X right now** | the `subject` register — highest seq wins; retracted folds to nothing, never to a stale value |
 | **how did this come to be · what did it lead to** | the causal trail — `parent` links walked back to a root, or forward to every descendant |
 | **can it be trusted** | corroborate / contradict votes, quorum is the reader's policy |
-| **who owns it** | the lowest-seq live `claim_of` — ownership is world state too, and exactly-once falls out as a theorem of order |
+| **who owns it** | the lowest-seq live `claim_of` — a shared ownership result, not exactly-once external execution |
 
-Two readers folding the same stream always agree. That is the whole point: two agents on two machines, with no channel between them but the log, compute the same world. It is **not** a message queue (nothing is consumed), **not** an orchestrator (nobody assigns work), **not** a workflow engine (a pipeline, if you build one, is a shape readers fold out of the trail afterwards — never a state anyone holds).
+Readers agree at the same log position with the same rules, parameters and calculation time. Trust thresholds can differ by reader; trailing claim expiry depends on the supplied time. The bus provides a shared log; workflow decisions remain in clients.
 
 ## The fact
 
@@ -57,10 +57,10 @@ One primitive, immutable, content-addressed, at a unique position in a single to
   "type":   "deploy.status",// dotted taxonomy; reserved types begin with "_."
   "author": "ci@build-7",   // who appended it
   "ts":     1748300000.0,   // author-stated time (advisory — spoofable, never fold on this)
-  "payload": { "…": "…" },  // arbitrary JSON
-  "refs": {                 // the only relational mechanism — all values are fact ids,
-    "subject": "deploy:prod",  // never agent ids. That is the structural reason
-    "parent":  "<id>",         // there are no commands.
+  "payload": { "…": "…" },  // plain JSON object
+  "refs": {                 // subject names and fact relationships
+    "subject": "deploy:prod",  // a subject name, not a fact id
+    "parent":  "<id>",         // a fact id
     "supersedes": "<id>"       // (also: tombstones · vote · claim_of · resolves · release_of)
   },
   "sig": "hmac…"            // HMAC-SHA256 signed by the bus
@@ -68,6 +68,8 @@ One primitive, immutable, content-addressed, at a unique position in a single to
 ```
 
 **Two ops, and that's the whole wire surface**: `POST /facts` to append, `GET /facts?since=N` to read. Registers, trails, trust and ownership are *facts about facts*, folded by the reader — see [PROTOCOL.md](PROTOCOL.md).
+
+Inputs are normalized and copied before hashing and storage. The official Node encoding is the current baseline; committed vectors are regression cases, not a complete cross-language contract. Retrying an append requires the original input, including `ts` and `nonce`; a fresh helper call may create a new fact. See [PROTOCOL.md §4](PROTOCOL.md#4-identity--integrity).
 
 For a self-hosted Docker console with an access token and isolated home demo, see [Home deployment](deploy/home/README.md).
 
@@ -147,14 +149,14 @@ export ANTLEGION_AUTHOR=my-agent@my-host      # stable identity; one identity = 
 alctl publish obs.metric '{"cpu":91}' --subject host:web-3     # write what happened
 alctl current host:web-3                                       # read the world
 alctl read --type 'deploy.*' --since "$CURSOR"                  # or tail it from a cursor
-alctl claim <id> && alctl resolve <id>                          # own a fact (exactly-once), then close it
+alctl claim <id> && alctl resolve <id>                          # confirm ownership, then record completion
 ```
 
 → Full verb reference, the first prompt to paste into an agent, a rules snippet for `CLAUDE.md` / `.cursorrules`, and a 5-minute two-window experiment: [docs/AGENT-CLI.md](docs/AGENT-CLI.md)
 
 ## Host an agent as a resident (DCU mode)
 
-Everything above is an agent someone is driving. The other posture is a **resident**: nobody drives it — the log does. It sits idle until a fact matching what it declared an interest in lands, then wakes, claims that fact so no sibling repeats the work, does the work, and deposits the result back under the original. No queue, no dispatcher, nobody at a prompt.
+Everything above is an agent someone is driving. The other posture is a **resident**: nobody drives it — the log does. It sits idle until a fact matching what it declared an interest in lands, then wakes, claims the fact, does the work, and deposits the result back under the original. Claim ownership alone does not prevent duplicate external effects after failure or expiry. No queue, no dispatcher, nobody at a prompt.
 
 `@antlegion/dsh` is the AntLegion plugin for **DeepSeek Harness**: run it and that dsh operates as a DCU mounted on the bus — it stands watch, responds to facts on the log by itself, and publishes what it did back as facts. Perception stays plain Node — poll, advance a cursor, fold, select — and only *deciding what to do about a fact* costs an LLM turn.
 
@@ -220,7 +222,7 @@ systemctl --user enable --now antlegion-dcu
 journalctl --user -u antlegion-dcu -f   # four boot lines: bus OK · session up · patrol starting · registered
 ```
 
-`Restart=always` is safe here, and that is a property of the log rather than of the supervisor. A resident that dies holding claims strands nothing: each claim lapses Δ after its bus-stamped `recv` and a sibling picks the work up, without un-doing a `resolve` that did complete. Booting twice costs nothing either — registration is a TTL slot in a `refs.subject` group, so a restart supersedes its own stale entry rather than piling up. Pointing it at a bus that is not up yet is fine too: it backs off, reconnects when the node appears, and re-announces. The one caveat it shares with every agent on the log: **one identity, one process** — two units under one `author` is a double-start, which a fold detects (`sys.identity.conflict`) rather than the bus forbidding.
+Automatic restart can recover claim ownership, but clients still need to handle repeated external actions. When a resident dies holding a claim, each claim lapses Δ after its bus-stamped `recv` and a sibling picks the work up, without un-doing a `resolve` that did complete. Registration uses a TTL slot in a `refs.subject` group, so newer declarations replace older ones in the reader view; both records remain in the log. Pointing it at a bus that is not up yet is fine too: it backs off, reconnects when the node appears, and re-announces. The one caveat it shares with every agent on the log: **one identity, one process** — two units under one `author` is a double-start, which a fold detects (`sys.identity.conflict`) rather than the bus forbidding.
 
 The same posture with its own runtime instead of a harness is `@antlegion/ant`: `ant start --daemon` detaches a colony (pid, logs and working memory under `./.ant/`), and `ant launchd` prints a plist for macOS boot.
 
@@ -297,11 +299,15 @@ Two things deliberately **not** in the tree: `.data-v2/` (the journal) and `.ant
 
 ## Status
 
-**Alpha** — the core protocol, reference implementation, and single-node operational story are solid. Not yet recommended for untrusted public networks (there is no auth; the bus trusts its callers, same as Redis).
+**Alpha** — the official Node implementation is the current protocol encoding baseline. Shared Bearer-token authentication is available, but it does not verify individual authors; the bus still trusts its callers. Untrusted public deployment remains outside the current scope.
 
-Done: stateless trusted core · append-only journal with `appendfsync` + compaction · reader-fold SDK (registers, trails, trust, ownership) · `alctl` CLI · cross-language conformance vectors with an independent Python verifier · shared-view + ownership scenarios · Docker image · ~160k appends/s in-process · 176 tests · npm packages · resident agents (`ant init` / `ant start`, `@antlegion/dsh`).
+Done: stateless trusted core · full append-only journal with `appendfsync` · reader-fold SDK (registers, trails, trust, ownership) · `alctl` CLI · committed hash regression vectors and a Python checker for those cases · shared-view + ownership scenarios · Docker image · throughput benchmark · automated tests · npm packages · resident agents (`ant init` / `ant start`, `@antlegion/dsh`).
 
-Next: multi-language client SDKs (Go, Python, Rust — the [conformance vectors](antlegion-bus/conformance/vectors.json) are the test target) · a paper-grade rewrite of `PROTOCOL.md` ([docs/protocol/](docs/protocol/)) · auth + rate limiting for exposed deployments · replication/HA ([§7](PROTOCOL.md)).
+The current version retains complete records: `compact()` and `rewrite()` are compatibility no-ops returning `0`, and cannot restore payloads removed by older versions. Completion ends processing, retraction removes the current statement, and supersession supplies a replacement. An accepted completion followed by retraction remains `resolved`, while the current subject value becomes `null` if it still points to that fact.
+
+`ClientV2.resolve()` requires the caller's active winning claim, stores output facts before completion, links them through `payload.output_ids`, and reads back to confirm completion. These writes are not a transaction. The underlying fold still accepts completion from any author when no active claim remains; see [§3.1](PROTOCOL.md#31-lifecycle-of-a-target-fact-f).
+
+Future work: complete cross-language encoding rules and SDKs, author identity and rate limiting for exposed deployments, and replication/high availability. The current regression vectors alone do not establish cross-language compatibility.
 
 ## Docs
 
@@ -321,12 +327,12 @@ Every document has a `.zh-CN.md` companion.
 
 ## Contributing
 
-Contributions are welcome. **Protocol changes are wire-breaking**: any change to the fact shape, the `id` computation (§4), or the §3 fold rules must land in `PROTOCOL.md`, `conformance/vectors.json` (regenerate with `npx tsx conformance/generate.ts`), and the cross-language verifier — together, in one commit that declares `[protocol-change]`.
+Contributions are welcome. Changes to the fact shape, `id` computation (§4), or §3 fold rules require an explicit compatibility review and matching documentation and tests. Preserve committed hash vectors unless the encoding change is intentional; a vectors change requires a commit declaring `[protocol-change]`. The Python checker verifies the committed cases, not complete cross-language compatibility.
 
 ```bash
-npm test                      # 176 tests, ~1s
+npm test                      # automated tests
 npx tsc --noEmit              # type check
-python3 conformance/verify.py # cross-language hash proof
+python3 conformance/verify.py # independent check of committed regression cases
 ```
 
 Read [docs/EVOLUTION.md](docs/EVOLUTION.md) first — it'll save you from re-inventing discarded approaches.

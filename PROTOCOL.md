@@ -30,11 +30,11 @@ one window into another.
 
 This protocol is that medium. It is a **shared world-state log**: every agent
 deposits what it observed, and every agent — at its own pace, on its own
-node — folds the same log into the same world. Nothing in it is a command,
-because a command has a recipient and the log has none. The lineage is
-stigmergy: ants do not address each other; they read the ground. The ground
-here is a totally-ordered, append-only, content-addressed log, and "reading
-the ground" is a deterministic fold (§3).
+node — derives state from a totally-ordered, append-only, content-addressed
+log using reader folds (§3). Readers agree when the log position, fold rules,
+parameters, and calculation time are the same. "Facts, not commands" describes
+the bus: it does not address, dispatch, or force an agent to execute anything.
+Arbitrary JSON can contain instruction-like text; the bus does not interpret it.
 
 Everything a workflow engine or an orchestrator does is *out of scope*: this
 protocol has no steps, no assignments, no scheduler. It has one derived
@@ -50,7 +50,7 @@ There is exactly one kind of thing in this system:
 > position in a single total order.**
 
 That is the whole ontology. A fact is a unit of shared world state — a
-statement about the world, never an instruction to anyone. There are no
+statement about the world. The bus does not execute or dispatch its content. There are no
 separate "tasks," "claims," "votes," "trust levels," or "states." Those words
 name *patterns of facts* — a fact is all there is. This is the monist move,
 and every rule below is a *consequence* of it, not an addition to it.
@@ -92,8 +92,8 @@ stream. In the order a physically isolated agent needs them:
 | **how did this come to be / what did it lead to** (`causation_chain` + `causation_depth`) | walk `parent` links backward (chain) or forward (descendants); depth is computed, not stored (§3.4) |
 | **can it be trusted** (`epistemic_state` + quorum config) | a **fold** over `vote` facts; quorum is the *reader's* policy (§3.2) |
 | **who owns it** (`published/claimed/resolved/dead`) | a **fold** over claim/resolve/tombstone facts referencing the target (§3.1) |
-| atomic `claim` endpoint + arbitration | append a `claim` fact; **lowest `seq` referencing the target wins** — ownership is world state, and exactly-once is a theorem of total order |
-| TTL → `dead` transition | reader-side filter / compaction hint; never a server state change |
+| atomic `claim` endpoint + arbitration | append a `claim` fact; **lowest `seq` active claim on the target wins** — ownership is world state; this does not guarantee exactly-once external actions |
+| TTL → `dead` transition | reader-side filter; never a server state change or deletion |
 | acceptance filter / dispatch | reader-side query predicate (server MAY offer it as a pure read optimization) |
 | event push / WebSocket | removed; read advances the cursor |
 | `semantic_kind`, `schema_version`, `priority`, `confidence`, TEC, reliability | optional payload/ref hints; **none** are interpreted by the trusted core |
@@ -124,23 +124,25 @@ to the one place it can be written once and conformance-tested — not a deletio
   "type":    "build.failed",        // dotted taxonomy. MUST.
   "author":  "claude-code",         // who appended it. MUST.
   "ts":      1748300000.0,          // unix seconds, author-stated. ADVISORY only (spoofable). MUST.
-  "payload": { "...": "..." },      // arbitrary JSON. MUST (MAY be {}).
-  "refs":    { "...": "..." },      // links to other facts — the ONLY relational mechanism. MAY be absent.
+  "payload": { "...": "..." },      // plain JSON object; omitted input defaults to {}.
+  "refs":    { "...": "..." },      // relations and subject name; omitted input defaults to {}.
   "nonce":   "k7…",                 // optional uniqueness token: a legitimate repeat (e.g. re-claim) gets a distinct id (§4). MAY be absent.
   "sig":     "hmac…"                // bus signature over (id, author, type, ts, recv, seq). Set by bus.
 }
 ```
 
-`refs` is where every relationship lives. Every value is a **fact id, never an
-agent id** — that is the structural reason there are no commands: a fact can
-say what it is about, it cannot say who it is for. Defined keys:
+`refs` carries relationships. **`refs.subject` is a subject name**; the other
+defined keys below reference **fact ids**. Unknown extension keys are accepted
+as strings and do not introduce bus-side dispatch. These field conventions do
+not prevent a payload or an extension from containing an agent name or an
+instruction. Defined keys:
 
 | `refs` key | Value | Meaning (a reader fold interprets it) |
 |---|---|---|
 | `parent` | fact id | This fact was caused by that one. Causation = transitive `parent` (§3.4). |
 | `subject` | string | Names the piece of the world this fact is about; the group key for the latest-wins **register** (§3.3). |
 | `supersedes` | fact id | The target is **replaced by a successor** (this fact). |
-| `tombstones` | fact id | A `_.tombstone` marks the target **retracted / GC'd** — distinct from `supersedes`, which means *replaced*. Folds MUST tell the two apart (§5.2). |
+| `tombstones` | fact id | A `_.tombstone` marks the target **retracted** — distinct from `supersedes`, which means *replaced*. Folds MUST tell the two apart (§5.2). |
 | `vote` | fact id | Combine with `payload.verdict ∈ {corroborate, contradict}` (§3.2). |
 | `claim_of` | fact id | Author asserts exclusive responsibility for the target (§3.1). |
 | `resolves` | fact id | The target is considered handled; payload MAY carry the result. |
@@ -173,14 +175,17 @@ wants them — live in `payload` and are honored only by readers that care.
 
 ```
 POST /facts
-  { type, author, ts, payload, refs?, id? }
+  { type, author, ts, payload?, refs?, nonce?, id? }
 → 201 { seq, id, sig }            // id/sig echoed; id MAY be sent as "" for the bus to compute
 → 409 { error: "id mismatch" }    // integrity failure
 ```
 
 Append is the only write. The bus assigns `seq`, verifies/derives `id`, signs,
 persists, returns. No mode, no token-gated claim, no priority. (Auth, if any, is
-a transport concern — see §6.)
+a transport concern — see §6.) Public entry points normalize and copy the
+input before hashing or storing it (§4); both operations use the same
+normalized content. Mutating the caller's object afterwards MUST NOT change a
+stored fact.
 
 ### 2.2 Read
 
@@ -210,10 +215,10 @@ That is the complete bus API: **one write, one read, two read conveniences.**
 
 A reader replays facts in `seq` order and folds them into whatever projection
 it needs. These fold rules are **normative** — conformance lives here, not in
-the bus. Two readers that fold identically will always agree, because they
-consume the same totally-ordered, immutable stream — and that is the whole
-point: two agents on two machines with no channel between them but the log
-compute the same world.
+the bus. Agreement requires the **same log position, fold rules, parameters,
+and calculation time**. A live reader may be ahead of another; trailing claim
+expiry depends on `now`; trust thresholds are reader policy (§3.2). Differences
+in those inputs can legitimately produce different answers.
 
 The folds answer four questions about that world. Ownership (§3.1) is listed
 first because its rule is the longest, not because it is the most important;
@@ -266,11 +271,12 @@ This is what makes crash recovery correct in both directions:
   crashed claimer's stale claim would block the recovering agent's resolve, and
   the item would be re-done forever.)
 
-**Ownership is world state, and exclusivity is a theorem, not a lock.** If
-several authors append `claim_of: F`, the one with the **lowest `seq` wins** —
-every reader computes the same winner from the same totally-ordered,
-`recv`-stamped stream, exactly as every reader computes the same current value
-of a register (§3.3). No atomic
+**Ownership is world state.** Among active claims on `F`, the claim with the
+**lowest `seq` wins**. Readers using the same inputs (§3) compute the same
+owner. This is a statement about ownership in the log, not exactly-once
+execution of an external action. A process can act and fail before recording
+completion, or continue acting after its claim expires; clients must handle
+external retries and duplicate effects. No atomic
 endpoint, no leader election, no hot-path arbitration. A claimer confirms it won
 by reading `F`'s claim set back and seeing no live `claim_of: F` at a lower
 `seq`; to keep that O(claims-on-F) instead of O(log), a bus SHOULD support the
@@ -278,10 +284,20 @@ by reading `F`'s claim set back and seeing no live `claim_of: F` at a lower
 **only because it keys on the bus-stamped `recv`**, not the author's `ts`; a
 `release_of` by the claim's author ends the claim immediately regardless of Δ.
 
-**A `resolve` is authorization-gated by the fold**: a `resolves: F` is honored
-only from `F`'s current claim winner. This stops a non-claimer from marking
-someone else's claimed work done. (For never-claimed broadcast facts, any author
-may resolve and the lowest-seq resolve wins.)
+**Fold rule and SDK policy differ.** The normative fold honors `resolves: F`
+from the current active claim winner, or from **any author when no active claim
+remains**, including after release or expiry. It ignores a different author
+while an active owner exists. The official Node SDK is stricter:
+`ClientV2.resolve()` requires the caller to hold the active winning claim.
+
+The SDK writes output facts first, then appends completion with their ids in
+`payload.output_ids`, and reads back to verify that completion was honored.
+These appends are **not a transaction**: an error can leave outputs without
+completion, or a stored completion whose read-back could not be confirmed.
+`resolved` means processing ended; it does not mean a subject value changed or
+that an external action succeeded exactly once. A later tombstone leaves the
+earlier lifecycle result `resolved`, while `current(subject)` becomes `null`
+if that fact is still the subject's current statement (§5.2).
 
 ### 3.2 Trust of a fact `F`
 
@@ -310,7 +326,7 @@ descendants automatically; a reader that cares about a chain's validity walks
 reader's choice, two readers can legitimately disagree on whether `F` is
 `refuted` or `consensus`. Any decision that all participants must agree on — who
 does the work, whether to proceed — MUST be built on exclusive claim
-(`seq`-deterministic, §3.1), which every reader computes identically. Trust is
+with the same log position, expiry parameters and calculation time (§3.1). Trust is
 for *advice and triage*, not for arbitration.
 
 ### 3.3 Supersession — the subject register ("what is X right now")
@@ -333,12 +349,12 @@ current(S):
   if ∃ _.tombstone with refs.tombstones == cur.id → null        # retracted: gone, NOT the previous value (§5.2)
   return cur
 
-supersededBy(F) = the fact that replaced F: an explicit `supersedes: F` if any,
-                  else the next-higher-seq fact in F's subject group, else null
+supersededBy(F) = the highest-seq explicit `supersedes: F` if any,
+                  else the highest-seq newer fact in F's subject group, else null
 ```
 
-Every reader that folds `current(S)` from the same stream gets the same fact —
-on any machine, at any later time, after any replay. That is what makes a
+Every reader that folds `current(S)` with the same rules through the same log
+position gets the same fact, including after replay. That is what makes a
 register a *shared* register. It is also the reason `refs.subject` is a plain
 string chosen by the writer: two agents that have never met can write to the
 same piece of the world by agreeing on a name.
@@ -360,9 +376,9 @@ author currently asserts.
 transitively, in `seq` order (F excluded): *what did F lead to*.
 
 Both are pure folds over the same stream, so a reader on another node
-reconstructs the same trail. Because facts are immutable and removed only by
-explicit `tombstone` (§5.2), a chain never silently loses an ancestor — a
-reader encountering a tombstoned ancestor sees the tombstone, not a gap. And
+reconstructs the same trail through the same log position. Facts are immutable
+and retained in full; an explicit `tombstone` retracts a statement without
+removing its record (§5.2). A reader can still inspect a retracted ancestor. And
 because `id` is a content hash (§4), a `parent` link cannot be forged after the
 fact and a cycle cannot be constructed at all (§5) — the trail is provenance
 that holds across organizational boundaries without anyone vouching for it.
@@ -411,24 +427,40 @@ See `docs/FACT-MODEL.md` for the full rationale and worked examples.
 
 ## 4. Identity & integrity
 
-`id` is the content address: `id = sha256(canonical(record))`, where the
-canonical record is the JSON object of `{type, author, ts, payload, refs, nonce}`
-(`nonce` included only when present) with recursively sorted keys and floats
-rendered with a trailing `.0` (Python-`json.dumps`-compatible). `seq`, `recv`,
-`sig`, and `id` itself are excluded — they are bus-assigned, not content.
+The official Node implementation in `antlegion-bus/src/canonical.ts` and
+`hash.ts` is the current encoding baseline. `id = sha256(canonical(record))`.
+The content record contains `type`, `author`, `ts`, `payload`, nonempty `refs`,
+and a nonempty `nonce` when supplied. `seq`, `recv`, `sig`, and `id` itself are
+excluded. Existing ordinary JSON event encodings and committed hash vectors
+remain unchanged; this is **not a claim of Python-compatible encoding or full
+cross-language conformance**. One compatibility correction is explicit: an own
+`__proto__` key, previously omitted by canonicalization, now participates in
+the hash. Inputs containing that key can therefore get a different id; the
+ordinary committed vectors remain unchanged.
 
-Content addressing gives dedup for free, but with a sharp edge that the protocol
-resolves **one** way, explicitly: **append is idempotent by `id`.** The bus keeps
-an `id → seq` index (rebuilt from the log on recovery — a pure projection, not
-authoritative state); appending an `id` that already exists returns the existing
-`{seq, recv, sig}` and does **not** write a second copy. "Resubmit is safe" is
-therefore the default. The consequence: a *legitimate repeat* — re-claiming `F`
-after releasing it — would otherwise collapse into the original, so a client
-wanting a genuinely **new** action MUST make the content distinct, normally by
-setting a fresh `nonce` (§1). Relational facts (`_.claim`, `_.resolve`,
-`_.vote`) SHOULD always carry a `nonce`. This is exactly the model of a
-content-addressed store like git: identical content is one object; you change
-the content to get a new one.
+Public append and hash entry points MUST normalize and copy the input first.
+`type` and `author` are nonempty strings; `ts` is a finite number. `payload`
+is a plain JSON object (omission defaults to `{}`), containing only JSON
+objects, arrays, strings, finite numbers, booleans, and `null`. Non-JSON values
+such as `Date`, functions, `BigInt`, non-finite numbers, cyclic objects and sparse
+arrays are rejected rather than silently coerced. Object content consists of
+its enumerable string-keyed fields, as in JSON. Omitted or top-level
+`undefined` payload/refs use their defaults;
+`null` payload/refs are rejected. `refs` must be a plain object and defaults
+to `{}`; values must be
+strings, with empty strings and omitted/`undefined` references removed; a
+`null` reference is rejected. `nonce` is an optional string; an empty string
+is treated as omitted. The hash excludes empty `refs` and an omitted `nonce`,
+preserving the existing encoding. The normalized content
+used to hash MUST also be the content stored. Unknown top-level fields,
+including supplied `seq`, `recv`, and `sig`, do not become content fields.
+
+**Append is idempotent by `id`, not by business intent.** Appending the same
+normalized content returns the existing `{seq, recv, sig}` without a second
+record. A retry MUST reuse the complete original input, including `ts` and
+`nonce`. Calling a helper again with a fresh timestamp or nonce can create a
+new fact. A genuinely new action, such as a later re-claim, SHOULD use a fresh
+`nonce`; reuse it only when retrying that same append.
 
 The bus signs every accepted fact: `sig = hmac_sha256(secret, "id|author|type|ts|recv|seq")`.
 A verifier recomputes that HMAC and compares (constant-time) to `sig`; because
@@ -438,9 +470,11 @@ different secret), or a read-replica that shares the secret. An unauthenticated
 HTTP reader cannot verify `sig`; for it, the content address `id` is the
 integrity check, and `seq`/`recv` are trusted by trusting the bus.
 Operators MUST set a stable `ANTLEGION_BUS_SECRET` so signatures verify across
-restarts. A **canonical cross-language conformance vector set** ships with the
-protocol; any implementation (TS, Python, Go, …) MUST reproduce its hashes
-byte-for-byte. This vector set — not prose — is the interop contract.
+restarts. `conformance/vectors.json` is a committed **regression corpus** for
+existing encodings. `conformance/verify.py` checks those cases independently;
+passing them does not prove compatibility for every JSON value, key order, or
+number representation. A future cross-language specification requires its
+own complete encoding rules and validation.
 
 ---
 
@@ -460,20 +494,23 @@ weaponized into unbounded growth or cycles. Everything else is a reader concern.
    rate cap to bound log growth. Rejections are facts-not-written, never state
    mutations.
 
-### 5.2 Deletion is a fact
+### 5.2 Retraction is a fact
 
-The bus never mutates or silently drops a stored fact. Removal is itself an
-appended `tombstone` fact (`type: "_.tombstone"`, `refs.tombstones` → target).
-Deletion gets its **own** ref key, never `supersedes`: superseding means *a
-successor replaced this*; tombstoning means *this is gone*. The folds (lifecycle
-§3.1, trust §3.2, register §3.3) MUST distinguish them — a retracted fact is
-`dead` (its register folds to null, §3.3), never `superseded`. Compaction (§7) MAY then physically drop a fact's
-*payload*, but MUST retain its full skeleton — `{id, seq, recv, author, refs,
-sig}` — because every fold depends on it: causation walks need `refs.parent`;
-the claim winner needs `seq` + `author` + `refs.claim_of`; trust needs `author`
-+ `refs.vote`. Dropping `refs` or `author` would destroy the very relationships
-the folds are computed from. Retaining the skeleton is how v2 keeps both
-causation and coordination durable across compaction.
+The bus never edits or deletes a stored fact. `_.tombstone` with
+`refs.tombstones` retracts a statement; `supersedes` identifies its replacement;
+`resolves` records that processing ended. These are separate meanings. A
+retracted current subject statement returns `null`, without restoring an older
+value. Lifecycle remains at its first accepted terminal result: a tombstone
+before completion yields `dead`; a tombstone after an accepted completion
+leaves lifecycle `resolved`. Trust follows §3.2 and does not gain a separate
+`dead` state from retraction.
+
+This version retains **complete records, including payloads**. Vote verdicts
+and other reader semantics depend on payload data, and removing it would also
+prevent recomputation of the original content hash. `compact()` and `rewrite()`
+remain compatibility entry points but do nothing and return `0`; they do not
+remove payloads or rewrite the journal. Data removed by an older version's
+compaction cannot be reconstructed from the remaining log (§7).
 
 ---
 
@@ -486,7 +523,9 @@ a **transport concern** (mTLS, a gateway, an API key header), out of scope for
 the fact model. A deployment MAY run the bus open (trusted network) or behind
 an authenticating proxy that stamps/validates `author`. The protocol does not
 mandate a scheme, but a public deployment SHOULD authenticate `author` and
-SHOULD NOT expose write access unauthenticated.
+SHOULD NOT expose write access unauthenticated. The Node implementation
+supports `ANTLEGION_API_TOKEN`, a shared HTTP Bearer token. It controls access
+but does not bind the supplied `author` to a verified identity.
 
 ---
 
@@ -498,23 +537,26 @@ the last byte offset that parses, then resume appending. There is **no
 in-memory state machine to rebuild** — the log *is* the state, and `seq` is
 restored from the last record. This is the reliability dividend of §0.2.
 
-Compaction folds the log to a checkpoint: snapshot the current projection
-(optional, derived, never authoritative) and drop superseded/tombstoned
-*payloads* while retaining the full `{id, seq, recv, author, refs, sig}`
-skeleton (§5.2). Compaction MUST use temp-file + atomic rename.
+The current version keeps the full log. `compact()`, `rewrite()`, and
+`POST /admin/rewrite` retain their callable interfaces but perform no deletion
+or file rewrite; the HTTP response reports `stripped: 0`. This preserves
+payload-dependent folds and content-hash verification. Previously compacted
+records remain missing their original payloads; restoring them requires a
+complete backup, not another replay or rewrite.
 
 **Total order ⇒ a single logical appender.** `seq` is one global sequence, so
 all writes funnel through a single logical append point. High availability is
 therefore *single-writer with failover* (e.g. Raft replicating the append
 position), **not** multi-master — there is no way to merge two independent
-orders without losing the exactly-once guarantee (§3.1). Reads scale out freely
+orders while preserving the original ownership order (§3.1). Reads scale out freely
 across log replicas. A deployment that genuinely needs multi-region writes must
 shard into independent buses (e.g. by `type` or `subject`), each with its own
 order; cross-shard coordination is then a client concern, not the bus's.
 
 A bus MAY serve a **materialized view** (`GET /facts/<id>/state`,
 `/trust`, …) as a cache of §3 folds. Such views are conveniences and MUST be
-bit-identical to a from-scratch fold; they are never a second source of truth.
+identical to a from-scratch fold with the same log position, rules, parameters,
+and calculation time; they are never a second source of truth.
 
 ---
 
@@ -526,7 +568,7 @@ bit-identical to a from-scratch fold; they are never a second source of truth.
 | Reader quorum (trust) | 2 | §3.2 — reader policy, not server config |
 | Claim-timeout (on `recv`) | 600 s | §3.1 — a claim whose bus-stamped `recv` is older than this folds as released |
 | Per-author rate (if enabled) | 20 burst / 5 per s | §5 |
-| Log fsync | per append | trade for per-batch under load |
+| Log fsync | server: `everysec`; embedded: `always` | Server configuration uses `everysec`; direct `new BusV2()` / `new JsonlLog()` defaults to `always` |
 
 Note these are mostly **reader** or **operator** knobs. The trusted core has
 almost nothing to configure — another consequence of §0.2.
@@ -557,12 +599,12 @@ REST surface for legacy clients, with zero changes to the trusted core.
 | **Blackboard architecture / stigmergy** | a shared medium everyone writes observations to and nobody is addressed through; ants read the ground, not each other. v2 keeps the board and drops the control component: the total order arbitrates |
 | **Event sourcing / CQRS** | the log is the only truth; state is a projection |
 | **Git** | content-addressed, immutable, append-only; `fetch` by cursor |
-| **Lamport / total order** | exactly-once exclusivity as a *theorem* of order |
+| **Lamport / total order** | a unique winning active claim under the same fold inputs |
 | **CAN bus** | content-addressed broadcast + local (reader) filtering |
 | **Scientific method** | contestable facts (corroborate/contradict), no central arbiter |
 
 ---
 
 *Protocol v2.0 by Carter.Yang. The bus orders and preserves; readers decide
-meaning. Keep the trusted core small enough that a second implementation is a
-weekend, and let the conformance vectors — not prose — guarantee interop.*
+meaning. The Node implementation is the current encoding baseline; regression
+vectors protect existing encodings without claiming complete interoperability.*

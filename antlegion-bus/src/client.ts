@@ -13,7 +13,7 @@
 import { randomBytes } from "node:crypto";
 import { hostname, userInfo } from "node:os";
 import type { AppendResult, Fact, FactInput, Refs } from "./types.js";
-import { RESERVED } from "./types.js";
+import { RESERVED, normalizeFactInput } from "./types.js";
 import type { BusV2, ReadQuery } from "./bus.js";
 import {
   lifecycle, claimWinner, didIWin, trust, causationChain, descendants,
@@ -39,6 +39,7 @@ export function defaultAuthor(): string {
 /** Transport abstraction: the client only needs append + read (+ optional INFO). */
 export interface Transport {
   append(input: FactInput): Promise<AppendResult>;
+  /** Return detached facts owned by the caller (as the built-in transports do). */
   read(q: ReadQuery): Promise<Fact[]>;
   /** Server INFO payload (the redis INFO analog), when the transport exposes it. */
   info?(): Promise<Record<string, unknown>>;
@@ -48,7 +49,7 @@ export interface Transport {
 export function localTransport(bus: BusV2): Transport {
   return {
     append: async (i) => bus.append(i),
-    read: async (q) => [...bus.read(q)],
+    read: async (q) => bus.read(q),
     info: async () => bus.info(),
   };
 }
@@ -70,12 +71,15 @@ export function httpTransport(baseUrl: string, opts: { token?: string } = {}): T
   };
   return {
     append: async (i) => {
+      // Validate and snapshot before JSON serialization can silently coerce values.
+      // Keep input errors outside `call`, which only describes transport failures.
+      const body = JSON.stringify(normalizeFactInput(i));
       const res = await call(() =>
         fetch(`${base}/facts`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
           redirect: "error",
-          body: JSON.stringify(i),
+          body,
         }));
       if (!res.ok) throw new Error(`append → ${res.status}: ${await res.text()}`);
       return (await res.json()) as AppendResult;
@@ -147,7 +151,7 @@ export class ClientV2 {
     return this.mirror.some((f) => f.id === F);
   }
 
-  /** Claim F, then read back to confirm: exactly-once is decided by lowest seq (§3.1). */
+  /** Claim F, then read back to confirm the current owner by lowest live seq (§3.1). */
   async claim(F: string): Promise<{ won: boolean; winner: string | null }> {
     await this.sync();
     if (!this.has(F)) throw new Error(`fact ${F} not found`);
@@ -157,31 +161,51 @@ export class ClientV2 {
   }
 
   /**
-   * Resolve F. Only honored when you are the current claim winner (§3.1) —
-   * verified by read-back BEFORE appending, so a stray resolve never becomes a
-   * silent no-op: it throws instead. Optionally emits child facts (causation).
+   * Save outputs before recording completion, with their ids in `output_ids`.
+   * Check ownership before outputs, again before completion, and read back the
+   * completion to confirm it was honored. These appends are not a transaction:
+   * a failure can leave outputs without completion, and a failed read-back can
+   * leave completion unconfirmed. This does not make external actions exactly-once.
    */
   async resolve(
     F: string,
     children: Array<{ type: string; payload?: Record<string, unknown>; refs?: Refs }> = [],
   ): Promise<{ childIds: string[] }> {
-    await this.sync();
-    if (!this.has(F)) throw new Error(`fact ${F} not found`);
-    const st = lifecycle(this.mirror, F, this.foldOpts);
-    if (st.state === "resolved") throw new Error(`resolve ignored — fact ${F} is already resolved`);
-    if (st.state !== "claimed" || st.owner !== this.author) {
-      throw new Error(st.owner
-        ? `resolve ignored — fact ${F} is owned by '${st.owner}' (you are '${this.author}')`
-        : `resolve ignored — fact ${F} has no active claim (you are '${this.author}')`);
-    }
-    await this.t.append({ type: RESERVED.RESOLVE, author: this.author, ts: now(), refs: { resolves: F }, nonce: nonce() });
-    const childIds: string[] = [];
-    for (const c of children) {
-      const r = await this.t.append({
-        type: c.type, author: this.author, ts: now(), payload: c.payload ?? {},
-        refs: { parent: F, ...c.refs }, nonce: nonce(),
+    // Snapshot all caller-owned output data before the first asynchronous step.
+    const outputs = children.map((c) => {
+      const output = normalizeFactInput({
+        type: c.type, author: this.author, ts: now(), payload: c.payload,
+        refs: c.refs, nonce: nonce(),
       });
+      output.refs = { ...output.refs, parent: F };
+      return output;
+    });
+    const checkClaim = async (): Promise<void> => {
+      await this.sync();
+      if (!this.has(F)) throw new Error(`fact ${F} not found`);
+      const st = lifecycle(this.mirror, F, this.foldOpts);
+      if (st.state === "resolved") throw new Error(`resolve ignored — fact ${F} is already resolved`);
+      if (st.state !== "claimed" || st.owner !== this.author) {
+        throw new Error(st.owner
+          ? `resolve ignored — fact ${F} is owned by '${st.owner}' (you are '${this.author}')`
+          : `resolve ignored — fact ${F} has no active claim (you are '${this.author}')`);
+      }
+    };
+    await checkClaim();
+    const childIds: string[] = [];
+    for (const output of outputs) {
+      const r = await this.t.append(output);
       childIds.push(r.id);
+    }
+    await checkClaim();
+    await this.t.append({
+      type: RESERVED.RESOLVE, author: this.author, ts: now(),
+      payload: { output_ids: childIds }, refs: { resolves: F }, nonce: nonce(),
+    });
+    await this.sync();
+    const after = lifecycle(this.mirror, F, this.foldOpts);
+    if (after.state !== "resolved" || after.owner !== this.author) {
+      throw new Error(`resolve not confirmed — fact ${F} was not completed by this claim`);
     }
     return { childIds };
   }
@@ -216,13 +240,13 @@ export class ClientV2 {
   /** How F came to be: root→F along `refs.parent` (§3.4). */
   async causation(F: string): Promise<Fact[]> {
     await this.sync();
-    return causationChain(this.mirror, F);
+    return structuredClone(causationChain(this.mirror, F));
   }
 
   /** What F led to: every transitive child of F, seq-ordered (§3.4, forward). */
   async descendants(F: string): Promise<Fact[]> {
     await this.sync();
-    return descendants(this.mirror, F);
+    return structuredClone(descendants(this.mirror, F));
   }
 
   // ── §3.3 subject registers — "what is X right now", identical on every reader ──
@@ -230,13 +254,13 @@ export class ClientV2 {
   /** The current value of a subject register, or null (never written / retracted). */
   async currentOf(subject: string): Promise<Fact | null> {
     await this.sync();
-    return current(this.mirror, subject);
+    return structuredClone(current(this.mirror, subject));
   }
 
   /** Everything ever said about a subject, oldest first (no latest-wins applied). */
   async historyOf(subject: string): Promise<Fact[]> {
     await this.sync();
-    return history(this.mirror, subject);
+    return structuredClone(history(this.mirror, subject));
   }
 
   /** The id of the fact that replaced F, or null (§3.3). */
@@ -276,7 +300,7 @@ export class ClientV2 {
   /** §3.5 colony roster — latest sys.registry per agent (interests/publishes). */
   async colony(): Promise<AgentRegistration[]> {
     await this.sync();
-    return colony(this.mirror);
+    return structuredClone(colony(this.mirror));
   }
 
   /** §3.5 orphan report — fact types nobody is interested in + declaration gaps. */
@@ -288,7 +312,7 @@ export class ClientV2 {
   /** §3.6 open context requests — facts an agent found too thin to act on. */
   async contextGaps(includeAnswered = false): Promise<ContextGap[]> {
     await this.sync();
-    return contextGaps(this.mirror, { includeAnswered });
+    return structuredClone(contextGaps(this.mirror, { includeAnswered }));
   }
 
   async query(q: ReadQuery = {}): Promise<Fact[]> {

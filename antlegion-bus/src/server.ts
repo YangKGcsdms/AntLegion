@@ -21,6 +21,7 @@ import { BusV2 } from "./bus.js";
 import type { ReadQuery } from "./bus.js";
 import type { FsyncPolicy } from "./log.js";
 import type { FactInput } from "./types.js";
+import { FactInputError } from "./types.js";
 import { BusObservations } from "./observability.js";
 import { current, history, lifecycle, trust, causationChain, descendants } from "./fold.js";
 
@@ -82,18 +83,40 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
     }
   });
 
+  // Explicit allowlist: serve only bundled UI assets, never journal/config files.
+  app.get("/console-assets/:name", async (c) => {
+    const name = c.req.param("name");
+    const assets: Record<string, string> = {
+      "tokens.css": "text/css; charset=utf-8",
+      "components.css": "text/css; charset=utf-8",
+      "console.css": "text/css; charset=utf-8",
+      "console.js": "text/javascript; charset=utf-8",
+    };
+    if (!Object.hasOwn(assets, name)) return c.notFound();
+    try {
+      const body = await fs.readFile(path.join(path.dirname(CONSOLE_HTML), name), "utf-8");
+      c.header("Content-Type", assets[name]);
+      c.header("X-Content-Type-Options", "nosniff");
+      c.header("Cache-Control", "no-cache");
+      return c.body(body);
+    } catch { return c.notFound(); }
+  });
+
   app.get("/explorer", async (c) => {
     try { return c.html(await fs.readFile(EXPLORER_HTML, "utf-8")); }
     catch { return c.json({ error: "explorer not bundled in this install" }, 404); }
   });
 
-  app.get("/ops/overview", (c) => c.json({
-    instance_id: instanceId,
-    auth_enabled: !!tokenHash,
-    ...observations.snapshot(bus.all()),
-    bus: bus.info(),
-    latest_facts: bus.all().slice(-100),
-  }));
+  app.get("/ops/overview", (c) => {
+    const stream = bus.all();
+    return c.json({
+      instance_id: instanceId,
+      auth_enabled: !!tokenHash,
+      ...observations.snapshot(stream),
+      bus: bus.info(),
+      latest_facts: stream.slice(-100),
+    });
+  });
 
   app.get("/ops/subject", (c) => {
     const subject = c.req.query("name");
@@ -111,7 +134,7 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
       ancestors: causationChain(stream, id), descendants: descendants(stream, id) });
   });
 
-  // INFO (redis INFO analog) + rewrite (BGREWRITEAOF analog)
+  // INFO + legacy rewrite entry point (full event content is retained).
   app.get("/info", (c) => c.json(bus.info()));
   app.post("/admin/rewrite", (c) => c.json({ stripped: bus.rewrite() }));
 
@@ -122,18 +145,11 @@ export function createServerV2(opts?: { secret?: string; dataDir?: string; fsync
     } catch {
       return c.json({ error: "invalid JSON body" }, 400);
     }
-    if (typeof body?.type !== "string" || !body.type || typeof body?.author !== "string" || !body.author || typeof body?.ts !== "number" || !Number.isFinite(body.ts)) {
-      return c.json({ error: "type, author, ts are required" }, 400);
-    }
-    if ((body.payload != null && (typeof body.payload !== "object" || Array.isArray(body.payload))) ||
-        (body.refs != null && (typeof body.refs !== "object" || Array.isArray(body.refs) || Object.values(body.refs).some((v) => typeof v !== "string")))) {
-      return c.json({ error: "payload must be an object; refs must map keys to strings" }, 400);
-    }
     try {
       const r = bus.append(body);
       return c.json(r, r.deduped ? 200 : 201);
     } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : String(err) }, 409);
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, err instanceof FactInputError ? 400 : 409);
     }
   });
 

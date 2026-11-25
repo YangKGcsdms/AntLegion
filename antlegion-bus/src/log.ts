@@ -7,14 +7,13 @@
  *   no       — never fsync explicitly; flush on close, OS decides otherwise
  *
  * A single append-mode fd is kept open (so we don't pay open/close per write).
- * Compaction (the BGREWRITEAOF analog) writes a temp file then atomically
- * renames it; the held fd is flushed + closed first and reopened lazily, so we
- * never keep writing into the unlinked pre-rewrite inode.
+ * Event contents are retained in full. The legacy compaction entry point is a
+ * no-op; it cannot discard the payloads needed for hashing and reader folds.
  */
 
 import {
   appendFileSync, existsSync, mkdirSync, openSync, readFileSync,
-  renameSync, statSync, writeFileSync, fsyncSync, closeSync, truncateSync,
+  statSync, fsyncSync, closeSync, truncateSync,
 } from "node:fs";
 import { join } from "node:path";
 import type { Fact } from "./types.js";
@@ -102,29 +101,10 @@ export class JsonlLog {
   }
 
   /**
-   * Compaction (§5.2): rewrite the log keeping every skeleton, stripping the
-   * payloads of `payloadDroppable` ids. Flushes + closes the live fd first, then
-   * temp-file + atomic rename, then drops the fd so the next append reopens the
-   * NEW file (never the unlinked pre-rewrite inode). Returns payloads stripped.
+   * Compatibility entry point: full history is retained, even for retractions.
    */
-  compact(facts: Fact[], payloadDroppable: Set<string>): number {
-    this.flush();
-    if (this.fd !== null) { closeSync(this.fd); this.fd = null; }
-
-    const tmp = this.path + ".tmp";
-    let stripped = 0;
-    const lines = facts.map((f) => {
-      if (payloadDroppable.has(f.id) && Object.keys(f.payload).length > 0) {
-        stripped++;
-        return JSON.stringify({ ...f, payload: {} });
-      }
-      return JSON.stringify(f);
-    });
-    writeFileSync(tmp, lines.length ? lines.join("\n") + "\n" : "", "utf-8");
-    renameSync(tmp, this.path);
-    this.entries = facts.length;
-    this.dirty = false;
-    return stripped;
+  compact(_facts: Fact[], _payloadDroppable: Set<string>): number {
+    return 0;
   }
 
   /** Flush + close. Call on graceful shutdown. */

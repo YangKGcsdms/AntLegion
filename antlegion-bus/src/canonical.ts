@@ -1,6 +1,6 @@
 /**
  * Self-contained primitives for the v2 fact bus: canonical JSON serialization
- * (Python-`json.dumps(sort_keys=True)` compatible) and a glob matcher.
+ * (the existing Node encoding) and a glob matcher.
  *
  * These were the only two things v2 borrowed from the v1 engine; vendored here
  * so v2 stands alone as the single architecture.
@@ -20,9 +20,9 @@ export function globMatch(pattern: string, text: string): boolean {
 }
 
 /**
- * JSON.stringify with recursively sorted keys, matching Python's
- * json.dumps(sort_keys=True, ensure_ascii=False). `floatKeys` names top-level
- * fields that must render with a trailing `.0` when whole (Python float vs int).
+ * Stable Node encoding retained for existing fact IDs. `floatKeys` names keys
+ * whose whole-number values render with a trailing `.0` (including nested keys).
+ * Node object enumeration orders integer-like keys before other sorted keys.
  */
 export function stableJsonStringify(obj: unknown, floatKeys?: ReadonlySet<string>): string {
   return jsonSerialize(sortKeys(obj), floatKeys);
@@ -54,7 +54,7 @@ function sortKeys(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (Array.isArray(value)) return value.map(sortKeys);
   if (typeof value === "object") {
-    const sorted: Record<string, unknown> = {};
+    const sorted: Record<string, unknown> = Object.create(null);
     for (const key of Object.keys(value as Record<string, unknown>).sort()) {
       sorted[key] = sortKeys((value as Record<string, unknown>)[key]);
     }

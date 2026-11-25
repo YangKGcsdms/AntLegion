@@ -67,7 +67,7 @@ describe("v2 fold — supersession (§3.3)", () => {
   });
 });
 
-describe("v2 fold — causation (§3.4) + compaction durability (§5.2)", () => {
+describe("v2 fold — causation (§3.4) + full history (§5.2)", () => {
   it("walks parent links root→F", () => {
     const a = f({ seq: 1, id: "A" });
     const b = f({ seq: 2, id: "B", refs: { parent: "A" } });
@@ -75,7 +75,7 @@ describe("v2 fold — causation (§3.4) + compaction durability (§5.2)", () => 
     expect(causationChain([a, b, c], "C").map((x) => x.id)).toEqual(["A", "B", "C"]);
   });
 
-  it("causation survives compaction: ancestor keeps its skeleton, not a gap", () => {
+  it("legacy compact retains the complete ancestor across restart", () => {
     const dir = mkdtempSync(join(tmpdir(), "antlegion-v2-"));
     const bus = new BusV2({ secret: "s", dataDir: dir });
     const a = bus.append({ type: "root", author: "x", ts: 1, payload: { big: "data" } });
@@ -83,17 +83,19 @@ describe("v2 fold — causation (§3.4) + compaction durability (§5.2)", () => 
     bus.append({ type: "_.tombstone", author: "gc", ts: 3, refs: { tombstones: a.id }, nonce: "1" });
 
     const stripped = bus.compact(new Set([a.id]));
-    expect(stripped).toBe(1);
+    expect(stripped).toBe(0);
 
     const chain = causationChain(bus.all(), b.id);
     expect(chain.map((x) => x.id)).toEqual([a.id, b.id]); // no gap
-    expect(chain[0].payload).toEqual({});                 // payload dropped …
-    expect(chain[0].author).toBe("x");                    // … but skeleton kept
+    expect(chain[0].payload).toEqual({ big: "data" });
+    expect(chain[0].author).toBe("x");
 
     // and it persists across restart
+    bus.close();
     const bus2 = new BusV2({ secret: "s", dataDir: dir });
     const chain2 = causationChain(bus2.all(), b.id);
     expect(chain2.map((x) => x.id)).toEqual([a.id, b.id]);
-    expect(chain2[0].payload).toEqual({});
+    expect(chain2[0].payload).toEqual({ big: "data" });
+    bus2.close();
   });
 });

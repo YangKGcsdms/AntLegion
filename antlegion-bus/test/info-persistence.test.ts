@@ -63,15 +63,13 @@ describe("R3 — fsync policy + durability ergonomics", () => {
     bus2.close();
   });
 
-  // ── probe: appends AFTER a rewrite must survive (fd must reopen the new file,
-  //    not keep writing into the unlinked pre-rewrite inode) ──
-  it("appends after rewrite() are durable (no lost-inode bug)", () => {
+  it("appends after the legacy rewrite() call remain durable", () => {
     const dir = tmp();
     const bus1 = new BusV2({ secret: "s", dataDir: dir, fsync: "everysec" });
     bus1.append({ type: "a", author: "x", ts: 1 });
     bus1.append({ type: "b", author: "x", ts: 2 });
-    bus1.rewrite();                                    // temp-file + rename
-    bus1.append({ type: "c", author: "x", ts: 3 });    // must land in the NEW file
+    expect(bus1.rewrite()).toBe(0); // full history is retained
+    bus1.append({ type: "c", author: "x", ts: 3 });
     bus1.close();
 
     const bus2 = new BusV2({ secret: "s", dataDir: dir, fsync: "everysec" });
@@ -80,14 +78,14 @@ describe("R3 — fsync policy + durability ergonomics", () => {
     bus2.close();
   });
 
-  it("rewrite() strips the payload of a tombstoned fact but keeps its skeleton", () => {
+  it("rewrite() retains the entire tombstoned fact", () => {
     const dir = tmp();
     const bus = new BusV2({ secret: "s", dataDir: dir });
     const a = bus.append({ type: "doomed", author: "x", ts: 1, payload: { big: "data" } });
     bus.append({ type: "_.tombstone", author: "gc", ts: 2, refs: { tombstones: a.id }, nonce: "1" });
-    expect(bus.rewrite()).toBe(1); // one payload stripped
-    expect(bus.get(a.id)!.payload).toEqual({});
-    expect(bus.get(a.id)!.author).toBe("x"); // skeleton kept
+    expect(bus.rewrite()).toBe(0);
+    expect(bus.get(a.id)!.payload).toEqual({ big: "data" });
+    expect(bus.get(a.id)!.author).toBe("x");
     bus.close();
   });
 });

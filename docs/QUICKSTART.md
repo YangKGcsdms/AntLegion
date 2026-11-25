@@ -131,7 +131,7 @@ const winner = ra.won ? alice : bob;
 // Winner resolves, optionally emitting child facts (causation chain)
 await winner.resolve(id, [{ type: "build.done", payload: { ok: true } }]);
 
-// Any client folds the same state from the same immutable log
+// Same log position, rules, parameters and calculation time give the same state
 await alice.state(id);  // { state: "resolved", owner: <winner> }
 await bob.state(id);    // identical — deterministic fold
 ```
@@ -140,6 +140,11 @@ The client surface: `publish` / `claim` / `resolve` / `release` / `observe` /
 `state` / `trustOf` / `causation` / `query` / `snapshot`.
 
 The SDK absorbs the append-then-read-back-and-fold work (PROTOCOL.md §3).
+`resolve()` requires the caller's active winning claim, stores output facts
+first, then records completion with their ids in `payload.output_ids`, and
+reads back to confirm it. These appends are not a transaction. The underlying
+fold is less restrictive: when no active claim remains, it accepts completion
+from any author. Ownership does not guarantee exactly-once external actions.
 
 ## 5. What makes a fact
 
@@ -152,13 +157,13 @@ The SDK absorbs the append-then-read-back-and-fold work (PROTOCOL.md §3).
   "author": "ci",
   "ts":     1748300000,     // author-stated (advisory only)
   "payload": { "…": "…" },
-  "refs": {                 // always fact ids, never agent ids
+  "refs": {                 // defined links use fact ids; subject uses a topic name
     "parent":    "<id>",    // causal predecessor
     "claim_of":  "<id>",    // exclusive claim on target
     "resolves":  "<id>",    // target is done
     "vote":      "<id>",    // corroborate / contradict
     "supersedes":"<id>",    // this replaces target
-    "tombstones":"<id>"     // target is deleted/GC'd
+    "tombstones":"<id>"     // target statement is retracted; the record stays
   }
 }
 ```
@@ -173,14 +178,16 @@ call each. Give it a bus URL and a stable identity:
 export ANTLEGION_BUS_URL=http://localhost:28090   # default
 export ANTLEGION_AUTHOR=my-agent                   # or --author per call
 
-# the agent loop: read since a cursor, claim exactly-once, resolve
+# the agent loop: read since a cursor, confirm ownership, record completion
 alctl read --type 'task.*' --since "$CURSOR"
-alctl claim <id> && alctl resolve <id>
-alctl publish task.done '{"result":"ok"}' --parent <id>
+alctl claim <id> && \
+  alctl publish task.done '{"result":"ok"}' --parent <id> && \
+  alctl resolve <id>
 ```
 
-`alctl claim` exits 0 only for the single winner, so an agent branches on the
-exit code and never double-executes. See [AGENT-CLI.md](AGENT-CLI.md) for the
+`alctl claim` reports whether the caller owns the active winning claim. An
+agent can branch on its exit code, but must still handle claim expiry and
+failures between external execution and recording completion. See [AGENT-CLI.md](AGENT-CLI.md) for the
 full agent guide (verb ↔ fold map, the `sys.registry` fact, crash recovery).
 
 ## 7. Validate the multi-agent swarms
@@ -221,17 +228,21 @@ curl -s http://localhost:28090/info | jq '.head_seq, .sig_failures'
 # 0
 ```
 
-Compaction (the BGREWRITEAOF analog):
+The rewrite endpoint is retained for compatibility and does nothing:
 
 ```bash
 curl -sX POST http://localhost:28090/admin/rewrite | jq
-# {"stripped": 0}   # payloads dropped from tombstoned/superseded facts
+# {"stripped": 0}   # no payload deletion or journal rewrite
 ```
+
+Complete records are retained so payload-dependent folds and content hashes
+remain reproducible. Payloads deleted by older versions cannot be recovered
+without a complete backup.
 
 ## Where to go next
 
 - [PROTOCOL.md](../PROTOCOL.md) — the full v2 spec (§3 fold rules are normative).
 - [EVOLUTION.md](EVOLUTION.md) — why the project looks like this.
 - `antlegion-bus/src/` — core (`bus.ts`), wire (`server.ts`), folds (`fold.ts`), SDK (`client.ts`).
-- `antlegion-bus/conformance/` — cross-language interop vectors + Python verifier.
-- `antlegion-bus/test/` — 147 tests (vitest).
+- `antlegion-bus/conformance/` — committed hash regression cases + Python checker; not complete cross-language proof.
+- `antlegion-bus/test/` — automated tests (Vitest).

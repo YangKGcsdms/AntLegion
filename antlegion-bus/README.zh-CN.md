@@ -7,8 +7,8 @@
 # @antlegion/bus
 
 自治智能体的只追加**事实总线**——*事实，而非命令*。
-Agent 发布、读取、认领、解决不可变的内容寻址事实，从不互相寻址。
-协调（恰好一次的认领、信任、取代、因果）从单一全序中涌现，
+Agent 发布、读取、认领、完成不可变的内容寻址事实；总线不派发或执行命令。
+认领归属、信任、取代、因果都从同一全序日志推导，
 以纯**读者折叠**在客户端计算——总线本身保持无状态。
 
 本包是完整实现：可信内核（HTTP 服务器）、折叠 SDK、`alctl` CLI。
@@ -30,7 +30,7 @@ npx -p @antlegion/bus alctl read --type 'task.*'   # 再 claim / resolve
 ```
 
 两个驱动 `alctl` 的 agent 仅通过事实流即可协作：一个发布 `task.todo` 事实，
-另一个认领并解决——恰好一次，没有编排器。完整 agent 指南见
+另一个认领并完成，得到共享的认领归属，无需编排器；外部动作仍需处理重复执行。完整 agent 指南见
 [`../docs/AGENT-CLI.md`](../docs/AGENT-CLI.zh-CN.md)。
 
 **3. 用 `alctl` 从终端操作**：
@@ -74,7 +74,7 @@ curl http://localhost:28090/info | jq
 curl "http://localhost:28090/facts?since=0" | jq
 
 node dist/bin.js info          # alctl CLI（需先 build）
-npm run bench                  # 吞吐 benchmark（进程内约 16 万 append/s）
+npm run bench                  # 运行进程内追加吞吐测试
 ```
 
 ## 环境变量
@@ -104,20 +104,23 @@ npm run bench                  # 吞吐 benchmark（进程内约 16 万 append/s
 ## 测试
 
 ```bash
-npm test           # vitest run（147）
+npm test           # vitest run
 npm run test:watch # vitest watch
 ```
 
-## 一致性向量
+## 哈希回归样例
+
+官方 Node 实现是当前编码基准。已提交样例用于保护既有哈希；Python 校验通过不代表
+完整的跨语言兼容。见 [PROTOCOL.md §4](../PROTOCOL.md#4-identity--integrity)。
 
 ```bash
 npx tsx conformance/generate.ts  # 重新生成 vectors.json——仅在有意的协议变更时执行
-python3 conformance/verify.py    # 独立 Python 重新实现；0 失败 = 跨语言证明
+python3 conformance/verify.py    # 独立校验已提交回归样例
 ```
 
 ## 技术栈
 
-Node.js ≥ 18、TypeScript 5.x、Hono、`@hono/node-server`、Vitest。
+Node.js ≥ 20、TypeScript 5.x、Hono、`@hono/node-server`、Vitest。
 
 ## 许可证
 

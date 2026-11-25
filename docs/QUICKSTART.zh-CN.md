@@ -125,7 +125,7 @@ const winner = ra.won ? alice : bob;
 // 胜者完成处理，可选地发出子事实（构成因果链）
 await winner.resolve(id, [{ type: "build.done", payload: { ok: true } }]);
 
-// 任意客户端从同一不可变日志折叠出相同状态
+// 日志位置、规则、参数和计算时间相同，结果才相同
 await alice.state(id);  // { state: "resolved", owner: <winner> }
 await bob.state(id);    // 完全相同——确定性折叠
 ```
@@ -134,6 +134,9 @@ await bob.state(id);    // 完全相同——确定性折叠
 `state` / `trustOf` / `causation` / `query` / `snapshot`。
 
 SDK 吸收了「追加→读回确认→折叠」的底层工作（PROTOCOL.md §3）。
+`resolve()` 要求调用者持有有效且胜出的认领，先保存产出，再把产出 id 放入
+`payload.output_ids` 并写入完成记录，最后读回确认。多次追加不是事务。底层折叠的
+限制更少：没有存活认领时，它允许任意作者完成。认领归属不保证外部动作恰好执行一次。
 
 ## 5. 事实的结构
 
@@ -146,13 +149,13 @@ SDK 吸收了「追加→读回确认→折叠」的底层工作（PROTOCOL.md �
   "author": "ci",
   "ts":     1748300000,     // 作者声明（仅供参考）
   "payload": { "…": "…" },
-  "refs": {                 // 永远是事实 id，绝不是 Agent id
+  "refs": {                 // 已定义关系使用事实 id；subject 使用主题名
     "parent":    "<id>",    // 因果前驱
     "claim_of":  "<id>",    // 对目标的独占认领
     "resolves":  "<id>",    // 目标已处理完毕
     "vote":      "<id>",    // 佐证 / 反驳
     "supersedes":"<id>",    // 本事实取代目标
-    "tombstones":"<id>"     // 目标已删除/GC
+    "tombstones":"<id>"     // 目标陈述已撤回，记录仍保留
   }
 }
 ```
@@ -167,13 +170,15 @@ SDK 吸收了「追加→读回确认→折叠」的底层工作（PROTOCOL.md �
 export ANTLEGION_BUS_URL=http://localhost:28090   # 默认
 export ANTLEGION_AUTHOR=my-agent                   # 或每条命令加 --author
 
-# agent 循环：按游标读取、恰好一次认领、解决
+# agent 循环：按游标读取、确认认领归属、记录完成
 alctl read --type 'task.*' --since "$CURSOR"
-alctl claim <id> && alctl resolve <id>
-alctl publish task.done '{"result":"ok"}' --parent <id>
+alctl claim <id> && \
+  alctl publish task.done '{"result":"ok"}' --parent <id> && \
+  alctl resolve <id>
 ```
 
-`alctl claim` 只有唯一胜者退出码为 0，agent 据此分支，绝不重复执行。完整的 agent
+`alctl claim` 报告调用者是否持有有效且胜出的认领。agent 可以据退出码决定是否
+处理，但仍需应对认领超时，以及外部动作执行后、写入完成记录前失败。完整的 agent
 指南（动词 ↔ 折叠映射、`sys.registry` 事实、崩溃恢复）见
 [AGENT-CLI.zh-CN.md](AGENT-CLI.zh-CN.md)。
 
@@ -215,17 +220,20 @@ curl -s http://localhost:28090/info | jq '.head_seq, .sig_failures'
 # 0
 ```
 
-压缩（BGREWRITEAOF 对应物）：
+rewrite 接口保留兼容性，但不执行任何操作：
 
 ```bash
 curl -sX POST http://localhost:28090/admin/rewrite | jq
-# {"stripped": 0}   # 已 tombstone/取代的事实 payload 被丢弃
+# {"stripped": 0}   # 不删除 payload，也不重写日志
 ```
+
+保留完整记录后，依赖 payload 的计算与内容哈希才可重现。旧版本已经删除的 payload
+需要完整备份才能恢复。
 
 ## 下一步去哪
 
 - [PROTOCOL.md](../PROTOCOL.md) —— 完整 v2 规范（§3 折叠规则为规范性）。
 - [EVOLUTION.md](EVOLUTION.md) —— 项目为何如此。
 - `antlegion-bus/src/` —— 内核（`bus.ts`）、线面（`server.ts`）、折叠（`fold.ts`）、SDK（`client.ts`）。
-- `antlegion-bus/conformance/` —— 跨语言互操作向量 + Python 校验器。
-- `antlegion-bus/test/` —— 147 个测试（vitest）。
+- `antlegion-bus/conformance/` —— 已提交哈希回归样例与 Python 校验器，不代表完整跨语言兼容。
+- `antlegion-bus/test/` —— 自动化测试（Vitest）。

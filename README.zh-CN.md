@@ -4,14 +4,14 @@
 
 # AntLegion
 
-**AntLegion 是为智能体共享世界状态的事实日志。** 跨机器、跨运行时、跨厂商的智能体各自把观察写进同一条全序、只追加的日志，各自读日志、算出同一个世界——发生了什么、现在是什么、因何而起、引出了什么、可信与否。不发命令，不靠人转述。本地部署，可内嵌，像 Redis，不是 SaaS。
+**AntLegion 是为智能体共享世界状态的事实日志。** 跨机器、跨运行时、跨厂商的智能体各自把观察写进同一条全序、只追加的日志，各自根据日志计算发生了什么、现在是什么、因何而起、可信与否。日志位置、规则、参数和计算时间相同，结果才相同。总线不派发命令。本地部署，可内嵌，像 Redis，不是 SaaS。
 
 ![npx @antlegion/bus demo——隔离进程、同一个世界、字节级重放](deploy/media/demo.gif)
 
 [![npm](https://img.shields.io/npm/v/%40antlegion%2Fbus?style=flat-square&label=%40antlegion%2Fbus&color=CB3837&logo=npm)](https://www.npmjs.com/package/@antlegion/bus)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](antlegion-bus/tsconfig.json)
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-176%20passing-brightgreen?style=flat-square)](antlegion-bus/test/)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Tests](https://img.shields.io/badge/tests-regression%20suite-brightgreen?style=flat-square)](antlegion-bus/test/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Status](https://img.shields.io/badge/status-alpha-orange?style=flat-square)]()
 
@@ -23,27 +23,27 @@
 
 几个互不共享进程的智能体——本机的 Claude Code、CI 里的 Codex、服务器上的常驻 Agent、厂商托管的 Agent——之间唯一的状态通道是人：从一个窗口复制到另一个窗口。同一进程树内有子 Agent、有共享内存；物理隔离的智能体之间没有，只有人肉中继。
 
-AntLegion 用一条日志取代这个中继。蚂蚁不下命令，只在地面留信息素，同伴读地面即知全局。这里的地面是一条**全序、只追加、内容寻址的事实日志**，"读地面"是一个确定性**折叠**：任何读者、任何节点、任何时刻、任何一次回放，算出的都是同一个答案。
+AntLegion 提供一条**全序、只追加、内容寻址的事实日志**。每个读者按规则从日志计算状态，下文称为「折叠」。以相同规则和输入重放相同记录，结果才相同；读取进度或参数不同的读者可以得到不同答案。
 
 ## 核心思想
 
 **只有事实，没有命令。**
 
 "deploy:prod 现在是 v42"是事实，上日志。
-"worker-3 去部署 v42"是命令，有收件人——日志里没有收件人。
+"worker-3 去部署 v42"是指令文本；把它写入日志，不会让总线派发或执行它。
 
-事实的 `refs` 只指向**事实 id，不指向智能体**：一条事实能说自己关于什么，说不了给谁。这就是"没有命令"的结构原因，也是它不是工作流引擎的原因——日志里没有步骤、没有指派、没有调度器。
+`refs.subject` 是主题名，其余已定义的关系键引用**事实 id**。未知扩展键和符合输入规则的 JSON 内容可以保存。「没有命令」指总线不按接收者寻址派发，也不强制执行，不是说 JSON 无法包含指令。工作流步骤与调度由客户端负责。
 
-总线只管一件事：**全序**。关于这个世界你想知道的一切，都是对全序的折叠（`PROTOCOL.md` §3，规范性）：
+总线负责分配**全序**、校验内容并保存日志。关于这个世界你想知道的一切，都是对全序的折叠（`PROTOCOL.md` §3，规范性）：
 
 | 问题 | 折叠 |
 |---|---|
 | **X 现在是什么** | `subject` 寄存器——seq 最高者胜出；撤回后折叠为「一无所知」，绝不回到旧值 |
 | **它是怎么来的 · 它引发了什么** | 因果踪迹——沿 `parent` 向后走到根，或向前走到每一个后代 |
 | **它可不可信** | corroborate / contradict 投票，quorum 是读者的策略 |
-| **谁拥有它** | seq 最小的存活 `claim_of`——所有权也是世界状态，恰好一次是全序的定理 |
+| **谁拥有它** | seq 最小的存活 `claim_of`——共享认领归属，不保证外部动作恰好执行一次 |
 
-同一条流，两个读者，答案必然相同——两台机器上的智能体之间只有这条日志，却算出同一个世界，这就是全部要点。它**不是**消息队列（事实不被消费）、**不是**编排器（没人派活）、**不是**工作流引擎（就算你搭出一条流水线，那也是读者事后从踪迹里折出来的形状，不是谁持有的状态）。
+日志位置、规则、参数和计算时间相同，读者结果才相同。信任阈值可以由各读者选择，末尾认领的超时也取决于计算时间。总线提供共享日志，工作流决策由客户端负责。
 
 ## 事实
 
@@ -57,10 +57,10 @@ AntLegion 用一条日志取代这个中继。蚂蚁不下命令，只在地面�
   "type":   "deploy.status",// 点分类型；保留类型以 "_." 开头
   "author": "ci@build-7",   // 谁追加的
   "ts":     1748300000.0,   // 作者自报的时间（仅供参考——可伪造，永远别拿它折叠）
-  "payload": { "…": "…" },  // 任意 JSON
-  "refs": {                 // 唯一的关系机制——所有值都是事实 id，
-    "subject": "deploy:prod",  // 绝不是 Agent id。这就是没有命令的
-    "parent":  "<id>",         // 结构性原因。
+  "payload": { "…": "…" },  // 普通 JSON 对象
+  "refs": {                 // 主题名与事实关系
+    "subject": "deploy:prod",  // 主题名，不是事实 id
+    "parent":  "<id>",         // 事实 id
     "supersedes": "<id>"       //（还有：tombstones · vote · claim_of · resolves · release_of）
   },
   "sig": "hmac…"            // 总线签的 HMAC-SHA256
@@ -68,6 +68,8 @@ AntLegion 用一条日志取代这个中继。蚂蚁不下命令，只在地面�
 ```
 
 **两个操作，这就是全部线面**：`POST /facts` 追加，`GET /facts?since=N` 读取。寄存器、踪迹、信任、所有权都是*关于事实的事实*，由读者折叠——见 [PROTOCOL.md](PROTOCOL.md)。
+
+输入先规范化并复制，再用于哈希和存储。官方 Node 编码是当前基准；已提交向量是回归样例，不代表完整跨语言契约。重试追加必须复用原始输入，包括 `ts` 和 `nonce`；再次调用生成新输入的辅助方法，可能新增事实。见 [PROTOCOL.md §4](PROTOCOL.md#4-identity--integrity)。
 
 使用 Docker 自托管控制台、访问令牌及独立家庭演示，参见[家庭部署说明](deploy/home/README.zh-CN.md)。
 
@@ -147,14 +149,14 @@ export ANTLEGION_AUTHOR=my-agent@my-host      # 稳定身份；一个身份 = �
 alctl publish obs.metric '{"cpu":91}' --subject host:web-3     # 写下发生了什么
 alctl current host:web-3                                       # 读世界
 alctl read --type 'deploy.*' --since "$CURSOR"                  # 或从游标处 tail
-alctl claim <id> && alctl resolve <id>                          # 拥有一条事实（恰好一次），然后关闭它
+alctl claim <id> && alctl resolve <id>                          # 确认认领归属，再记录处理结束
 ```
 
 → 完整动词参考、贴给 Agent 的第一条 prompt、`CLAUDE.md` / `.cursorrules` 规则片段、5 分钟双窗口实验：[docs/AGENT-CLI.md](docs/AGENT-CLI.md)
 
 ## 把 Agent 托管成常驻单元（DCU 模式）
 
-上面讲的都是有人在驱动的 Agent。另一种姿态是**常驻**：没人驱动它，日志驱动它。它平时闲着，直到一条它声明关注的事实落到日志上——醒来、认领（同伴因此不会重复做）、干活、把产出挂回原事实底下。没有队列，没有调度器，没有人在提示符前面等着。
+上面讲的都是有人在驱动的 Agent。另一种姿态是**常驻**：没人驱动它，日志驱动它。它平时闲着，直到一条它声明关注的事实落到日志上——开始处理、认领、执行、把产出关联到原事实。单靠认领归属，无法防止故障或超时后的外部动作重复执行。没有队列，没有调度器，没有人在提示符前面等着。
 
 `@antlegion/dsh` 是为 **DeepSeek Harness** 提供的 AntLegion 插件：运行它，这个 dsh 就作为一个挂载到总线的 DCU 运作——值守在那里，自动响应总线上的事实，并把做完的事作为事实发布回去。感知仍然是纯 Node 代码——轮询、推游标、折叠、筛选——只有「这条事实该怎么办」才花掉一次 LLM 轮次。
 
@@ -220,7 +222,7 @@ systemctl --user enable --now antlegion-dcu
 journalctl --user -u antlegion-dcu -f   # 启动四行：bus OK · session up · patrol starting · registered
 ```
 
-`Restart=always` 在这里是安全的，而这是日志的性质，不是进程守护的功劳。一个握着认领死掉的常驻单元不会卡住任何东西：每条认领在总线盖章的 `recv` 之后 Δ 失效，同伴接着做，而且不会撤销一次真的完成了的 `resolve`。重复启动也不花代价——注册是 `refs.subject` 组里的一个 TTL 槽位，重启只会覆盖掉自己那条旧的，不会越堆越多。总线还没起就先起它也没问题：它会退避重连，等节点出现自己接上并重新报到。唯一要当心的和日志上每个 Agent 一样：**一个身份一个进程**——同一个 `author` 起两份就是双启动，这件事由折叠检测出来（`sys.identity.conflict`），而不是由总线禁止。
+自动重启可以恢复认领归属，但客户端仍需处理外部动作重复执行。持有认领的常驻单元崩溃后，每条认领在总线盖章的 `recv` 之后 Δ 失效，同伴接着做，而且不会撤销一次真的完成了的 `resolve`。注册使用 `refs.subject` 分组中的有效期记录，新声明在读者视图中取代旧声明；两条记录仍然保留在日志中。总线还没起就先起它也没问题：它会退避重连，等节点出现自己接上并重新报到。唯一要当心的和日志上每个 Agent 一样：**一个身份一个进程**——同一个 `author` 起两份就是双启动，这件事由折叠检测出来（`sys.identity.conflict`），而不是由总线禁止。
 
 同样的姿态、换成自带运行时而不是挂在 harness 上，就是 `@antlegion/ant`：`ant start --daemon` 把群落转到后台（pid、日志、工作记忆都在 `./.ant/`），`ant launchd` 打印一份 macOS 开机自启的 plist。
 
@@ -297,11 +299,15 @@ AntLegion/
 
 ## 当前状态
 
-**Alpha**——核心协议、参考实现、单节点运维故事都是扎实的。尚不建议用于不可信的公网（没有鉴权；总线信任它的调用者，和 Redis 一样）。
+**Alpha**——官方 Node 实现是当前协议编码基准。已有共享 Bearer 令牌鉴权，但不验证各作者身份，总线仍然信任调用者。当前范围不包含不可信公网部署。
 
-已完成：无状态可信核心 · 带 `appendfsync` 与压缩的只追加日志 · 读者折叠 SDK（寄存器、踪迹、信任、所有权）· `alctl` CLI · 带独立 Python 校验器的跨语言合规向量 · 共享视图 + 所有权场景 · Docker 镜像 · 进程内约 160k 追加/秒 · 176 个测试 · npm 包 · 常驻 Agent（`ant init` / `ant start`、`@antlegion/dsh`）。
+已完成：无状态可信核心 · 带 `appendfsync` 的完整只追加日志 · 读者折叠 SDK（寄存器、踪迹、信任、所有权）· `alctl` CLI · 已提交哈希回归样例及校验这些样例的 Python 脚本 · 共享视图 + 所有权场景 · Docker 镜像 · 吞吐测试 · 自动化测试 · npm 包 · 常驻 Agent（`ant init` / `ant start`、`@antlegion/dsh`）。
 
-下一步：多语言客户端 SDK（Go、Python、Rust——[合规向量](antlegion-bus/conformance/vectors.json)是测试目标）· `PROTOCOL.md` 的论文级重写（[docs/protocol/](docs/protocol/)）· 面向暴露部署的鉴权与限流 · 复制/高可用（[§7](PROTOCOL.md)）。
+当前版本保留完整记录：`compact()`、`rewrite()` 仅保留兼容入口，不执行操作并返回 `0`，也无法恢复旧版本已删除的 payload。完成表示处理结束，撤回表示不再把原陈述当作当前值，取代表示出现新版本。先完成再撤回，生命周期仍为 `resolved`；如果该事实仍是主题的当前陈述，当前值返回 `null`。
+
+`ClientV2.resolve()` 要求调用者持有有效且胜出的认领，先保存产出，再通过 `payload.output_ids` 关联产出并写入完成记录，最后读回确认。多次写入不是事务。底层折叠仍允许在没有存活认领时由任意作者完成，详见 [§3.1](PROTOCOL.md#31-lifecycle-of-a-target-fact-f)。
+
+后续方向：完整的跨语言编码规则及 SDK、面向暴露部署的作者身份校验与限流、复制与高可用。现有回归样例本身不构成跨语言兼容保证。
 
 ## 文档
 
@@ -321,12 +327,12 @@ AntLegion/
 
 ## 参与贡献
 
-欢迎贡献。**协议变更是线上破坏性的**：对事实形状、`id` 计算（§4）或 §3 折叠规则的任何改动，必须同时落到 `PROTOCOL.md`、`conformance/vectors.json`（用 `npx tsx conformance/generate.ts` 重新生成）和跨语言校验器——在一个声明 `[protocol-change]` 的提交里一起落地。
+欢迎贡献。修改事实形状、`id` 计算（§4）或 §3 折叠规则时，须明确评估兼容性，并同步文档与测试。除非有意修改编码，否则保留已提交哈希向量；向量变更要求提交信息声明 `[protocol-change]`。Python 脚本只校验已有样例，不证明完整跨语言兼容。
 
 ```bash
-npm test                      # 176 个测试，约 1 秒
+npm test                      # 自动化测试
 npx tsc --noEmit              # 类型检查
-python3 conformance/verify.py # 跨语言哈希证明
+python3 conformance/verify.py # 独立校验已提交回归样例
 ```
 
 先读 [docs/EVOLUTION.md](docs/EVOLUTION.md)——它能帮你避免重新发明已被放弃的方案。

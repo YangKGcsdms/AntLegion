@@ -1,9 +1,8 @@
 /**
  * v2 identity & integrity (PROTOCOL.md §4).
  *
- * id  = sha256(canonical record), keys sorted, `ts` rendered as a float to
- *       stay byte-compatible with a Python reference. Reuses the v1
- *       stable-stringify so both protocol versions hash identically-shaped data.
+ * id  = sha256(canonical record), using the existing Node encoding. Whole-number
+ *       `ts` values retain their .0 rendering so ordinary existing IDs stay stable.
  * sig = hmac_sha256(secret, "id|author|type|ts|recv|seq")
  */
 
@@ -11,7 +10,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { stableJsonStringify } from "./canonical.js";
 import { canonicalRecord, type Fact, type FactInput } from "./types.js";
 
-/** Top-level canonical fields that are floats in the cross-language record. */
+/** Keys retaining the existing whole-number .0 encoding. */
 const FLOAT_KEYS = new Set(["ts"]);
 
 export function computeId(input: FactInput): string {

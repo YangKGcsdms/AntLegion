@@ -21,8 +21,8 @@ export class BusObservations {
       this.authors.set(fact.author, row);
       if (fact.type === SYS_REGISTRY) this.registrations.set(fact.author, fact);
     }
-    // Retain references to the journal objects: payload compaction must also
-    // be reflected here. Capability parsing stays identical to the reader fold.
+    // Full event snapshots remain available. Capability parsing stays identical
+    // to the reader fold; later registrations replace earlier declarations.
     const registered = new Map(colony([...this.registrations.values()]).map((r) => [r.author, r]));
     const agents = [...this.authors].map(([author, row]) => {
       const registration = registered.get(author);

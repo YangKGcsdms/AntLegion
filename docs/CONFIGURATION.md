@@ -11,7 +11,7 @@ The bus is configured entirely by environment variables — the `redis.conf` ana
 | `PORT` | `28090` | HTTP listen port |
 | `HOST` | `127.0.0.1` | Listen address — the bus trusts its callers (same security model as Redis); set `0.0.0.0` only inside a trust boundary |
 | `ANTLEGION_DATA_DIR` | `.data-v2` | Directory for the journal file (`facts-v2.jsonl`) |
-| `ANTLEGION_FSYNC` | `everysec` | `always` (max durability) · `everysec` (≤1s loss) · `no` (OS decides) — mirrors Redis `appendfsync` |
+| `ANTLEGION_FSYNC` | `everysec` | `always` (max durability) · `everysec` (recent unsynced writes may be lost) · `no` (OS decides) — mirrors Redis `appendfsync` |
 | `ANTLEGION_BUS_SECRET` | *(random each boot)* | HMAC signing secret. **Always set a stable value in production** — without it, signatures written before a restart cannot be verified |
 | `ANTLEGION_API_TOKEN` | *(unset)* | Shared HTTP Bearer token; authentication is disabled when unset |
 | `ANTLEGION_MAX_DEPTH` | `64` | Maximum causation chain depth (§5 safety cap; cycles are structurally impossible under content addressing) |
@@ -68,6 +68,12 @@ npm install && npm run dev
 - **Ctrl-C is safe:** the journal is flushed on shutdown; recovery replays the log and verifies every signature.
 - **Always set a stable `ANTLEGION_BUS_SECRET`:** unset, the bus mints a fresh HMAC key each boot — after a restart, `sig`s written earlier can no longer be verified (they surface as `sig_failures` in `/info`).
 
+The current version retains complete facts, including payloads. `compact()`,
+`rewrite()`, and `POST /admin/rewrite` are compatibility no-ops; the HTTP
+response is `{"stripped":0}`. They do not rewrite the journal or reclaim disk
+space. Payloads already removed by older versions require a complete backup
+to restore; changing versions cannot reconstruct them.
+
 ## Security model
 
 Same trust boundary as Redis: the bus **trusts its callers**. It binds to `127.0.0.1` by default; set `HOST=0.0.0.0` only inside a boundary you control (a docker network, a VPC). By default there is no authentication. Set `ANTLEGION_API_TOKEN` to require a shared Bearer token; the token does not authenticate individual authors. Use HTTPS or VPN on untrusted networks. See [home deployment](../deploy/home/README.md).
@@ -80,4 +86,4 @@ Same trust boundary as Redis: the bus **trusts its callers**. It binds to `127.0
 | `sig_failures > 0` in `/info` | the bus restarted with a different (or missing) `ANTLEGION_BUS_SECRET` — set a stable one |
 | `error: cannot reach bus at <url>` from alctl/SDK | no bus on that URL — `npx @antlegion/bus`, or point `ANTLEGION_BUS_URL` at the right host |
 | `resolve ignored — fact is owned by 'X'` | you lost the claim; that's the system working. Query state, pick other work |
-| two units act on the same task | are two processes sharing one identity/author? one identity = one process ([why](../research/s2-experiments-2026-08.md)) |
+| two units act on the same task | check duplicate author identities, claim expiry, and a failure after an external action but before completion; ownership does not guarantee exactly-once external effects |

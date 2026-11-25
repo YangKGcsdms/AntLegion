@@ -17,6 +17,25 @@ const post = (app: ReturnType<typeof freshApp>, body: unknown) =>
   });
 
 describe("v2 server — wire surface", () => {
+  it("serves the console assets before login without exposing arbitrary files", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "antlegion-console-"));
+    const { app, bus } = createServerV2({ secret: "test", dataDir: dir, apiToken: "access" });
+    try {
+      const html = await (await app.request("/console")).text();
+      for (const name of ["tokens.css", "components.css", "console.css", "console.js"]) {
+        expect(html).toContain(`/console-assets/${name}`);
+        const res = await app.request(`/console-assets/${name}`);
+        expect(res.status).toBe(200);
+        expect(res.headers.get("content-type")).toContain(name.endsWith("css") ? "text/css" : "text/javascript");
+        expect((await res.text()).length).toBeGreaterThan(0);
+      }
+      expect((await app.request("/console-assets/explorer.html")).status).toBe(404);
+      expect((await app.request("/console-assets/constructor")).status).toBe(404);
+      expect((await app.request("/ops/overview")).status).toBe(401);
+      expect((await app.request("/ops/overview", { headers: { authorization: "Bearer access" } })).status).toBe(200);
+    } finally { bus.close(); }
+  });
+
   it("health reports protocol 2.0", async () => {
     const res = await freshApp().request("/health");
     expect(res.status).toBe(200);

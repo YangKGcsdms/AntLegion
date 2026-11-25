@@ -2,8 +2,8 @@
  * v2 reader folds (PROTOCOL.md §3) — where meaning lives.
  *
  * Pure functions over the totally-ordered fact stream (bus.all()). Two readers
- * folding identically always agree, because they consume the same immutable,
- * recv-stamped, seq-ordered stream. The bus stores none of this.
+ * using the same log prefix, rules, parameters and evaluation time agree.
+ * A trailing claim uses `now`; trust thresholds may differ by reader.
  */
 
 import type { Fact } from "./types.js";
@@ -39,7 +39,8 @@ interface ActiveClaim { author: string; seq: number; recv: number }
 /**
  * Core ownership fold (§3.1): maintain the set of active claims with recv-anchored
  * deterministic expiry. `resolved`/`dead` are terminal. Only a trailing claim
- * with no successor uses wall-clock `now`.
+ * with no successor uses wall-clock `now`. A later retraction does not undo
+ * completed processing; current(subject) independently handles retraction.
  */
 function ownership(stream: readonly Fact[], F: string, opts: FoldOpts): Lifecycle {
   const now = opts.now ?? Date.now() / 1000;
@@ -191,7 +192,7 @@ export function trust(stream: readonly Fact[], F: string, quorum = 2): TrustStat
 // ───────────────────────────── §3.4 Causation ────────────────────────────────
 
 /**
- * Walk `refs.parent` from F to its root, returned root→F. A compacted ancestor
+ * Walk `refs.parent` from F to its root, returned root→F. A legacy compacted ancestor
  * keeps its skeleton (§5.2), so the chain shows a payload-stripped fact, never a
  * silent gap. Cycle-guarded (the bus rejects cycles at append, §5).
  */

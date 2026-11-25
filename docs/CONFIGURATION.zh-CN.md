@@ -11,7 +11,7 @@
 | `PORT` | `28090` | HTTP 监听端口 |
 | `HOST` | `127.0.0.1` | 监听地址——总线信任它的调用方（与 Redis 相同的安全模型）；只在你控制的信任边界内设为 `0.0.0.0` |
 | `ANTLEGION_DATA_DIR` | `.data-v2` | 日志文件（`facts-v2.jsonl`）所在目录 |
-| `ANTLEGION_FSYNC` | `everysec` | `always`（最高持久性）· `everysec`（最多丢 1 秒）· `no`（交给操作系统）——对应 Redis 的 `appendfsync` |
+| `ANTLEGION_FSYNC` | `everysec` | `always`（最高持久性）· `everysec`（可能丢失近期尚未同步的写入）· `no`（交给操作系统）——对应 Redis 的 `appendfsync` |
 | `ANTLEGION_BUS_SECRET` | *（每次启动随机）* | HMAC 签名密钥。**生产环境务必设一个稳定值**——否则重启前写入的签名将无法再被验证 |
 | `ANTLEGION_API_TOKEN` | *（未设置）* | 共享 HTTP Bearer 令牌；未设置时不启用鉴权 |
 | `ANTLEGION_MAX_DEPTH` | `64` | 因果链最大深度（§5 安全上限；内容寻址让环从结构上不可能出现） |
@@ -68,6 +68,11 @@ npm install && npm run dev
 - **Ctrl-C 是安全的：** 关闭时刷盘；恢复时重放日志并验证每一个签名。
 - **务必设稳定的 `ANTLEGION_BUS_SECRET`：** 不设的话总线每次启动都会新造一把 HMAC 密钥——重启后早先写入的 `sig` 就再也无法验证（会以 `sig_failures` 出现在 `/info` 里）。
 
+当前版本保留包含 payload 的完整事实。`compact()`、`rewrite()` 和
+`POST /admin/rewrite` 仅保留兼容入口，不执行操作；HTTP 返回 `{"stripped":0}`。
+它们不会重写日志，也不会释放磁盘空间。旧版本已经删除的 payload 需要完整备份才能
+恢复，更新版本不能重新生成这些内容。
+
 ## 安全模型
 
 与 Redis 相同的信任边界：总线**信任它的调用方**。默认绑定 `127.0.0.1`；只在你自己控制的边界内（docker 网络、VPC）才设 `HOST=0.0.0.0`。默认没有鉴权。设置 `ANTLEGION_API_TOKEN` 可启用共享 Bearer 令牌；令牌不绑定作者身份。跨不受信任网络访问时使用 HTTPS 或 VPN。详见[家庭部署](../deploy/home/README.zh-CN.md)。
@@ -80,4 +85,4 @@ npm install && npm run dev
 | `/info` 里 `sig_failures > 0` | 总线以不同的（或缺失的）`ANTLEGION_BUS_SECRET` 重启了——设一个稳定值 |
 | alctl/SDK 报 `error: cannot reach bus at <url>` | 那个 URL 上没有总线——`npx @antlegion/bus`，或把 `ANTLEGION_BUS_URL` 指对 |
 | `resolve ignored — fact is owned by 'X'` | 你没抢到认领；这正是系统在正常工作。查一下状态，去干别的活 |
-| 两个单元处理了同一个任务 | 是不是两个进程共用了一个身份/author？一个身份 = 一个进程（[为什么](../research/s2-experiments-2026-08.md)） |
+| 两个单元处理了同一个任务 | 检查是否共用作者身份、认领是否超时，以及是否在外部动作执行后、完成记录写入前失败；认领归属不保证外部动作恰好执行一次 |

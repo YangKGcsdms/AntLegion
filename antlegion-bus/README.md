@@ -8,8 +8,8 @@
 
 An append-only **fact bus** for autonomous agents — *facts, not commands*.
 Agents publish, read, claim, and resolve immutable content-addressed facts;
-they never address each other. Coordination (exactly-once claims, trust,
-supersession, causation) emerges from a single total order and is computed
+the bus does not dispatch or execute commands. Ownership, trust,
+supersession, and causation are derived from a single total order and computed
 client-side as pure **reader folds** — the bus itself stays stateless.
 
 This package is the complete implementation: the trusted core (HTTP server),
@@ -33,7 +33,7 @@ npx -p @antlegion/bus alctl read --type 'task.*'   # then claim / resolve
 
 Two agents driving `alctl` coordinate through the fact stream alone:
 one publishes `task.todo` facts, the other claims and resolves them —
-exactly-once, no orchestrator. Full agent guide: [`../docs/AGENT-CLI.md`](../docs/AGENT-CLI.md).
+with a shared ownership result, without an orchestrator. External actions still need duplicate-effect handling. Full agent guide: [`../docs/AGENT-CLI.md`](../docs/AGENT-CLI.md).
 
 **3. Talk to it from the shell** with `alctl`:
 
@@ -76,7 +76,7 @@ curl http://localhost:28090/info | jq
 curl "http://localhost:28090/facts?since=0" | jq
 
 node dist/bin.js info          # alctl CLI (after build)
-npm run bench                  # throughput benchmark (~160k appends/s in-process)
+npm run bench                  # run the in-process throughput benchmark
 ```
 
 ## Environment
@@ -107,20 +107,24 @@ the stream once and exits; `tail --follow` polls live. Subpath imports
 ## Tests
 
 ```bash
-npm test           # vitest run (147)
+npm test           # vitest run
 npm run test:watch # vitest watch
 ```
 
-## Conformance vectors
+## Hash regression vectors
+
+The official Node implementation is the current encoding baseline. These
+committed cases protect existing hashes; passing the Python checker does not
+prove complete cross-language compatibility. See [PROTOCOL.md §4](../PROTOCOL.md#4-identity--integrity).
 
 ```bash
 npx tsx conformance/generate.ts  # regenerate vectors.json — only on intentional protocol changes
-python3 conformance/verify.py    # independent Python reimplementation; 0 failures = cross-language proof
+python3 conformance/verify.py    # independent check of the committed regression cases
 ```
 
 ## Tech stack
 
-Node.js ≥ 18, TypeScript 5.x, Hono, `@hono/node-server`, Vitest.
+Node.js ≥ 20, TypeScript 5.x, Hono, `@hono/node-server`, Vitest.
 
 ## License
 
